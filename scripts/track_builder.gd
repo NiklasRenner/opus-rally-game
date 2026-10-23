@@ -1,0 +1,1422 @@
+class_name TrackBuilder
+extends Node3D
+## Builds a stage procedurally from a map definition (maps.gd): a closed
+## spline road split into surface sections, hilly terrain that follows the
+## road's elevation, barriers, trees, houses and spectators.
+
+const SPACING := 3.0
+const CELL := 8.0
+const VERGE := 2.6  # sloped shoulder outside the road edge
+const WIDTH := {"asphalt": 10.0, "gravel": 8.5, "wet": 10.0, "ice": 9.0, "grass": 8.0, "mud": 8.0, "ford": 9.0,
+	"wood": 7.5}
+
+## Current map definition (see maps.gd), set before build().
+var map: Dictionary = Maps.LIST[0]
+var rain := false  # wet weather: shiny dark roads, darker grass
+var _control_points: Array = []
+var _sections: Array = []
+var _elevation_keys: Array = []
+var _jumps: Array = []
+
+var points := PackedVector3Array()
+var tangents := PackedVector3Array()
+var surfaces := PackedStringArray()
+var widths := PackedFloat32Array()
+var total_length := 0.0
+
+var _center := Vector2(333, -153)
+var _world_half := 560.0  # terrain grid half size, grown to fit big stages
+var _grid_n := 0
+var _dist := PackedFloat32Array()
+var _road_h := PackedFloat32Array()
+var _heights := PackedFloat32Array()
+var _rng := RandomNumberGenerator.new()
+
+
+func build() -> void:
+	prepare()
+	_build_road()
+	_build_terrain()
+	_build_barriers()
+	_build_start_line()
+	_build_section_signs()
+	_build_village()
+	_build_spectators()
+	_build_trees()
+	_build_cones()
+	_build_mountains()
+	_build_water()
+	_build_bridges()
+	if _theme() == "circuit":
+		_build_kerbs()
+	if map.has("landmark"):
+		_build_pyramid(map["landmark"])
+	if map.has("tunnel"):
+		_build_tunnel()
+	if _theme() == "wasteland":
+		_build_wrecks()
+
+
+## Reads the map and samples the route only (no geometry). The menu uses
+## this for its track preview.
+func prepare() -> void:
+	_control_points = map["points"]
+	_sections = map["sections"]
+	_elevation_keys = map["elevation"]
+	_jumps = map["jumps"]
+	_rng.seed = map["seed"]
+	# centre the terrain grid on the route
+	var mn := Vector2(INF, INF)
+	var mx := Vector2(-INF, -INF)
+	for p in _control_points:
+		mn = mn.min(p)
+		mx = mx.max(p)
+	_center = (mn + mx) * 0.5
+	_world_half = maxf(560.0, maxf(mx.x - mn.x, mx.y - mn.y) * 0.5 + 170.0)
+	points.clear()
+	tangents.clear()
+	surfaces.clear()
+	widths.clear()
+	_sample_spline()
+
+
+## "" for the normal countryside look, "wasteland", "jungle" or "circuit".
+func _theme() -> String:
+	return map.get("theme", "")
+
+
+## Inside one of the map's water areas (harbour, sea)?
+func _in_water(x: float, z: float, margin := 0.0) -> bool:
+	for r in map.get("water", []):
+		if x > (r[0] as float) - margin and x < (r[2] as float) + margin and z > (r[1] as float) - margin and z < (r[3] as float) + margin:
+			return true
+	return false
+
+
+func count() -> int:
+	return points.size()
+
+
+func surface_at_index(i: int) -> String:
+	return surfaces[wrapi(i, 0, points.size())]
+
+
+func get_spawn_transform(i: int) -> Transform3D:
+	i = wrapi(i, 0, points.size())
+	var flat := tangents[i]
+	flat.y = 0.0
+	var bas := Basis.looking_at(flat.normalized(), Vector3.UP)
+	return Transform3D(bas, points[i] + Vector3(0, 1.0, 0))
+
+
+## Nearest centreline sample. Searches a window around `hint` first and
+## falls back to a full scan when the car is far away (off-road, reset).
+func nearest_index(pos: Vector3, hint: int) -> int:
+	var n := points.size()
+	var best := hint
+	var best_d := INF
+	for o in range(-25, 26):
+		var i := wrapi(hint + o, 0, n)
+		var d := Vector2(points[i].x - pos.x, points[i].z - pos.z).length_squared()
+		if d < best_d:
+			best_d = d
+			best = i
+	if best_d > 30.0 * 30.0:
+		for i in n:
+			var d := Vector2(points[i].x - pos.x, points[i].z - pos.z).length_squared()
+			if d < best_d:
+				best_d = d
+				best = i
+	return best
+
+
+func distance_to_road(pos: Vector3, idx: int) -> float:
+	return Vector2(points[idx].x - pos.x, points[idx].z - pos.z).length()
+
+
+# --------------------------------------------------------------------------- spline
+
+static func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: float) -> Vector2:
+	var t2 := t * t
+	var t3 := t2 * t
+	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+
+
+## Smooth periodic interpolation of the elevation keyframes plus the jump bump.
+func _elevation(frac: float) -> float:
+	var keys: Array = _elevation_keys
+	var n := keys.size()
+	var k := n - 1
+	for i in n:
+		if frac >= (keys[i][0] as float):
+			k = i
+	var a: Array = keys[k]
+	var b: Array = keys[(k + 1) % n]
+	var f0: float = a[0]
+	var f1: float = b[0] if k + 1 < n else 1.0
+	var t := clampf((frac - f0) / maxf(f1 - f0, 0.0001), 0.0, 1.0)
+	t = t * t * (3.0 - 2.0 * t)
+	var h := lerpf(a[1], b[1], t)
+	for jump in _jumps:
+		var jd := (frac - (jump[0] as float)) * total_length / (jump[2] as float)
+		if absf(jd) < 1.0:
+			h += (jump[1] as float) * (0.5 + 0.5 * cos(jd * PI))
+	return h
+
+
+func _sample_spline() -> void:
+	var cp: Array = _control_points
+	var n := cp.size()
+	var dense: Array[Vector2] = []
+	for i in n:
+		var p0: Vector2 = cp[wrapi(i - 1, 0, n)]
+		var p1: Vector2 = cp[i]
+		var p2: Vector2 = cp[wrapi(i + 1, 0, n)]
+		var p3: Vector2 = cp[wrapi(i + 2, 0, n)]
+		for k in 40:
+			dense.append(_catmull(p0, p1, p2, p3, k / 40.0))
+	var lengths: Array[float] = [0.0]
+	for i in range(1, dense.size() + 1):
+		lengths.append(lengths[i - 1] + dense[i - 1].distance_to(dense[i % dense.size()]))
+	total_length = lengths[lengths.size() - 1]
+	var count_pts := int(total_length / SPACING)
+	var step := total_length / count_pts
+	var j := 0
+	for k in count_pts:
+		var s := k * step
+		while lengths[j + 1] < s:
+			j += 1
+		var t := (s - lengths[j]) / maxf(lengths[j + 1] - lengths[j], 0.0001)
+		var p := dense[j].lerp(dense[(j + 1) % dense.size()], t)
+		var frac := float(k) / count_pts
+		points.append(Vector3(p.x, _elevation(frac), p.y))
+		var surf := "asphalt"
+		for sec in _sections:
+			if frac >= sec[0]:
+				surf = sec[1]
+		surfaces.append(surf)
+	for i in count_pts:
+		tangents.append((points[(i + 1) % count_pts] - points[wrapi(i - 1, 0, count_pts)]).normalized())
+	# road width eases between surfaces instead of stepping
+	for i in count_pts:
+		var acc := 0.0
+		for o in range(-6, 7):
+			acc += WIDTH[surfaces[wrapi(i + o, 0, count_pts)]]
+		widths.append(acc / 13.0)
+
+
+func _side(i: int) -> Vector3:
+	var t := tangents[i]
+	t.y = 0.0
+	return t.normalized().cross(Vector3.UP).normalized()
+
+
+# --------------------------------------------------------------------------- road
+
+func _build_road() -> void:
+	var tools := {}
+	var verge := SurfaceTool.new()
+	verge.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := points.size()
+	var v := 0.0
+	var down := Vector3(0, -0.5, 0)
+	for i in n:
+		var b := (i + 1) % n
+		var surf: String = surfaces[i]
+		if not tools.has(surf):
+			var st := SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			tools[surf] = st
+		var st2: SurfaceTool = tools[surf]
+		var la := points[i] - _side(i) * widths[i] * 0.5
+		var ra := points[i] + _side(i) * widths[i] * 0.5
+		var lb := points[b] - _side(b) * widths[b] * 0.5
+		var rb := points[b] + _side(b) * widths[b] * 0.5
+		var seg := points[i].distance_to(points[b]) / 10.0
+		# wound so faces point up (Godot: clockwise = front)
+		_quad(st2, la, ra, lb, rb, Vector2(0, v), Vector2(1, v), Vector2(0, v + seg), Vector2(1, v + seg))
+		# sloped shoulders hide the seam between road and terrain
+		var lla := la - _side(i) * VERGE + down
+		var llb := lb - _side(b) * VERGE + down
+		var rra := ra + _side(i) * VERGE + down
+		var rrb := rb + _side(b) * VERGE + down
+		_quad(verge, lla, la, llb, lb, Vector2(0, v), Vector2(0.3, v), Vector2(0, v + seg), Vector2(0.3, v + seg))
+		_quad(verge, ra, rra, rb, rrb, Vector2(0.3, v), Vector2(0, v), Vector2(0.3, v + seg), Vector2(0, v + seg))
+		v += seg
+	for surf in tools:
+		var st3: SurfaceTool = tools[surf]
+		st3.generate_normals()
+		var arrays := st3.commit_to_arrays()
+		var mat := TexGen.material(_road_tex(surf), 0.12 if surf == "wet" else 0.9)
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if rain and surf != "ford":
+			mat.roughness = 0.12 if surf in ["asphalt", "wet", "wood", "ice"] else 0.35
+			mat.metallic_specular = 0.9
+			mat.albedo_color = Color(0.70, 0.72, 0.78)
+		_add_static(arrays, mat, surf, "Road_" + surf)
+	verge.generate_normals()
+	var vmat := TexGen.material(_road_tex("grass"), 1.0)
+	vmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_add_static(verge.commit_to_arrays(), vmat, "grass", "Verges")
+
+
+func _road_tex(surf: String) -> ImageTexture:
+	return TexGen.road_wasted(surf) if _theme() == "wasteland" else TexGen.road(surf)
+
+
+## Two triangles for a quad given left/right at the start (a) and end (b).
+func _quad(st: SurfaceTool, la: Vector3, ra: Vector3, lb: Vector3, rb: Vector3,
+		ula: Vector2, ura: Vector2, ulb: Vector2, urb: Vector2) -> void:
+	for q in [[la, ula], [rb, urb], [ra, ura], [la, ula], [lb, ulb], [rb, urb]]:
+		st.set_uv(q[1])
+		st.add_vertex(q[0])
+
+
+## `arrays` must be a non-indexed triangle list; its vertices double as the
+## collision faces (built directly so it also works with a headless server).
+func _add_static(arrays: Array, mat: Material, surf: String, node_name: String) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.set_meta("surface", surf)
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	body.add_child(mi)
+	var cs := CollisionShape3D.new()
+	var shape := ConcavePolygonShape3D.new()
+	shape.set_faces(arrays[Mesh.ARRAY_VERTEX])
+	shape.backface_collision = true
+	cs.shape = shape
+	body.add_child(cs)
+	add_child(body)
+	return body
+
+
+# --------------------------------------------------------------------------- terrain
+
+func _build_terrain() -> void:
+	_grid_n = int(_world_half * 2.0 / CELL) + 1
+	var gn := _grid_n
+	_dist.resize(gn * gn)
+	_dist.fill(1e9)
+	_road_h.resize(gn * gn)
+	_road_h.fill(0.0)
+	var origin := _grid_origin()
+	var r := 12
+	for p in points:
+		var cx := int(round((p.x - origin.x) / CELL))
+		var cz := int(round((p.z - origin.y) / CELL))
+		for z in range(maxi(cz - r, 0), mini(cz + r, gn - 1) + 1):
+			for x in range(maxi(cx - r, 0), mini(cx + r, gn - 1) + 1):
+				var d := Vector2(origin.x + x * CELL - p.x, origin.y + z * CELL - p.z).length()
+				var k := z * gn + x
+				if d < _dist[k]:
+					_dist[k] = d
+					_road_h[k] = p.y
+	# cells far from the road get the height of the nearest stamped cell's road (diffuse a bit)
+	var noise := FastNoiseLite.new()
+	noise.seed = 42
+	noise.frequency = 0.007
+	noise.fractal_octaves = 3
+	_heights.resize(gn * gn)
+	for z in gn:
+		for x in gn:
+			var k := z * gn + x
+			var wx := origin.x + x * CELL
+			var wz := origin.y + z * CELL
+			# near the road the ground sits just under it; further out it fades to
+			# a common base level so the stamp boundary leaves no step
+			var base := _road_h[k] if _dist[k] < 1e8 else 0.0
+			var far_base := lerpf(base * 0.7, 5.6, smoothstep(55.0, 95.0, _dist[k]))
+			var n01 := noise.get_noise_2d(wx, wz) * 0.5 + 0.5
+			var edge := smoothstep(VERGE + 6.0, 70.0, _dist[k])
+			var hills := (n01 * n01) * 38.0 - 4.0
+			var rim := smoothstep(_world_half - 110.0, _world_half, maxf(absf(wx - _center.x), absf(wz - _center.y)))
+			_heights[k] = lerpf(base - 0.3, far_base + hills + 3.0, edge) + rim * 60.0
+			var sink := _water_depth(wx, wz)
+			if sink > 0.0:
+				_heights[k] = lerpf(_heights[k], _water_level() - 5.0, sink)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for z in gn - 1:
+		for x in gn - 1:
+			var ids := [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x + 1, z + 1),
+				Vector2i(x, z), Vector2i(x + 1, z + 1), Vector2i(x, z + 1)]
+			for g in ids:
+				var k: int = g.y * gn + g.x
+				var h := _heights[k]
+				var wp := Vector3(origin.x + g.x * CELL, h, origin.y + g.y * CELL)
+				st.set_color(_terrain_color(h - _road_h[k] * 0.7, k))
+				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
+				st.add_vertex(wp)
+	st.generate_normals()
+	var mat := TexGen.material(TexGen.grass(), 1.0, Color(0.8, 0.84, 0.82) if rain else Color.WHITE)
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_add_static(st.commit_to_arrays(), mat, "grass", "Terrain")
+
+
+func _grid_origin() -> Vector2:
+	return _center - Vector2(_world_half, _world_half)
+
+
+func _terrain_color(h: float, k: int) -> Color:
+	if _theme() == "wasteland":
+		var ash := Color(0.40, 0.37, 0.32)
+		var scorch := Color(0.24, 0.21, 0.18)
+		var c2 := ash.lerp(scorch, clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0) * 0.5)
+		if h < -0.5:
+			c2 = c2.lerp(Color(0.30, 0.32, 0.18), 0.6)  # sludge on the shore
+		if h > 20.0:
+			c2 = c2.lerp(Color(0.48, 0.42, 0.36), clampf((h - 20.0) / 15.0, 0.0, 1.0))
+		return c2
+	if _theme() == "jungle":
+		var lush := Color(0.20, 0.42, 0.14)
+		var c3 := lush.lerp(Color(0.30, 0.50, 0.12), clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0) * 0.6)
+		if h < 0.6:
+			c3 = c3.lerp(Color(0.34, 0.26, 0.16), clampf((0.6 - h) / 1.5, 0.0, 1.0))  # muddy river banks
+		if h > 22.0:
+			c3 = c3.lerp(Color(0.40, 0.42, 0.30), clampf((h - 22.0) / 14.0, 0.0, 1.0))
+		return c3
+	var grass := Color(0.40, 0.58, 0.22)
+	var dry := Color(0.64, 0.56, 0.32)
+	var rock := Color(0.62, 0.55, 0.46)
+	var c := grass.lerp(dry, clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0) * 0.35)
+	if h > 16.0:
+		c = c.lerp(rock, clampf((h - 16.0) / 12.0, 0.0, 1.0))
+	if h > 48.0:
+		c = c.lerp(Color(0.95, 0.96, 1.0), clampf((h - 48.0) / 10.0, 0.0, 1.0))
+	return c
+
+
+func terrain_height(x: float, z: float) -> float:
+	var k := _grid_index(x, z)
+	return _heights[k]
+
+
+func _road_dist(x: float, z: float) -> float:
+	return _dist[_grid_index(x, z)]
+
+
+func _grid_index(x: float, z: float) -> int:
+	var origin := _grid_origin()
+	var gx := clampi(int(round((x - origin.x) / CELL)), 0, _grid_n - 1)
+	var gz := clampi(int(round((z - origin.y) / CELL)), 0, _grid_n - 1)
+	return gz * _grid_n + gx
+
+
+# --------------------------------------------------------------------------- barriers
+
+## Crashable barriers on the outside of sharper corners: stone walls on
+## tarmac, hay bales on gravel.
+func _build_barriers() -> void:
+	var styles := {
+		"asphalt": {"size": Vector3(0.9, 1.1, 3.4), "mat": _box_material(TexGen.stone_wall(), 1.0)},
+		"gravel": {"size": Vector3(1.2, 1.2, 2.6), "mat": _box_material(TexGen.hay(), 1.0)},
+		"wet": {"size": Vector3(0.3, 0.8, 3.4), "mat": _box_material(TexGen.armco(), 0.35)},
+		"ice": {"size": Vector3(2.0, 1.3, 3.6), "mat": _box_material(TexGen.snow(), 0.6)},
+		"grass": {"size": Vector3(0.25, 1.0, 3.2), "mat": _box_material(TexGen.planks(), 1.0)},
+	}
+	if _theme() == "wasteland":
+		var rusty := _box_material(TexGen.armco(), 0.6)
+		rusty.albedo_color = Color(0.85, 0.6, 0.45)
+		var slab := _box_material(TexGen.concrete(), 1.0)
+		styles["asphalt"] = {"size": Vector3(0.3, 0.8, 3.4), "mat": rusty}
+		styles["wet"] = styles["asphalt"]
+		styles["gravel"] = {"size": Vector3(0.8, 1.0, 3.0), "mat": slab}
+	var logs := {"size": Vector3(0.8, 0.8, 3.4), "mat": TexGen.material(TexGen.bark(), 1.0), "log": true}
+	styles["mud"] = logs
+	if _theme() == "jungle":
+		styles["gravel"] = logs
+		styles["grass"] = logs
+	elif _theme() == "circuit":
+		styles["asphalt"] = styles["wet"]  # armco round the whole lap
+	var walls := StaticBody3D.new()
+	walls.name = "Barriers"
+	walls.set_meta("surface", "grass")
+	add_child(walls)
+	var n := points.size()
+	for i in n:
+		if i < 8 or i > n - 8:
+			continue  # keep the start area open
+		var t0 := tangents[wrapi(i - 4, 0, n)]
+		var t1 := tangents[wrapi(i + 4, 0, n)]
+		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
+		if absf(turn) < 0.16:
+			continue
+		var surf: String = surfaces[i]
+		if not styles.has(surf):
+			continue  # bridges and fords have their own edges
+		var style: Dictionary = styles[surf]
+		var size: Vector3 = style["size"]
+		# positive turn = turning left, so the outside is the right (+side)
+		var out_sign := 1.0 if turn > 0.0 else -1.0
+		var pos := points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 0.4 + size.x * 0.5)
+		pos.y = points[i].y - 0.45 + size.y * 0.5
+		var flat := tangents[i]
+		flat.y = 0.0
+		var xf := Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), pos)
+		var mi := MeshInstance3D.new()
+		if style.get("log", false):
+			# a felled log lying along the corner
+			var cyl := CylinderMesh.new()
+			cyl.top_radius = size.x * 0.5
+			cyl.bottom_radius = size.x * 0.55
+			cyl.height = size.z
+			cyl.radial_segments = 7
+			cyl.rings = 1
+			mi.mesh = cyl
+			mi.transform = xf * Transform3D(Basis(Vector3.RIGHT, PI * 0.5).rotated(Vector3.FORWARD, _rng.randf() * 0.3),
+				Vector3.ZERO)
+		else:
+			var box := BoxMesh.new()
+			box.size = size
+			mi.mesh = box
+			mi.transform = xf
+		mi.material_override = style["mat"]
+		walls.add_child(mi)
+		var cs := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = size
+		cs.shape = shape
+		cs.transform = xf
+		walls.add_child(cs)
+		# chevron boards on the outside of tight corners
+		if absf(turn) > 0.3 and i % 6 == 0:
+			_chevron(points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5), flat.normalized(), out_sign)
+
+
+## BoxMesh packs its six faces into a 3 x 2 atlas; scale UVs so every face
+## shows the whole texture.
+func _box_material(tex: Texture2D, roughness: float) -> StandardMaterial3D:
+	var m := TexGen.material(tex, roughness)
+	m.uv1_scale = Vector3(3, 2, 1)
+	return m
+
+
+func _chevron(pos: Vector3, tangent: Vector3, out_sign: float) -> void:
+	var board := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(1.6, 0.8, 0.08)
+	board.mesh = bm
+	board.material_override = TexGen.material(TexGen.stripes(Color(1.0, 0.82, 0.1), Color(0.08, 0.08, 0.08), 4), 0.8)
+	board.position = pos + Vector3(0, 1.6, 0)
+	add_child(board)
+	board.look_at(board.position + tangent, Vector3.UP)
+	var label := Label3D.new()
+	label.text = "<<" if out_sign > 0.0 else ">>"
+	label.font_size = 64
+	label.outline_size = 12
+	label.modulate = Color(0.1, 0.1, 0.1)
+	label.outline_modulate = Color(1.0, 0.85, 0.1)
+	label.position = Vector3(0, 0, 0.05)
+	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	board.add_child(label)
+	var post := MeshInstance3D.new()
+	var pm := BoxMesh.new()
+	pm.size = Vector3(0.12, 2.2, 0.12)
+	post.mesh = pm
+	post.material_override = TexGen.flat_material(Color(0.85, 0.85, 0.85))
+	post.position = pos + Vector3(0, 0.5, 0)
+	add_child(post)
+
+
+# --------------------------------------------------------------------------- dressing
+
+func _build_start_line() -> void:
+	var i := 0
+	var hw := widths[i] * 0.5
+	var flat := tangents[i]
+	flat.y = 0.0
+	flat = flat.normalized()
+	var line := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(widths[i], 2.0)
+	line.mesh = pm
+	line.material_override = TexGen.material(TexGen.checker(), 0.9)
+	line.position = points[i] + Vector3(0, 0.03, 0)
+	add_child(line)
+	line.look_at(line.position + flat, Vector3.UP)
+	var bas := Basis.looking_at(flat, Vector3.UP)
+	var red := TexGen.flat_material(Color(0.85, 0.1, 0.1), 0.6)
+	for s in [-1.0, 1.0]:
+		var post := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.6, 6.0, 0.6)
+		post.mesh = bm
+		post.material_override = red
+		post.position = points[i] + _side(i) * s * (hw + VERGE + 0.5) + Vector3(0, 2.6, 0)
+		add_child(post)
+		var body := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = bm.size
+		cs.shape = shape
+		body.add_child(cs)
+		body.position = post.position
+		add_child(body)
+	var beam := MeshInstance3D.new()
+	var beam_mesh := BoxMesh.new()
+	beam_mesh.size = Vector3(widths[i] + VERGE * 2.0 + 2.0, 1.4, 0.5)
+	beam.mesh = beam_mesh
+	beam.material_override = TexGen.flat_material(Color(0.1, 0.25, 0.75), 0.6)
+	beam.transform = Transform3D(bas, points[i] + Vector3(0, 5.8, 0))
+	add_child(beam)
+	for dir in [1.0, -1.0]:
+		var label := Label3D.new()
+		label.text = "START  /  FINISH"
+		label.font_size = 160
+		label.outline_size = 24
+		label.modulate = Color(1.0, 0.85, 0.1)
+		label.outline_modulate = Color(0.05, 0.05, 0.1)
+		label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		label.position = Vector3(0, 0, 0.3 * dir)
+		if dir < 0.0:
+			label.rotation.y = PI
+		beam.add_child(label)
+
+
+func _build_section_signs() -> void:
+	var n := points.size()
+	for sec in _sections:
+		var i := int(float(sec[0]) * n)
+		if i == 0:
+			continue
+		var surf: String = sec[1]
+		var info := Surfaces.get_surface(surf)
+		var label := Label3D.new()
+		label.text = info["label"]
+		label.font_size = 128
+		label.outline_size = 20
+		label.modulate = info["hud"]
+		label.outline_modulate = Color(0.05, 0.05, 0.1)
+		label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+		label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+		var k := wrapi(i - 10, 0, n)
+		label.position = points[k] + _side(k) * (widths[k] * 0.5 + VERGE + 1.5) + Vector3(0, 3.2, 0)
+		add_child(label)
+
+
+## Low-poly houses lining the village sections: textured plaster walls with
+## shuttered windows, tiled gable roofs, a door facing the road.
+func _build_village() -> void:
+	var ranges: Array = map["village"]
+	if ranges.is_empty():
+		return
+	if not (ranges[0] is Array):
+		ranges = [ranges]
+	var ruins := _theme() == "wasteland"
+	var temples := _theme() == "jungle"
+	var temple_mat := TexGen.material(TexGen.stone_wall(), 1.0, Color(0.72, 0.80, 0.62))
+	var n := points.size()
+	var wall_mats: Array[StandardMaterial3D] = []
+	var gable_mats: Array[StandardMaterial3D] = []
+	for v in TexGen.WALL_COLORS.size():
+		wall_mats.append(TexGen.material(TexGen.house_wall(v), 0.95))
+		gable_mats.append(TexGen.flat_material(TexGen.WALL_COLORS[v], 0.95))
+	var roof_mat := TexGen.material(TexGen.roof_tiles(), 0.85)
+	roof_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var door_mat := TexGen.material(TexGen.door(), 0.8)
+	var chimney_mat := TexGen.material(TexGen.stone_wall(), 1.0)
+	var ruin_mats: Array[StandardMaterial3D] = []
+	for v in 3:
+		var m := TexGen.material(TexGen.ruin_wall(v), 1.0)
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		ruin_mats.append(m)
+	var rubble_mat := TexGen.material(TexGen.concrete(), 1.0, Color(0.6, 0.57, 0.52))
+	var bodies := StaticBody3D.new()
+	bodies.name = "Village"
+	add_child(bodies)
+	for range_f in ranges:
+		var i := int(n * (range_f[0] as float))
+		while i < int(n * (range_f[1] as float)):
+			for s in [-1.0, 1.0]:
+				if _rng.randf() < 0.3:
+					continue
+				var storeys := (_rng.randi_range(2, 5) if ruins else (1 if _rng.randf() < 0.45 else 2))
+				var size := Vector3(_rng.randf_range(6, 10), storeys * 3.0, _rng.randf_range(6, 9))
+				var off := widths[i] * 0.5 + VERGE + 3.0 + size.x * 0.5
+				var pos: Vector3 = points[i] + _side(i) * s * off
+				# keep clear of other parts of the route and of the water
+				if _road_dist(pos.x, pos.z) < off - 1.0 or _in_water(pos.x, pos.z, size.x * 0.6 + 2.0):
+					continue
+				var flat := tangents[i]
+				flat.y = 0.0
+				var bas := Basis.looking_at(flat.normalized(), Vector3.UP)
+				var house := Node3D.new()
+				house.transform = Transform3D(bas, pos)
+				add_child(house)
+				if temples:
+					size.y = _place_temple(house, size, temple_mat)
+				elif ruins:
+					_place_ruin(house, size, ruin_mats[_rng.randi() % ruin_mats.size()], rubble_mat, s)
+				else:
+					_place_house(house, size, s, wall_mats, gable_mats, roof_mat, door_mat, chimney_mat)
+				var cs := CollisionShape3D.new()
+				var shape := BoxShape3D.new()
+				shape.size = size
+				cs.shape = shape
+				cs.transform = Transform3D(bas, pos + Vector3(0, size.y * 0.5 - 0.5, 0))
+				bodies.add_child(cs)
+			i += _rng.randi_range(4, 6)
+
+
+func _place_house(house: Node3D, size: Vector3, s: float, wall_mats: Array[StandardMaterial3D],
+		gable_mats: Array[StandardMaterial3D], roof_mat: Material, door_mat: Material, chimney_mat: Material) -> void:
+	var v := _rng.randi() % wall_mats.size()
+	var mi := MeshInstance3D.new()
+	mi.mesh = _house_mesh(size, wall_mats[v], roof_mat, gable_mats[v])
+	house.add_child(mi)
+	# door on the road side (local -s * x)
+	var dq := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(1.1, 2.2)
+	dq.mesh = qm
+	dq.material_override = door_mat
+	dq.position = Vector3(-s * (size.x * 0.5 + 0.03), 0.5, _rng.randf_range(-0.25, 0.25) * size.z)
+	dq.rotation.y = -s * PI * 0.5
+	house.add_child(dq)
+	if _rng.randf() < 0.6:
+		var ch := MeshInstance3D.new()
+		var cb := BoxMesh.new()
+		cb.size = Vector3(0.7, 2.0, 0.7)
+		ch.mesh = cb
+		ch.material_override = chimney_mat
+		ch.position = Vector3(_rng.randf_range(-0.25, 0.25) * size.x, size.y + 2.0, size.z * 0.3)
+		house.add_child(ch)
+
+
+## A bombed-out apartment block: four walls that end at ragged heights,
+## no roof, a heap of rubble at its foot.
+func _place_ruin(house: Node3D, size: Vector3, wall_mat: Material, rubble_mat: Material, s: float) -> void:
+	var hx := size.x * 0.5
+	var hz := size.z * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := [Vector3(-hx, 0, -hz), Vector3(hx, 0, -hz), Vector3(hx, 0, hz), Vector3(-hx, 0, hz)]
+	for k in 4:
+		var a: Vector3 = corners[k]
+		var b: Vector3 = corners[(k + 1) % 4]
+		var cols := int(maxf(1.0, roundf(a.distance_to(b) / 3.0)))
+		var n := (a + b).normalized()
+		for c in cols:
+			var p0 := a.lerp(b, float(c) / cols)
+			var p1 := a.lerp(b, float(c + 1) / cols)
+			# each 3 m column of wall broke off at its own height
+			var top := size.y - floorf(_rng.randf() * _rng.randf() * size.y / 3.0) * 3.0 - _rng.randf_range(0.0, 1.4)
+			top = maxf(top, 2.0)
+			var v0 := (size.y + 0.6) / 3.0
+			var v1 := (size.y - top) / 3.0
+			_quad_uv(st, [p0 + Vector3(0, -0.6, 0), p1 + Vector3(0, -0.6, 0), p1 + Vector3(0, top, 0), p0 + Vector3(0, top, 0)],
+				[Vector2(0, v0), Vector2(1, v0), Vector2(1, v1), Vector2(0, v1)], n)
+	st.set_material(wall_mat)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	house.add_child(mi)
+	# a floor slab hanging on at mid height
+	if size.y > 6.0:
+		var slab := MeshInstance3D.new()
+		var sm := BoxMesh.new()
+		sm.size = Vector3(size.x * 0.9, 0.3, size.z * 0.6)
+		slab.mesh = sm
+		slab.material_override = rubble_mat
+		slab.position = Vector3(0, 3.0 * _rng.randi_range(1, int(size.y / 3.0) - 1), -size.z * 0.15)
+		slab.rotation.x = _rng.randf_range(-0.15, 0.15)
+		house.add_child(slab)
+	for r in 3:
+		var rb := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(_rng.randf_range(1.0, 2.5), _rng.randf_range(0.5, 1.2), _rng.randf_range(1.0, 2.5))
+		rb.mesh = bm
+		rb.material_override = rubble_mat
+		rb.position = Vector3(-s * (hx + 0.6), 0.0, _rng.randf_range(-hz, hz))
+		rb.rotation = Vector3(_rng.randf_range(-0.3, 0.3), _rng.randf() * TAU, _rng.randf_range(-0.3, 0.3))
+		house.add_child(rb)
+
+
+## House walls (UVs tile one 3 m storey per texture repeat), a gable roof
+## running along local z, and plain gable ends.
+func _house_mesh(size: Vector3, wall_mat: Material, roof_mat: Material, gable_mat: Material) -> ArrayMesh:
+	var hx := size.x * 0.5
+	var hz := size.z * 0.5
+	var y0 := -0.6
+	var y1 := size.y
+	var ridge := y1 + minf(size.x * 0.32, 2.8)
+	var mesh := ArrayMesh.new()
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var corners := [Vector3(-hx, 0, -hz), Vector3(hx, 0, -hz), Vector3(hx, 0, hz), Vector3(-hx, 0, hz)]
+	for k in 4:
+		var a: Vector3 = corners[k]
+		var b: Vector3 = corners[(k + 1) % 4]
+		var tiles := maxf(1.0, roundf(a.distance_to(b) / 3.0))
+		var vb := (y1 - y0) / 3.0
+		_quad_uv(st, [a + Vector3(0, y0, 0), b + Vector3(0, y0, 0), b + Vector3(0, y1, 0), a + Vector3(0, y1, 0)],
+			[Vector2(0, vb), Vector2(tiles, vb), Vector2(tiles, 0), Vector2(0, 0)], (a + b).normalized())
+	st.set_material(wall_mat)
+	st.commit(mesh)
+
+	st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var eave := 0.5
+	var slope_len := Vector2(hx + eave, ridge - y1 + 0.25).length()
+	for sx in [-1.0, 1.0]:
+		var lo := Vector3(sx * (hx + eave), y1 - 0.25, 0)
+		var hi := Vector3(0, ridge, 0)
+		var dz := Vector3(0, 0, hz + 0.35)
+		var out := (lo - hi).cross(dz).normalized()
+		if out.y < 0.0:
+			out = -out
+		_quad_uv(st, [lo - dz, lo + dz, hi + dz, hi - dz],
+			[Vector2(0, slope_len / 1.5), Vector2(size.z / 2.0, slope_len / 1.5), Vector2(size.z / 2.0, 0), Vector2(0, 0)], out)
+	st.set_material(roof_mat)
+	st.commit(mesh)
+
+	st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for sz in [-1.0, 1.0]:
+		var n := Vector3(0, 0, sz)
+		_tri_uv(st, [Vector3(-hx, y1, sz * hz), Vector3(hx, y1, sz * hz), Vector3(0, ridge, sz * hz)],
+			[Vector2.ZERO, Vector2.ZERO, Vector2.ZERO], n)
+	st.set_material(gable_mat)
+	st.commit(mesh)
+	return mesh
+
+
+func _quad_uv(st: SurfaceTool, v: Array, uv: Array, n: Vector3) -> void:
+	_tri_uv(st, [v[0], v[1], v[2]], [uv[0], uv[1], uv[2]], n)
+	_tri_uv(st, [v[0], v[2], v[3]], [uv[0], uv[2], uv[3]], n)
+
+
+## Adds a triangle wound so its front face points along `n`.
+func _tri_uv(st: SurfaceTool, v: Array, uv: Array, n: Vector3) -> void:
+	var order := [0, 1, 2]
+	var cr := (v[1] - v[0] as Vector3).cross(v[2] - v[0])
+	if cr.dot(n) * CarModel.winding() < 0.0:
+		order = [0, 2, 1]
+	for k in order:
+		st.set_normal(n)
+		st.set_uv(uv[k])
+		st.add_vertex(v[k])
+
+
+## Little crowds behind tape at hairpins and at the jump.
+func _build_spectators() -> void:
+	if _theme() == "wasteland":
+		return  # nobody left to watch
+	var n := points.size()
+	var shirt_cols := [Color(0.9, 0.15, 0.1), Color(0.1, 0.3, 0.85), Color(1.0, 0.85, 0.1),
+		Color(0.95, 0.95, 0.95), Color(0.2, 0.6, 0.2), Color(0.95, 0.5, 0.1)]
+	var skin := TexGen.flat_material(Color(0.95, 0.78, 0.62))
+	var legs := TexGen.flat_material(Color(0.2, 0.22, 0.3))
+	var body_mesh := BoxMesh.new()
+	body_mesh.size = Vector3(0.5, 0.7, 0.3)
+	var leg_mesh := BoxMesh.new()
+	leg_mesh.size = Vector3(0.42, 0.8, 0.26)
+	var head_mesh := BoxMesh.new()
+	head_mesh.size = Vector3(0.3, 0.3, 0.3)
+	var spots: Array[int] = []
+	for i in n:
+		var t0 := tangents[wrapi(i - 5, 0, n)]
+		var t1 := tangents[wrapi(i + 5, 0, n)]
+		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
+		if absf(turn) > 1.0 and (spots.is_empty() or i - spots[spots.size() - 1] > 25):
+			spots.append(i)
+	for jump in _jumps:
+		spots.append(int((jump[0] as float) * n) + 4)
+	for i in spots:
+		var t0 := tangents[wrapi(i - 5, 0, n)]
+		var t1 := tangents[wrapi(i + 5, 0, n)]
+		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
+		var inside := -1.0 if turn > 0.0 else 1.0  # crowd on the inside: safer and visible
+		if absf(turn) < 0.3:
+			inside = 1.0
+		for c in 14:
+			var k := wrapi(i + _rng.randi_range(-6, 6), 0, n)
+			var off := widths[k] * 0.5 + VERGE + _rng.randf_range(4.0, 8.0)
+			var pos := points[k] + _side(k) * inside * off
+			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 else points[k].y - 0.45
+			var guy := Node3D.new()
+			guy.position = pos
+			add_child(guy)
+			guy.look_at(points[k] + Vector3(0, pos.y - points[k].y, 0), Vector3.UP)
+			var lm := MeshInstance3D.new()
+			lm.mesh = leg_mesh
+			lm.material_override = legs
+			lm.position.y = 0.4
+			guy.add_child(lm)
+			var bm := MeshInstance3D.new()
+			bm.mesh = body_mesh
+			bm.material_override = TexGen.flat_material(shirt_cols[_rng.randi() % shirt_cols.size()])
+			bm.position.y = 1.15
+			guy.add_child(bm)
+			var hm := MeshInstance3D.new()
+			hm.mesh = head_mesh
+			hm.material_override = skin
+			hm.position.y = 1.68
+			guy.add_child(hm)
+
+
+func _build_trees() -> void:
+	var col_shape := CylinderShape3D.new()
+	col_shape.radius = 0.4
+	col_shape.height = 3.0
+	var trees := StaticBody3D.new()
+	trees.name = "Trees"
+	trees.set_meta("surface", "grass")
+	add_child(trees)
+	var wasteland := _theme() == "wasteland"
+	var jungle := _theme() == "jungle"
+	var landmark: Vector2 = Vector2(map["landmark"][0], map["landmark"][1]) if map.has("landmark") else Vector2(INF, INF)
+	var placed := 0
+	var tries := 0
+	var n := points.size()
+	var target_trees := int(650 * (map["forest"] as float))
+	while placed < target_trees and tries < target_trees * 14:
+		tries += 1
+		var i := _rng.randi_range(0, n - 1)
+		var forest := surfaces[i] == "gravel" or (map["forest"] as float) > 1.2
+		# the gravel sections run through forest: denser and closer trees
+		var off := _rng.randf_range(9.0, 45.0) if forest else _rng.randf_range(16.0, 110.0)
+		if jungle:
+			off = _rng.randf_range(7.0, 55.0)
+		if forest == false and _rng.randf() < 0.4:
+			continue
+		var side := 1.0 if _rng.randf() < 0.5 else -1.0
+		var p := points[i] + _side(i) * side * off + Vector3(_rng.randf_range(-5, 5), 0, _rng.randf_range(-5, 5))
+		var min_clear := widths[i] * 0.5 + VERGE + 2.5
+		if _road_dist(p.x, p.z) < min_clear or _in_water(p.x, p.z) or Vector2(p.x, p.z).distance_to(landmark) < 34.0:
+			continue
+		var nearest := nearest_index(p, i)
+		if distance_to_road(p, nearest) < min_clear:
+			continue
+		p.y = terrain_height(p.x, p.z) - 0.2
+		var mi := MeshInstance3D.new()
+		if wasteland:
+			mi.mesh = Trees.dead(_rng.randi_range(0, 3))
+		elif jungle:
+			var roll := _rng.randf()
+			mi.mesh = Trees.palm(_rng.randi_range(0, 3)) if roll < 0.4 else (Trees.jungle(_rng.randi_range(0, 3))
+				if roll < 0.8 else Trees.leafy(_rng.randi_range(0, 1)))
+		elif _rng.randf() < (0.88 if forest else 0.45):
+			mi.mesh = Trees.pine(_rng.randi_range(0, 3))
+		else:
+			mi.mesh = Trees.leafy(_rng.randi_range(0, 3))
+		mi.position = p
+		mi.scale = Vector3.ONE * _rng.randf_range(0.8, 1.5)
+		mi.rotation.y = _rng.randf() * TAU
+		_scatter_add(mi)
+		if off < 40.0:
+			var cs := CollisionShape3D.new()
+			cs.shape = col_shape
+			cs.position = p + Vector3(0, 1.5, 0)
+			trees.add_child(cs)
+		placed += 1
+	if wasteland:
+		_scatter_flush(trees)
+		return
+	# bushes along the verges (no collision, they're just scenery)
+	for b in int((420 if jungle else 220) * (map["forest"] as float)):
+		var i := _rng.randi_range(0, n - 1)
+		var side := 1.0 if _rng.randf() < 0.5 else -1.0
+		var off := widths[i] * 0.5 + VERGE + _rng.randf_range(3.0, 14.0)
+		var p := points[i] + _side(i) * side * off
+		if _road_dist(p.x, p.z) < widths[i] * 0.5 + VERGE + 2.0 or _in_water(p.x, p.z):
+			continue
+		p.y = terrain_height(p.x, p.z) - 0.1
+		var mi := MeshInstance3D.new()
+		mi.mesh = Trees.fern(_rng.randi_range(0, 3)) if jungle and _rng.randf() < 0.7 else Trees.bush(_rng.randi_range(0, 2))
+		mi.position = p
+		mi.scale = Vector3.ONE * _rng.randf_range(0.7, 1.4)
+		mi.rotation.y = _rng.randf() * TAU
+		_scatter_add(mi)
+	_scatter_flush(trees)
+
+
+var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
+
+
+## Queue a placed scenery mesh for batching (and free the temporary node).
+func _scatter_add(mi: MeshInstance3D) -> void:
+	if not _scatter.has(mi.mesh):
+		_scatter[mi.mesh] = []
+	_scatter[mi.mesh].append(mi.transform)
+	mi.free()
+
+
+func _scatter_flush(parent: Node3D) -> void:
+	for mesh in _scatter:
+		var xfs: Array = _scatter[mesh]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = xfs.size()
+		for i in xfs.size():
+			mm.set_instance_transform(i, xfs[i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		parent.add_child(mmi)
+	_scatter.clear()
+
+
+func _build_cones() -> void:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.04
+	mesh.bottom_radius = 0.28
+	mesh.height = 0.75
+	mesh.radial_segments = 6
+	var mat := TexGen.material(TexGen.stripes(Color(1.0, 0.4, 0.05), Color(1, 1, 1), 8), 0.7)
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.25
+	shape.height = 0.75
+	if _theme() == "wasteland":
+		# rusty oil drums instead of cones, some still glowing
+		mesh = CylinderMesh.new()
+		mesh.top_radius = 0.3
+		mesh.bottom_radius = 0.3
+		mesh.height = 0.9
+		mesh.radial_segments = 8
+		mat = TexGen.material(TexGen.barrel(), 0.8)
+		shape.radius = 0.3
+		shape.height = 0.9
+	for k in range(4, 30, 4):
+		for s in [-1.0, 1.0]:
+			var cone := RigidBody3D.new()
+			cone.mass = 4.0
+			cone.collision_layer = 8
+			cone.collision_mask = 1 | 2 | 8
+			cone.set_meta("surface", "asphalt")
+			var mi := MeshInstance3D.new()
+			mi.mesh = mesh
+			mi.material_override = mat
+			cone.add_child(mi)
+			var cs := CollisionShape3D.new()
+			cs.shape = shape
+			cone.add_child(cs)
+			cone.position = points[k] + _side(k) * s * (widths[k] * 0.5 - 0.5) + Vector3(0, 0.45, 0)
+			add_child(cone)
+			if _theme() == "wasteland" and _rng.randf() < 0.5:
+				_glow_lid(mi)
+
+
+func _build_mountains() -> void:
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for k in 22:
+		var a := TAU * k / 22.0 + _rng.randf_range(-0.1, 0.1)
+		var r := _rng.randf_range(900.0, 1150.0) * _world_half / 560.0
+		var h := _rng.randf_range(160.0, 360.0)
+		var base := _rng.randf_range(180.0, 300.0)
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var sides := 7
+		var peak := Vector3(_rng.randf_range(-30, 30), h, _rng.randf_range(-30, 30))
+		for s in sides:
+			var a0 := TAU * s / sides
+			var a1 := TAU * (s + 1) / sides
+			var p0 := Vector3(cos(a0), 0, sin(a0)) * base * _rng.randf_range(0.8, 1.1)
+			var p1 := Vector3(cos(a1), 0, sin(a1)) * base
+			var mid0 := p0.lerp(peak, 0.7)
+			var mid1 := p1.lerp(peak, 0.7)
+			var rockc := Color(0.38, 0.44, 0.55).darkened(0.12 * (s % 2))
+			var snow := Color(0.94, 0.96, 1.0)
+			if _theme() == "wasteland":
+				rockc = Color(0.36, 0.28, 0.22).darkened(0.12 * (s % 2))
+				snow = Color(0.52, 0.46, 0.40)  # ash, not snow
+			elif _theme() == "jungle":
+				rockc = Color(0.22, 0.36, 0.26).darkened(0.12 * (s % 2))
+				snow = Color(0.30, 0.44, 0.30)  # forest right to the top
+			for tri in [[p0, rockc], [mid1, rockc], [p1, rockc], [p0, rockc], [mid0, rockc], [mid1, rockc],
+					[mid0, snow], [peak, snow], [mid1, snow]]:
+				st.set_color(tri[1])
+				st.add_vertex(tri[0])
+		var mi := MeshInstance3D.new()
+		mi.mesh = st.commit()
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = Vector3(_center.x + cos(a) * r, -10.0, _center.y + sin(a) * r)
+		if _in_water(mi.position.x, mi.position.z, 200.0):
+			mi.free()
+			continue
+		add_child(mi)
+
+
+# --------------------------------------------------------------------------- water, tunnel, wrecks
+
+func _water_level() -> float:
+	return map.get("water_level", -1.5)
+
+
+## 0 outside the water areas, rising to 1 a few metres in from their edge.
+func _water_depth(x: float, z: float) -> float:
+	var best := 0.0
+	for r in map.get("water", []):
+		var inside := minf(minf(x - (r[0] as float), (r[2] as float) - x), minf(z - (r[1] as float), (r[3] as float) - z))
+		best = maxf(best, smoothstep(-2.0, 14.0, inside))
+	return best
+
+
+func _build_water() -> void:
+	if not map.has("water"):
+		return
+	var mi := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(4000, 4000)
+	mi.mesh = pm
+	var mat := StandardMaterial3D.new()
+	if _theme() == "wasteland":
+		mat.albedo_color = Color(0.20, 0.26, 0.10)  # oily, faintly green
+		mat.emission_enabled = true
+		mat.emission = Color(0.05, 0.10, 0.02)
+	elif _theme() == "jungle":
+		# muddy river: see-through enough to make out the ford's stones
+		mat.albedo_color = Color(0.17, 0.20, 0.10, 0.84)
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	else:
+		mat.albedo_color = Color(0.12, 0.30, 0.55)
+	mat.roughness = 0.12
+	mat.metallic_specular = 0.9
+	if _theme() == "jungle":
+		mat.roughness = 0.45
+		mat.metallic_specular = 0.25
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = Vector3(_center.x, _water_level(), _center.y)
+	add_child(mi)
+
+
+## Wooden bridges over rivers: wherever the route is on the "wood" surface,
+## plank railings both sides (solid) and posts down into the water.
+func _build_bridges() -> void:
+	var n := points.size()
+	var body: StaticBody3D = null
+	var wood := TexGen.material(TexGen.planks(), 1.0)
+	var dark := TexGen.material(TexGen.bark(), 1.0)
+	for i in n:
+		if surfaces[i] != "wood":
+			continue
+		if body == null:
+			body = StaticBody3D.new()
+			body.name = "Bridges"
+			body.set_meta("surface", "wood")
+			add_child(body)
+		var b := (i + 1) % n
+		var flat := tangents[i]
+		flat.y = 0.0
+		var seg := points[i].distance_to(points[b])
+		var dir := (points[b] - points[i]).normalized()
+		for s in [-1.0, 1.0]:
+			var edge: Vector3 = (points[i] + points[b]) * 0.5 + _side(i) * s * (widths[i] * 0.5 + 0.2)
+			var xf := Transform3D(Basis.looking_at(dir, Vector3.UP), edge + Vector3(0, 0.55, 0))
+			for part in [[Vector3(0.2, 0.18, seg + 0.05), Vector3(0, 0.35, 0), wood], [Vector3(0.12, 0.12, seg + 0.05), Vector3(0, -0.1, 0), wood]]:
+				var mi := MeshInstance3D.new()
+				var bm := BoxMesh.new()
+				bm.size = part[0]
+				mi.mesh = bm
+				mi.material_override = part[2]
+				mi.transform = xf * Transform3D(Basis(), part[1])
+				body.add_child(mi)
+			var cs := CollisionShape3D.new()
+			var shape := BoxShape3D.new()
+			shape.size = Vector3(0.3, 1.2, seg + 0.05)
+			cs.shape = shape
+			cs.transform = xf
+			body.add_child(cs)
+			if i % 2 == 0:
+				# post from the rail down into the river bed
+				var depth := points[i].y - (_water_level() - 4.0)
+				var post := MeshInstance3D.new()
+				var pm := BoxMesh.new()
+				pm.size = Vector3(0.3, depth + 1.0, 0.3)
+				post.mesh = pm
+				post.material_override = dark
+				post.position = points[i] + _side(i) * s * (widths[i] * 0.5 + 0.2) + Vector3(0, 0.5 - (depth + 1.0) * 0.5 + 0.5, 0)
+				body.add_child(post)
+		# cross beam under the deck
+		var beam := MeshInstance3D.new()
+		var beam_mesh := BoxMesh.new()
+		beam_mesh.size = Vector3(widths[i] + 0.8, 0.35, 0.4)
+		beam.mesh = beam_mesh
+		beam.material_override = dark
+		beam.transform = Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), points[i] + Vector3(0, -0.35, 0))
+		body.add_child(beam)
+
+
+## Red and white kerbs on the edges of the circuit's corners.
+func _build_kerbs() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := points.size()
+	var red := Color(0.85, 0.12, 0.10)
+	var white := Color(0.95, 0.95, 0.92)
+	for i in n:
+		var t0 := tangents[wrapi(i - 3, 0, n)]
+		var t1 := tangents[wrapi(i + 3, 0, n)]
+		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
+		if absf(turn) < 0.09 or surfaces[i] == "gravel":
+			continue
+		var b := (i + 1) % n
+		for s in [-1.0, 1.0]:
+			for k in 3:
+				var f0 := k / 3.0
+				var f1 := (k + 1) / 3.0
+				var pa := points[i].lerp(points[b], f0)
+				var pb := points[i].lerp(points[b], f1)
+				var sa: Vector3 = _side(i).lerp(_side(b), f0).normalized() * s
+				var sb: Vector3 = _side(i).lerp(_side(b), f1).normalized() * s
+				var ia: Vector3 = pa + sa * (widths[i] * 0.5 - 0.3) + Vector3(0, 0.03, 0)
+				var oa: Vector3 = pa + sa * (widths[i] * 0.5 + 0.9) + Vector3(0, -0.02, 0)
+				var ib: Vector3 = pb + sb * (widths[i] * 0.5 - 0.3) + Vector3(0, 0.03, 0)
+				var ob: Vector3 = pb + sb * (widths[i] * 0.5 + 0.9) + Vector3(0, -0.02, 0)
+				var c := red if (i * 3 + k) % 2 == 0 else white
+				for v in [ia, oa, ob, ia, ob, ib]:
+					st.set_color(c)
+					st.add_vertex(v)
+	st.generate_normals()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.7
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mi := MeshInstance3D.new()
+	mi.name = "Kerbs"
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+## Jungle ruins: a stepped stone shrine with a doorway and fallen blocks.
+## Returns the height so the caller can size the collision box.
+func _place_temple(house: Node3D, size: Vector3, mat: Material) -> float:
+	var tiers := _rng.randi_range(2, 3)
+	var y := -0.6
+	var dims := Vector3(size.x, 0, size.z)
+	for t in tiers:
+		var h := _rng.randf_range(1.6, 2.4)
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(dims.x, h, dims.z)
+		mi.mesh = bm
+		mi.material_override = mat
+		mi.position = Vector3(0, y + h * 0.5, 0)
+		house.add_child(mi)
+		y += h
+		dims *= 0.72
+	var door := MeshInstance3D.new()
+	var dm := BoxMesh.new()
+	dm.size = Vector3(1.4, 1.8, 0.1)
+	door.mesh = dm
+	door.material_override = TexGen.flat_material(Color(0.06, 0.07, 0.05))
+	door.position = Vector3(0, y - 1.4, dims.z * 0.5 / 0.72 + 0.03)
+	house.add_child(door)
+	for r in 3:
+		var rb := MeshInstance3D.new()
+		var bm2 := BoxMesh.new()
+		bm2.size = Vector3(_rng.randf_range(0.8, 1.6), _rng.randf_range(0.6, 1.0), _rng.randf_range(0.8, 1.6))
+		rb.mesh = bm2
+		rb.material_override = mat
+		rb.position = Vector3(_rng.randf_range(-1, 1) * size.x * 0.7, -0.3, _rng.randf_range(-1, 1) * size.z * 0.7)
+		rb.rotation = Vector3(_rng.randf_range(-0.4, 0.4), _rng.randf() * TAU, _rng.randf_range(-0.4, 0.4))
+		house.add_child(rb)
+	return y + 0.6
+
+
+## A big stepped pyramid deep in the jungle, seen over the treetops.
+func _build_pyramid(at: Array) -> void:
+	var x: float = at[0]
+	var z: float = at[1]
+	var base: float = at[2] if at.size() > 2 else 34.0
+	var ground := terrain_height(x, z) - 1.0
+	var mat := TexGen.material(TexGen.stone_wall(), 1.0, Color(0.72, 0.78, 0.60))
+	mat.uv1_scale = Vector3(6, 4, 1)
+	var stairs := TexGen.flat_material(Color(0.46, 0.48, 0.38), 1.0)
+	var body := StaticBody3D.new()
+	body.name = "Pyramid"
+	add_child(body)
+	var w := base
+	var y := ground
+	for t in 6:
+		var h := 4.0
+		for part in [[Vector3(w, h, w), Vector3.ZERO, mat], [Vector3(4.0, h, 2.0), Vector3(0, 0, w * 0.5 + 0.8), stairs]]:
+			var mi := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = part[0]
+			mi.mesh = bm
+			mi.material_override = part[2]
+			mi.position = Vector3(x, y + h * 0.5, z) + (part[1] as Vector3)
+			body.add_child(mi)
+		var cs := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(w, h, w)
+		cs.shape = shape
+		cs.position = Vector3(x, y + h * 0.5, z)
+		body.add_child(cs)
+		y += h
+		w -= 5.0
+	var shrine := MeshInstance3D.new()
+	var sm := BoxMesh.new()
+	sm.size = Vector3(5.0, 4.0, 5.0)
+	shrine.mesh = sm
+	shrine.material_override = mat
+	shrine.position = Vector3(x, y + 2.0, z)
+	body.add_child(shrine)
+	var door := MeshInstance3D.new()
+	var dm := BoxMesh.new()
+	dm.size = Vector3(1.6, 2.4, 0.1)
+	door.mesh = dm
+	door.material_override = TexGen.flat_material(Color(0.05, 0.06, 0.04))
+	door.position = Vector3(x, y + 1.2, z + 2.53)
+	body.add_child(door)
+	# vines and trees growing out of the terraces
+	for k in 12:
+		var tier := _rng.randi_range(0, 3)
+		var r := (base - 5.0 * tier) * 0.5 - 1.2  # on the terrace above this tier
+		var along := _rng.randf_range(-r, r)
+		var off := [Vector2(r, along), Vector2(-r, along), Vector2(along, r), Vector2(along, -r)][k % 4] as Vector2
+		var mi := MeshInstance3D.new()
+		mi.mesh = Trees.fern(k % 4) if k % 3 else Trees.palm(k % 4)
+		mi.position = Vector3(x + off.x, ground + 4.0 * (tier + 1) - 0.1, z + off.y)
+		mi.scale = Vector3.ONE * (1.4 if k % 3 else 0.7)
+		body.add_child(mi)
+
+
+func _glow_lid(barrel: MeshInstance3D) -> void:
+	var lid := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.26
+	cm.bottom_radius = 0.26
+	cm.height = 0.04
+	cm.radial_segments = 8
+	lid.mesh = cm
+	lid.material_override = TexGen.flat_material(Color(0.5, 1.0, 0.2), 0.5, true)
+	lid.position.y = 0.46
+	barrel.add_child(lid)
+
+
+## The tunnel under the old hotel: thick walls, a roof that has caved in
+## here and there (letting light through), rubble against the walls and a
+## few dim lamps still burning.
+func _build_tunnel() -> void:
+	var span: Array = map["tunnel"]
+	var n := points.size()
+	var i0 := int(n * (span[0] as float))
+	var i1 := int(n * (span[1] as float))
+	var concrete := TexGen.material(TexGen.concrete(), 1.0, Color(0.7, 0.68, 0.64))
+	var roof_mat := TexGen.material(TexGen.concrete(), 1.0, Color(0.45, 0.43, 0.40))
+	roof_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var lamp_mat := TexGen.flat_material(Color(1.0, 0.7, 0.35), 0.5, true)
+	var body := StaticBody3D.new()
+	body.name = "Tunnel"
+	body.set_meta("surface", "asphalt")
+	add_child(body)
+	const H := 6.0
+	var step := 2
+	var i := i0
+	while i < i1:
+		var j := mini(i + step, i1)
+		var mid := (points[i] + points[j]) * 0.5
+		var flat := (points[j] - points[i])
+		var seg_len := flat.length() + 0.4
+		flat.y = 0.0
+		var bas := Basis.looking_at(flat.normalized(), Vector3.UP)
+		var side := _side(i)
+		var hw := widths[i] * 0.5 + 1.2
+		for s in [-1.0, 1.0]:
+			var wall := Transform3D(bas, mid + side * s * (hw + 0.5) + Vector3(0, H * 0.5 - 0.6, 0))
+			_tunnel_box(body, Vector3(1.0, H + 1.2, seg_len), wall, concrete, true)
+		var collapsed := _rng.randf() < 0.16 and i > i0 + 6 and j < i1 - 6
+		if collapsed:
+			# a slab hanging down into the hole, and rubble along one wall
+			var s2 := 1.0 if _rng.randf() < 0.5 else -1.0
+			var hang := Transform3D(bas.rotated(flat.normalized(), s2 * 0.5), mid + side * s2 * (hw * 0.6) + Vector3(0, H - 0.8, 0))
+			_tunnel_box(body, Vector3(hw * 0.9, 0.5, seg_len * 0.8), hang, roof_mat, false)
+			var rub := Transform3D(bas.rotated(Vector3.UP, _rng.randf_range(-0.3, 0.3)), mid + side * s2 * (hw - 0.8) + Vector3(0, 0.2, 0))
+			_tunnel_box(body, Vector3(1.4, 1.0, seg_len * 0.7), rub, roof_mat, true)
+		else:
+			_tunnel_box(body, Vector3(hw * 2.0 + 2.0, 0.8, seg_len), Transform3D(bas, mid + Vector3(0, H + 0.4, 0)), roof_mat, false)
+			if (i - i0) % 8 == 0:
+				_tunnel_box(body, Vector3(0.8, 0.12, 0.4), Transform3D(bas, mid + Vector3(0, H - 0.05, 0)), lamp_mat, false)
+		i = j
+
+
+func _tunnel_box(body: StaticBody3D, size: Vector3, xf: Transform3D, mat: Material, solid: bool) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.material_override = mat
+	mi.transform = xf
+	body.add_child(mi)
+	if solid:
+		var cs := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = size
+		cs.shape = shape
+		cs.transform = xf
+		body.add_child(cs)
+
+
+## Burnt-out cars abandoned at the roadside: the same models as the
+## playable ones, rusted, some on their roofs.
+func _build_wrecks() -> void:
+	var n := points.size()
+	var body := StaticBody3D.new()
+	body.name = "Wrecks"
+	body.set_meta("surface", "grass")
+	add_child(body)
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.8, 1.2, 4.0)
+	var rust := [Color(0.42, 0.24, 0.13), Color(0.30, 0.20, 0.14), Color(0.48, 0.36, 0.24), Color(0.22, 0.20, 0.18)]
+	var placed := 0
+	var tries := 0
+	while placed < 26 and tries < 300:
+		tries += 1
+		var i := _rng.randi_range(10, n - 10)
+		if map.has("tunnel") and float(i) / n > (map["tunnel"][0] as float) - 0.01 and float(i) / n < (map["tunnel"][1] as float) + 0.01:
+			continue
+		var s := 1.0 if _rng.randf() < 0.5 else -1.0
+		var off := widths[i] * 0.5 + VERGE + _rng.randf_range(1.5, 5.0)
+		var p := points[i] + _side(i) * s * off
+		if _road_dist(p.x, p.z) < off - 1.0 or _in_water(p.x, p.z, 3.0):
+			continue
+		var spec: Dictionary = Cars.LIST[_rng.randi_range(0, 4)].duplicate(true)
+		spec["livery"] = {"kind": "split", "base": rust[_rng.randi() % 4], "a": rust[_rng.randi() % 4], "b": rust[_rng.randi() % 4]}
+		spec["roof"] = rust[_rng.randi() % 4]
+		spec["pod"] = 0
+		spec.erase("banner")
+		spec.erase("sponsor")
+		var m := CarModel.new()
+		m.spec = spec
+		add_child(m)
+		m.build()
+		_burn_out(m)
+		var flipped := _rng.randf() < 0.25
+		var flat := tangents[i]
+		flat.y = 0.0
+		var bas := Basis.looking_at(flat.normalized(), Vector3.UP).rotated(Vector3.UP, _rng.randf_range(-0.8, 0.8))
+		if flipped:
+			bas = bas * Basis(Vector3.FORWARD, PI)
+		var y := terrain_height(p.x, p.z)
+		m.transform = Transform3D(bas, Vector3(p.x, y + (0.95 if flipped else 0.55), p.z))
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.transform = Transform3D(bas, Vector3(p.x, y + 0.6, p.z))
+		body.add_child(cs)
+		placed += 1
+
+
+## Dim the lights and strip the stickers off a wreck.
+func _burn_out(node: Node) -> void:
+	for c in node.get_children():
+		if c is MeshInstance3D:
+			var mo := (c as MeshInstance3D).material_override
+			if mo is StandardMaterial3D and (mo as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+				(c as MeshInstance3D).material_override = TexGen.flat_material(Color(0.12, 0.11, 0.1))
+			elif mo is StandardMaterial3D and (mo as StandardMaterial3D).albedo_texture != null:
+				(c as MeshInstance3D).material_override = TexGen.flat_material(Color(0.25, 0.2, 0.16))
+		_burn_out(c)
