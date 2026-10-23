@@ -1,0 +1,36 @@
+# Godot 4 editor cache: rebuilt automatically when the project is opened.
+.godot/
+
+# Exported game builds (put your export presets' output in build/ or export/).
+build/
+export/
+*.exe
+*.pck
+*.zip
+*.apk
+*.aab
+*.x86_64
+*.dmg
+
+# C# / .NET (only if you ever add C# scripts).
+.mono/
+data_*/
+mono_crash.*.json
+.vs/
+bin/
+obj/
+
+# Editors and IDEs.
+.vscode/
+.idea/
+*.swp
+*~
+
+# Operating system junk.
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Note: *.import and *.uid files are NOT ignored on purpose. Godot 4 keeps
+# import settings and resource IDs in them, so they belong in git.
