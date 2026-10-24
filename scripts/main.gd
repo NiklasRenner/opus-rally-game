@@ -42,6 +42,7 @@ var _headlights := false
 var _rain: CPUParticles3D
 var _env: Environment
 var _sun: DirectionalLight3D
+var _palette: Dictionary
 
 
 func _ready() -> void:
@@ -110,6 +111,7 @@ func _ready() -> void:
 	look = RetroLook.new()
 	look.env = _env
 	look.sun = _sun
+	look.sky_colors = [_palette["sky_top"], _palette["sky_horizon"], _palette["sky_ground"]]
 	add_child(look)
 	look.setup(self, Game.retro_look)
 
@@ -117,6 +119,7 @@ func _ready() -> void:
 func _setup_environment() -> void:
 	var theme: String = Maps.get_map(Game.map_id).get("theme", "")
 	var p := Conditions.palette(theme, Game.race_time_of_day, Game.race_rain)
+	_palette = p
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
