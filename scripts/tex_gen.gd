@@ -865,14 +865,7 @@ static func _make_livery(spec: Dictionary) -> ImageTexture:
 			Color(1.0, 0.85, 0.45))
 		_box_px(img, _end_px(true, s * 0.5, 0.34), _end_px(true, s * 0.68, 0.44), Color(1.0, 0.9, 0.5))
 	_box_px(img, _end_px(true, -0.4, 0.25), _end_px(true, 0.4, 0.42), black)
-	# back: tail lights, plate, diffuser
-	var tz: Array = at["tail"]
-	for s in [-1.0, 1.0]:
-		_box_px(img, _end_px(false, s * 0.5, tz[0]), _end_px(false, s * 0.84, tz[1]), Color(0.75, 0.06, 0.04))
-		_box_px(img, _end_px(false, s * 0.5, tz[0]), _end_px(false, s * 0.6, tz[1]), Color(0.95, 0.6, 0.15))
-	var pc := _end_px(false, 0.0, at["plate"])
-	_text_px(img, spec.get("plate", "RR 98"), pc, 1, black, Color(1.0, 0.85, 0.1))
-	_box_px(img, _end_px(false, -0.8, 0.2), _end_px(false, 0.8, 0.3), black)
+	_paint_tail(img, spec, black, light)
 	# underside, and the bottom rows the underside maps to
 	img.fill_rect(Rect2i(0, 250, 256, 6), black)
 	_bake_light(img)
@@ -888,6 +881,54 @@ static func _bake_light(img: Image) -> void:
 		for x in 256:
 			var c := img.get_pixel(x, y)
 			img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
+	# nose and tail: lit in the middle, falling off round the corners
+	for y in range(192, 250):
+		var z := AH * (1.0 - float(y - 192) / 64.0)
+		for x in 256:
+			var across := absf(float(x % 128) / 64.0 - 1.0)
+			var k := lerpf(1.04, 0.78, smoothstep(0.6, 0.95, across)) * lerpf(0.86, 1.0, smoothstep(0.2, 0.7, z))
+			var c := img.get_pixel(x, y)
+			img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
+
+
+## The back: livery wrapped round, tail-light clusters, the maker's name on a
+## dark panel or garnish between them, a recessed plate on the bumper and a
+## black diffuser underneath.
+static func _paint_tail(img: Image, spec: Dictionary, black: Color, light: Color) -> void:
+	var lv: Dictionary = spec["livery"]
+	var at: Dictionary = spec["atlas"]
+	var base: Color = lv["base"]
+	var tz: Array = at["tail"]
+	var bz: float = at["bumper"]
+	var t0: float = tz[0]
+	var t1: float = tz[1]
+	match lv["kind"]:
+		"bands":  # stripes carry on across the back, a black light panel above them
+			for band in [[0.0, lv["a"]], [1.0, light], [2.0, lv["b"]]]:
+				var z1: float = at["band"] - band[0] * 0.065
+				_box_px(img, _end_px(false, -1.0, z1 - 0.065), _end_px(false, 1.0, z1), band[1])
+			_box_px(img, _end_px(false, -0.86, t0 - 0.01), _end_px(false, 0.86, t1 + 0.01), black)
+		"split":  # waist pinstripe wraps round, a garnish between the lights
+			var belt: float = at["belt"]
+			_box_px(img, _end_px(false, -1.0, belt - 0.07), _end_px(false, 1.0, belt - 0.045), lv["b"])
+			_box_px(img, _end_px(false, -0.44, t0 + 0.02), _end_px(false, 0.44, t1 - 0.02), base.darkened(0.6))
+	var maker: String = (spec["name"] as String).get_slice(" ", 0)
+	_text_px(img, maker, _end_px(false, 0.0, (t0 + t1) * 0.5), 1, Color(0.95, 0.95, 0.9) if lv["kind"] == "bands" else lv["b"])
+	for s in [-1.0, 1.0]:
+		# cluster: black surround, big red lens, amber indicator and white reverse lamp inboard
+		_box_px(img, _end_px(false, s * 0.43, t0), _end_px(false, s * 0.87, t1), black)
+		_box_px(img, _end_px(false, s * 0.58, t0 + 0.02), _end_px(false, s * 0.85, t1 - 0.02), Color(0.78, 0.07, 0.05))
+		_box_px(img, _end_px(false, s * 0.6, t1 - 0.05), _end_px(false, s * 0.83, t1 - 0.035), Color(1.0, 0.45, 0.4))
+		_box_px(img, _end_px(false, s * 0.51, t0 + 0.02), _end_px(false, s * 0.57, t1 - 0.02), Color(0.98, 0.6, 0.12))
+		_box_px(img, _end_px(false, s * 0.45, t0 + 0.02), _end_px(false, s * 0.5, t1 - 0.02), Color(0.92, 0.92, 0.88))
+	# bumper: shut line, recessed plate, tow eye, diffuser
+	_box_px(img, _end_px(false, -0.9, bz), _end_px(false, 0.9, bz - 0.015), base.darkened(0.5))
+	var pc := _end_px(false, 0.0, bz - 0.13)
+	_text_px(img, spec.get("plate", "RR 98"), pc, 1, black, Color(1.0, 0.85, 0.1), Color(0.12, 0.12, 0.13))
+	_box_px(img, _end_px(false, 0.55, bz - 0.15), _end_px(false, 0.62, bz - 0.11), Color(0.2, 0.2, 0.22))
+	_box_px(img, _end_px(false, -1.0, 0.0), _end_px(false, 1.0, 0.37), Color(0.08, 0.08, 0.09))
+	for x in range(-80, 81, 16):
+		_box_px(img, _end_px(false, x * 0.01, 0.24), _end_px(false, x * 0.01 + 0.03, 0.36), Color(0.16, 0.16, 0.18))
 
 
 ## Glass in the same atlas layout: dark tint, diagonal glints and the sun

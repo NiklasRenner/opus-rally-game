@@ -232,7 +232,8 @@ class Body:
     def heights(self, y):
         top, belt = self.profile(y)
         c = self.c
-        bot = c["bottom"]
+        # the tail sits up off the road so the tyres and diffuser show from behind
+        bot = c["bottom"] + 0.11 * (1.0 - smoothstep(0.0, 0.55, y - self.rear()))
         ar = self.arch_r()
         for wy in c["wheel_y"]:
             dy = abs(y - wy)
@@ -354,8 +355,8 @@ def build_car(c):
     B.make("Bumper_F", g, (0, fy - 0.15, 0.36), hull, M)
     g = G()
     g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
-        (hwr + 0.015, ry + 0.38, 0.22), (hwr + 0.015, ry + 0.38, bt[1]), (hwr * 0.92, ry - 0.03, 0.24),
-        (hwr * 0.92, ry - 0.03, bt[1] - 0.02), (hwr * 0.98, ry + 0.1, bt[1]), (hwr * 0.95, ry + 0.05, 0.21)]], "Livery")
+        (hwr + 0.015, ry + 0.38, 0.27), (hwr + 0.015, ry + 0.38, bt[1]), (hwr * 0.92, ry - 0.03, 0.33),
+        (hwr * 0.92, ry - 0.03, bt[1] - 0.02), (hwr * 0.98, ry + 0.1, bt[1]), (hwr * 0.95, ry + 0.05, 0.3)]], "Livery")
     B.make("Bumper_R", g, (0, ry + 0.15, 0.36), hull, M)
 
     # mirrors on the doors just behind the A-pillar
