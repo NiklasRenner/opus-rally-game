@@ -5,7 +5,8 @@ Late-90s arcade rally in the spirit of Sega Rally / Colin McRae: chunky
 scenery, arcade HUD. Everything (track, cars, textures, sky, engine sound) is
 generated in code, except three vehicles modelled in Blender: the Martello HF,
 the Pleiad 555 and the KPz Pardel tank (sources in `art/`, exported to
-`models/*.glb`). Their textures are still painted in code at startup.
+`models/*.glb`). The two rally cars wear pixel-art skins from `models/`; the
+tank is painted in code at startup.
 
 ## Open and play
 
@@ -75,15 +76,13 @@ The modelled cars come from `art/cars/build_cars.py`: run it in Blender's
 Scripting tab (with `build_all("<path to this folder>")`) to rebuild their
 .blend files and re-export `models/martello.glb` and `models/pleiad.glb`.
 
-- **Pleiad:** every painted face is projected into one 256x256 livery atlas,
-  which `TexGen.livery()` paints in game using the spec's `atlas` positions.
-- **Martello:** its skin is painted in separate panel pieces (each side, top,
-  front, back, windscreen) in `art/cars/martello_pieces/`, then combined into
-  `models/martello_skin.png`. `python art/cars/paint_skin.py martello`
-  recombines the pieces (needs Pillow), so you can retouch any piece in a
-  pixel editor such as LibreSprite, Krita or GIMP and run it again;
-  `--repaint` paints the pieces from scratch. The builder writes
-  `art/cars/martello_layout.json` with every face's outline in the skin.
+Both wear a skin painted in separate panel pieces (each side, top, front,
+back, windscreen) in `art/cars/<car>_pieces/`, combined into
+`models/<car>_skin.png`. `python art/cars/paint_skin.py <car>` recombines the
+pieces (needs Pillow), so you can retouch any piece in a pixel editor such as
+LibreSprite, Krita or GIMP and run it again; `--repaint` paints the pieces
+from scratch. The builder writes `art/cars/<car>_layout.json` with every
+face's outline in the skin.
 
 The tank lives in `art/tank/`.
 

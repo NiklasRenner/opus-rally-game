@@ -170,6 +170,18 @@ class Skin:
             full.putalpha(Image.composite(full.getchannel("A"), Image.new("L", full.size, 0), m))
         self.img.alpha_composite(full)
 
+    def side_oval(self, side, y0, y1, z0, z1):
+        """Pixel box of an oval on one side between two lengths and heights."""
+        a, b = self.side_pt(side, y0, z0), self.side_pt(side, y1, z1)
+        return (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+
+    def crescent(self, outer, inner, col, mask="body"):
+        """Ellipse `outer` minus ellipse `inner` (pixel boxes)."""
+        def draw(d):
+            d.ellipse(outer, fill=col)
+            d.ellipse(inner, fill=(0, 0, 0, 0))
+        self.paint(draw, mask)
+
     def disc(self, centre, r, col, mask="body"):
         cx, cy = centre
         self.paint(lambda d: d.ellipse((round(cx - r), round(cy - r), round(cx + r) - 1, round(cy + r) - 1), fill=col), mask)
@@ -200,9 +212,7 @@ class Skin:
 
 def paint_martello(sk):
     W = 0.95  # half width used for full-width bands
-    # base coats
-    sk.paint(lambda d: d.rectangle((0, 0, sk.size, sk.size), fill=WHITE), "body")
-    sk.paint(lambda d: d.rectangle((0, 0, sk.size, sk.size), fill=GLASS), "glass")
+    base(sk, WHITE)
 
     def stripe_z(y):
         """Centre height of the side stripes: level along the doors, sweeping up the front wing."""
@@ -247,7 +257,7 @@ def paint_martello(sk):
         sk.text("PIXEL TYRES", sk.side_pt(side, 0.1, 0.38), 0.07 * sk.s, DARK_BLUE, bold=True)
         for i, col in enumerate((RED, DARK_BLUE, BLACK)):
             yy = 0.78 - i * 0.13
-            sk.side_box(side, yy, yy - 0.11, 0.42, 0.47, col)
+            sk.side_box(side, yy, yy - 0.11, 0.47, 0.52, col)
 
     # top: stripes along the bonnet, roof and spoiler, left of centre; vents are
     # geometry. Spoiler lettering.
@@ -296,11 +306,23 @@ def paint_martello(sk):
     sk.text("PIXEL TYRES", sk.px("rear", (0, 0, 0.43)), 0.07 * sk.s, WHITE, bold=True)
     sk.end_box(False, -W, W, 0.0, 0.33, rgb(0.08, 0.08, 0.09))
 
-    # windscreen sun strip and glass glints
-    x0, y0, x1, y1 = sk.rect("screen")
-    sk.box((x0, y0), (x1, y0 + 0.15 * sk.s), DARK_BLUE, "glass")
-    sk.text("PIXEL RACING", ((x0 + x1) / 2, y0 + 0.075 * sk.s), 0.08 * sk.s, WHITE, "glass", bold=True)
+    sun_strip(sk, "PIXEL RACING", DARK_BLUE, WHITE)
+    finish(sk)
 
+
+def base(sk, paint):
+    sk.paint(lambda d: d.rectangle((0, 0, sk.size, sk.size), fill=paint), "body")
+    sk.paint(lambda d: d.rectangle((0, 0, sk.size, sk.size), fill=GLASS), "glass")
+
+
+def sun_strip(sk, text, bg, fg):
+    x0, y0, x1, y1 = sk.rect("screen")
+    sk.box((x0, y0), (x1, y0 + 0.15 * sk.s), bg, "glass")
+    sk.text(text, ((x0 + x1) / 2, y0 + 0.075 * sk.s), 0.08 * sk.s, fg, "glass", bold=True)
+
+
+def finish(sk, wheels=(1.32, -1.28)):
+    """Glass glints, hand-painted light, window rubbers and the underside."""
     def glints(d):
         for k in range(-sk.size, sk.size, 23):
             d.line((k, 0, k + sk.size, sk.size), fill=rgb(0.16, 0.2, 0.28), width=2)
@@ -320,22 +342,123 @@ def paint_martello(sk):
             v = 0.74 + 0.3 * min(max((z - 0.15) / 0.7, 0.0), 1.0)
             if 0.79 < z < 0.82:
                 v += 0.08
-            for wy0 in (1.32, -1.28):
+            for wy0 in wheels:
                 r = math.hypot(wy - wy0, z - 0.34)
                 if 0.4 < r < 0.52 and z > 0.2:
                     v *= 0.78 + 0.22 * (r - 0.4) / 0.12
             return v
         sk.shade(piece, k)
     for piece in ("front", "rear"):
-        sk.shade(piece, lambda x, y: (1.04 - 0.24 * max(abs(x / 80.0 - 1.0) - 0.6, 0.0) / 0.4)
-                 * (0.86 + 0.14 * min(max((1.6 - y / 80.0 - 0.2) / 0.5, 0.0), 1.0)))
-    sk.shade("top", lambda x, y: 1.02 - 0.12 * max(abs(y / 80.0 - 1.0) - 0.5, 0.0) / 0.5)
+        sk.shade(piece, lambda x, y: (1.04 - 0.24 * max(abs(x / sk.s - 1.0) - 0.6, 0.0) / 0.4)
+                 * (0.86 + 0.14 * min(max((1.6 - y / sk.s - 0.2) / 0.5, 0.0), 1.0)))
+    sk.shade("top", lambda x, y: 1.02 - 0.12 * max(abs(y / sk.s - 1.0) - 0.5, 0.0) / 0.5)
     sk.outline_glass(BLACK)
     x0, y0, x1, y1 = sk.rect("under")
     sk.img.paste(rgb(0.08, 0.08, 0.09), (x0, y0, x1, y1))
 
 
-PAINTERS = {"martello": paint_martello}
+# --------------------------------------------------------------------------- the Impreza
+
+DEEP_BLUE = rgb(0.165, 0.247, 0.627)
+GOLD_YELLOW = rgb(1.0, 0.84, 0.1)
+
+
+def paint_pleiad(sk):
+    """555-style works Impreza: deep blue, yellow crescent swooshes and big
+    lucky numbers (made-up sponsor STAR 777), number panels with a yellow top."""
+    base(sk, DEEP_BLUE)
+    navy = rgb(0.08, 0.12, 0.36)
+    for side in (-1, 1):
+        # shut lines, handles, fuel cap
+        for dy in (0.92, -0.35, -1.12):
+            sk.side_box(side, dy, dy - 0.013, 0.3, 0.86, navy)
+        for hy in (-0.22, -0.98):
+            sk.side_box(side, hy, hy + 0.11, 0.78, 0.8, BLACK)
+        sk.side_box(side, -1.45, -1.55, 0.78, 0.84, rgb(0.12, 0.18, 0.5))
+        # the big swoosh along the rear door and quarter, numbers riding on it
+        outer = sk.side_oval(side, -0.3, -2.1, 0.46, 0.86)
+        inner = sk.side_oval(side, -0.25, -2.05, 0.535, 0.93)
+        sk.crescent(outer, inner, GOLD_YELLOW)
+        sk.text("777", sk.side_pt(side, -0.74, 0.68), 0.22 * sk.s, GOLD_YELLOW, bold=True)
+        sk.text("STAR", sk.side_pt(side, -1.45, 0.72), 0.07 * sk.s, WHITE)
+        # number panel with a yellow top on the front door
+        sk.side_box(side, 0.5, 0.06, 0.52, 0.8, WHITE)
+        sk.side_box(side, 0.5, 0.06, 0.74, 0.8, GOLD_YELLOW)
+        sk.text("5", sk.side_pt(side, 0.28, 0.625), 0.18 * sk.s, BLACK, bold=True)
+        sk.text("PLEIAD", sk.side_pt(side, 0.28, 0.42), 0.07 * sk.s, WHITE, bold=True)
+        # small stickers behind the front wheel, tyre maker on the sill
+        for i, col in enumerate((GOLD_YELLOW, WHITE, RED)):
+            yy = 0.86 - i * 0.12
+            sk.side_box(side, yy, yy - 0.1, 0.64, 0.69, col)
+        sk.text("PIXELLI", sk.side_pt(side, 0.28, 0.33), 0.07 * sk.s, GOLD_YELLOW)
+        # crew names on the rear side windows
+        sk.text("A PIXEL", sk.side_pt(side, -0.82, 1.12), 7, WHITE, "glass")
+        sk.text("B BYTE", sk.side_pt(side, -0.82, 1.02), 7, WHITE, "glass")
+
+    # top: crescent and numbers on the bonnet (reading from in front) and on
+    # the boot (from behind), roof number
+    def top_crescent(cy, flip):
+        a = sk.px("top", (-0.55, cy + 0.32 * flip, 0))
+        b = sk.px("top", (0.55, cy - 0.32 * flip, 0))
+        outer = (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+        sh = 0.06 * sk.s * flip
+        inner = (outer[0] + sh, outer[1] - 0.02 * sk.s, outer[2] + sh, outer[3] + 0.02 * sk.s)
+        sk.crescent(outer, inner, GOLD_YELLOW)
+    top_crescent(1.55, 1)
+    sk.text("777", sk.px("top", (0.0, 1.6, 0)), 0.18 * sk.s, GOLD_YELLOW, rotate=90, bold=True)
+    sk.text("PLEIAD", sk.px("top", (0.0, 1.3, 0)), 0.08 * sk.s, WHITE, rotate=90, bold=True)
+    top_crescent(-1.85, -1)
+    sk.text("777", sk.px("top", (0.0, -1.85, 0)), 0.12 * sk.s, GOLD_YELLOW, rotate=-90, bold=True)
+    c = sk.px("top", (0.0, -0.35, 0))
+    sk.box((c[0] - 10, c[1] - 10), (c[0] + 10, c[1] + 10), GOLD_YELLOW)
+    sk.box((c[0] - 9, c[1] - 9), (c[0] + 9, c[1] + 9), WHITE)
+    sk.text("5", c, 14, BLACK, rotate=-90, bold=True)
+
+    # front: rounded headlamps under the bonnet edge, small grille with a
+    # cluster of gold stars, deep bumper with a wide black intake and fog lamps
+    sk.end_box(True, -0.27, 0.27, 0.6, 0.69, BLACK)
+    for x, z in ((-0.08, 0.66), (0.0, 0.64), (0.07, 0.66), (0.13, 0.63), (-0.14, 0.63), (0.03, 0.615)):
+        sk.disc(sk.px("front", (x, 0, z)), 1.5, GOLD_YELLOW)
+    for s_ in (-1, 1):
+        a = sk.px("front", (s_ * 0.31, 0, 0.6))
+        b = sk.px("front", (s_ * 0.8, 0, 0.71))
+        box = (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+        sk.paint(lambda d, box=box: d.rounded_rectangle(box, radius=4, fill=GREY, outline=BLACK))
+        a = sk.px("front", (s_ * 0.36, 0, 0.615))
+        b = sk.px("front", (s_ * 0.6, 0, 0.695))
+        sk.paint(lambda d, a=a, b=b: d.ellipse((min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1])),
+                                               fill=rgb(1.0, 0.98, 0.86)))
+        sk.end_box(True, s_ * 0.63, s_ * 0.77, 0.625, 0.69, rgb(1.0, 0.95, 0.75))
+        sk.end_box(True, s_ * 0.66, s_ * 0.79, 0.5, 0.54, AMBER)
+        sk.disc(sk.px("front", (s_ * 0.7, 0, 0.34)), 0.065 * sk.s, BLACK)
+        sk.disc(sk.px("front", (s_ * 0.7, 0, 0.34)), 0.05 * sk.s, rgb(1.0, 0.92, 0.55))
+    sk.end_box(True, -0.58, 0.58, 0.24, 0.43, BLACK)
+    for i in range(7):
+        z = 0.26 + i * 0.024
+        sk.end_box(True, -0.56, 0.56, z, z + 0.008, GREY)
+    sk.text("PIXELDRIVE", sk.px("front", (0, 0, 0.49)), 7, WHITE)
+    sk.end_box(True, -0.95, 0.95, 0.19, 0.23, BLACK)
+
+    # rear: wide red tail lights with amber sections either side of a black
+    # plate panel, stickers on the bumper corners, black diffuser
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.3, s_ * 0.86, 0.66, 0.85, BLACK)
+        sk.end_box(False, s_ * 0.44, s_ * 0.84, 0.68, 0.83, RED)
+        sk.end_box(False, s_ * 0.46, s_ * 0.82, 0.8, 0.815, rgb(1.0, 0.45, 0.4))
+        sk.end_box(False, s_ * 0.32, s_ * 0.43, 0.68, 0.83, AMBER)
+        sk.end_box(False, s_ * 0.68, s_ * 0.84, 0.43, 0.49, GOLD_YELLOW)
+        sk.text("PIX", sk.px("rear", (s_ * 0.76, 0, 0.46)), 7, RED)
+    sk.end_box(False, -0.3, 0.3, 0.66, 0.85, BLACK)
+    sk.end_box(False, -0.24, 0.24, 0.69, 0.8, YELLOW)
+    sk.text("PL 555", sk.px("rear", (0, 0, 0.745)), 7, BLACK, bold=True)
+    sk.text("PLEIAD", sk.px("rear", (0, 0, 0.92)), 7, GOLD_YELLOW, bold=True)
+    sk.end_box(False, -0.95, 0.95, 0.0, 0.34, rgb(0.08, 0.08, 0.09))
+
+    sun_strip(sk, "PLEIAD", navy, GOLD_YELLOW)
+    finish(sk)
+
+
+PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad}
 
 
 def main():

@@ -21,8 +21,8 @@ extends RefCounted
 ## bottom  : optional underside height of the lofted shell (default -0.24)
 ## glass   : false for open cockpits (tall parts of the profile stay painted)
 ## mesh    : a model built in Blender (art/) instead of the lofted body; the
-##           profile then only marks the nose. Cars painted with the livery
-##           atlas (TexGen.livery) say where things are in "atlas".
+##           profile then only marks the nose. Modelled cars wear a "skin"
+##           painted in pieces by art/cars/paint_skin.py; spokes: rim spokes.
 ## dents, parts: mesh nodes that dent, and [node, zone, threshold] bolt-ons
 ##           that fall off (cars default to body and bumpers / bumpers, wing,
 ##           light pod and mirrors)
@@ -38,11 +38,8 @@ const LIST := [
 		"blurb": "Boxy hatch, all-rounder",
 		"number": "4",
 		"plate": "MH 4",
-		"banner": ["RALLYE", Color(1, 1, 1), Color(0.08, 0.20, 0.62)],
-		"sponsor": ["PIXEL OIL", Color(0.86, 0.10, 0.10), Color(0.97, 0.97, 0.95)],
 		"mesh": "res://models/martello.glb",
 		"profile": [[-2.01, 0.04, 0.0]],
-		"livery": {"kind": "bands", "base": Color(0.95, 0.95, 0.94), "a": Color(0.08, 0.20, 0.62), "b": Color(0.86, 0.10, 0.10)},
 		# skin painted in pieces by art/cars/paint_skin.py
 		"skin": "res://models/martello_skin.png",
 		"spokes": 8,
@@ -56,14 +53,10 @@ const LIST := [
 		"blurb": "Grippy saloon, gold wheels",
 		"number": "5",
 		"plate": "PL 555",
-		"banner": ["PLEIAD", Color(1.0, 0.82, 0.08), Color(0.10, 0.22, 0.66)],
-		"sponsor": ["STAR 7", Color(0.10, 0.22, 0.66), Color(1.0, 0.82, 0.08)],
 		"mesh": "res://models/pleiad.glb",
 		"profile": [[-2.21, 0.04, 0.0]],
-		"livery": {"kind": "split", "base": Color(0.10, 0.22, 0.66), "a": Color(0.10, 0.22, 0.66), "b": Color(1.0, 0.82, 0.08)},
-		"atlas": {"front": 2.18, "rear": -2.18, "belt": 0.9, "doors": [0.9, -0.35, -0.87], "sponsor_z": 0.42,
-			"bonnet": [2.05, 0.95], "roof": [0.05, -0.7], "screen": 0.1, "head": [0.6, 0.71], "tail": [0.68, 0.84],
-			"bumper": 0.62},
+		"skin": "res://models/pleiad_skin.png",
+		"spokes": 8,
 		"rims": Color(0.85, 0.68, 0.22),
 		"flaps": Color(0.95, 0.95, 0.95),
 		"stats": {"power": 0.97, "grip": 1.04, "steer": 0.98, "mass": 1230.0},
