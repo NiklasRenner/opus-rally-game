@@ -112,11 +112,12 @@ const LIST := [
 		"skin": "res://models/swamp_skin.png",
 		"rims": Color(1.0, 0.5, 0.05),
 		"spokes": 8,
-		"frame": Color(0.8, 0.08, 0.06),
+		"frame": Color(0.95, 0.12, 0.08),
+		"tread": "chevron",
 		"flaps": Color(0.1, 0.1, 0.1),
 		"dents": ["Body"],
 		"parts": [["LightBar", "front", 0.35], ["Mirror_L", "left", 0.25], ["Mirror_R", "right", 0.25]],
-		"wheels": {"x": 0.98, "zf": -1.45, "zr": 1.45, "rf": 0.75, "rr": 0.75, "wf": 0.55, "wr": 0.55},
+		"wheels": {"x": 1.05, "zf": -1.45, "zr": 1.45, "rf": 0.75, "rr": 0.75, "wf": 0.8, "wr": 0.8},
 		# travel, spring, damper: long soft suspension that keeps bouncing;
 		# bump_soak: how much rough ground still shakes it; roll_tame: lower lets it lean
 		"stats": {"power": 1.35, "grip": 1.0, "steer": 0.85, "mass": 2000.0, "gearing": 0.85, "drag": 1.5,

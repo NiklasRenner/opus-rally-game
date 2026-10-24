@@ -476,14 +476,12 @@ def make_wheels(B, c, root, M):
         for s, side in ((-1, "L"), (1, "R")):
             g = G()
             x = s * c["wheel_x"]
-            knobby = c.get("knobby", False)
-            segs = 24 if knobby else 14
+            segs = c.get("tyre_segs", 14)
             verts, faces, keys = [], [], []
             for i in range(segs):
                 a = math.tau * i / segs
-                rr = r * (0.93 if knobby and i % 2 else 1.0)  # tread blocks stand proud
                 for dx in (-w / 2, w / 2):
-                    verts.append((x + dx, wy + rr * math.cos(a), r + rr * math.sin(a)))
+                    verts.append((x + dx, wy + r * math.cos(a), r + r * math.sin(a)))
             for i in range(segs):
                 j = (i + 1) % segs
                 faces.append((2 * i, 2 * j, 2 * j + 1, 2 * i + 1))
@@ -580,26 +578,26 @@ def truck_parts(B, c, root, M):
     for sx in (-1, 1):
         g.hull([(sx * x, y, z) for x in (0.4, 0.5) for y in (2.25, -2.15) for z in (1.02, 1.18)], "Frame")
         for y in (1.8, 1.1, -0.2, -1.1, -1.8):
-            rod(g, (sx * 0.45, y, 1.18), (sx * 0.6, y, 1.4), t, "Frame")
+            rod(g, (sx * 0.45, y, 1.18), (sx * 0.6, y, 1.4), t, "Frame", 8)
     for y in (2.2, 1.45, 0.4, -0.6, -1.45, -2.1):
-        rod(g, (-0.45, y, 1.1), (0.45, y, 1.1), t, "Frame")
+        rod(g, (-0.45, y, 1.1), (0.45, y, 1.1), t, "Frame", 8)
     # tube bumpers
     for y0, y1 in ((2.25, 2.45), (-2.15, -2.3)):
-        rod(g, (-0.9, y1, 1.2), (0.9, y1, 1.2), 0.09, "Frame")
-        rod(g, (-0.9, y1, 1.45), (0.9, y1, 1.45), 0.07, "Frame")
+        rod(g, (-0.9, y1, 1.2), (0.9, y1, 1.2), 0.09, "Frame", 8)
+        rod(g, (-0.9, y1, 1.45), (0.9, y1, 1.45), 0.07, "Frame", 8)
         for sx in (-1, 1):
-            rod(g, (sx * 0.45, y0, 1.12), (sx * 0.9, y1, 1.2), t, "Frame")
-            rod(g, (sx * 0.9, y1, 1.2), (sx * 0.9, y1, 1.45), t, "Frame")
+            rod(g, (sx * 0.45, y0, 1.12), (sx * 0.9, y1, 1.2), t, "Frame", 8)
+            rod(g, (sx * 0.9, y1, 1.2), (sx * 0.9, y1, 1.45), t, "Frame", 8)
     # roll cage over the bed
     top = 2.6
     for y in (-0.6, -1.85):
         for sx in (-1, 1):
-            rod(g, (sx * 0.78, y, 1.98), (sx * 0.72, y, top), t, "Frame")
-        rod(g, (-0.72, y, top), (0.72, y, top), t, "Frame")
+            rod(g, (sx * 0.78, y, 1.98), (sx * 0.72, y, top), t, "Frame", 8)
+        rod(g, (-0.72, y, top), (0.72, y, top), t, "Frame", 8)
     for sx in (-1, 1):
-        rod(g, (sx * 0.72, -0.6, top), (sx * 0.72, -1.85, top), t, "Frame")
-        rod(g, (sx * 0.72, -0.6, top), (sx * 0.78, -1.85, 1.98), t, "Frame")
-    B.make("Frame", g, (0, 0, 1.1), hull, M)
+        rod(g, (sx * 0.72, -0.6, top), (sx * 0.72, -1.85, top), t, "Frame", 8)
+        rod(g, (sx * 0.72, -0.6, top), (sx * 0.78, -1.85, 1.98), t, "Frame", 8)
+    shade_tubes(B.make("Frame", g, (0, 0, 1.1), hull, M))
 
     # light bar on the roof: red housing, five round lamps
     g = G()
@@ -627,7 +625,7 @@ def truck_parts(B, c, root, M):
     r = c["wheel_r"]
     for wy, n in ((c["wheel_y"][0], "F"), (c["wheel_y"][1], "R")):
         g = G()
-        rod(g, (-0.72, wy, r), (0.72, wy, r), 0.14, "Trim")
+        rod(g, (-0.8, wy, r), (0.8, wy, r), 0.14, "Trim", 8)
         g.cyl((0.12, wy, r), "Y", 0.2, 0.3, "Chrome", segs=10)
         g.cyl((0.12, wy - 0.16 * (1 if n == "F" else -1), r + 0.02), "Y", 0.08, 0.2, "Trim", segs=8)
         for sx in (-1, 1):
@@ -636,19 +634,39 @@ def truck_parts(B, c, root, M):
                 hi = (sx * 0.5, wy + dy, 1.42)
                 g.cyl((lo[0], lo[1], (lo[2] + hi[2]) / 2), "Z", 0.075, 0.42, "Frame", segs=8)
                 rod(g, lo, hi, 0.035, "Chrome")
-        B.make("Axle_" + n, g, (0, wy, r), root, M)
+        shade_tubes(B.make("Axle_" + n, g, (0, wy, r), root, M))
 
 
-def rod(g, a, b, t, key):
-    """A thin square bar from a to b."""
+def rod(g, a, b, t, key, sides=4):
+    """A thin bar from a to b: square, or a round tube with more sides."""
     a, b = Vector(a), Vector(b)
     d = (b - a).normalized()
     side = d.cross(Vector((0, 0, 1)))
     if side.length < 1e-3:
         side = Vector((1, 0, 0))
-    side = side.normalized() * t / 2
-    up = side.cross(d).normalized() * t / 2
-    g.hull([p + sx * side + sz * up for p in (a, b) for sx in (-1, 1) for sz in (-1, 1)], key)
+    side = side.normalized()
+    up = side.cross(d).normalized()
+    if sides == 4:
+        g.hull([p + (sx * side + sz * up) * t / 2 for p in (a, b) for sx in (-1, 1) for sz in (-1, 1)], key)
+        return
+    ring = [(math.cos(math.tau * (i + 0.5) / sides) * side + math.sin(math.tau * (i + 0.5) / sides) * up) * t / 2
+            for i in range(sides)]
+    g.hull([p + o for p in (a, b) for o in ring], key)
+
+
+def shade_tubes(ob):
+    """Bake light into vertex colours on the tube frame: tops catch the sun,
+    undersides fall into shadow, so plain red reads as round tubing."""
+    me = ob.data
+    keys = [m.name.split(".")[0] for m in me.materials]
+    attr = me.color_attributes.new("Col", "BYTE_COLOR", "CORNER")
+    for poly in me.polygons:
+        n = poly.normal
+        lit = 0.6 + 0.4 * max(min(n.z * 0.8 + n.y * 0.2 + 0.25, 1.0), 0.0)
+        if keys[poly.material_index] != "Frame":
+            lit = 1.0
+        for li in poly.loop_indices:
+            attr.data[li].color = (lit, lit, lit, 1.0)
 
 
 def f1_parts(B, c, root, M):
@@ -772,7 +790,7 @@ CARS = [
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
          wing=ibiza_wing, screen=((1.0, 0.82), (0.3, 1.34))),
     dict(name="Swamp", file="swamp", kind="truck", paint=(0.55, 0.85, 0.1), flaps=(0.1, 0.1, 0.1),
-         rims=(1.0, 0.5, 0.05), frame=(0.8, 0.08, 0.06), knobby=True,
+         rims=(1.0, 0.5, 0.05), frame=(0.8, 0.08, 0.06), tyre_segs=20,
          hw=0.92, roof_hw=0.8, flare=0.0, bottom=1.38, nose_round=0.93, half_len=2.45, px_m=70.0,
          z_lo=1.0, z_span=1.7,
          # regular-cab pickup perched high above the axles: bonnet, cab, open bed
@@ -780,7 +798,7 @@ CARS = [
                   (-0.32, 2.44, 2.02), (-0.42, 2.3, 2.02), (-0.5, 1.98, 1.94), (-2.0, 1.98, 1.94),
                   (-2.08, 1.85, 1.8)],
          glass_y=(0.8, -0.38), pillars=[9.0], b_pillar=9.0, mirror_y=0.72,
-         wheel_y=(1.45, -1.45), wheel_x=0.98, wheel_r=0.75, wheel_w=0.55,
+         wheel_y=(1.45, -1.45), wheel_x=1.05, wheel_r=0.75, wheel_w=0.8,
          screen=((0.8, 2.02), (0.5, 2.44))),
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
@@ -792,8 +810,14 @@ def export(coll, path):
     bpy.ops.object.select_all(action="DESELECT")
     for o in coll.objects:
         o.select_set(True)
-    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_yup=True,
-                              export_apply=False, export_cameras=False, export_lights=False, export_animations=False)
+    opts = dict(filepath=path, export_format="GLB", use_selection=True, export_yup=True,
+                export_apply=False, export_cameras=False, export_lights=False, export_animations=False)
+    props = bpy.ops.export_scene.gltf.get_rna_type().properties
+    if "export_vertex_color" in props:  # baked tube shading
+        opts["export_vertex_color"] = "ACTIVE"
+    elif "export_colors" in props:
+        opts["export_colors"] = True
+    bpy.ops.export_scene.gltf(**opts)
 
 
 def reset_scene():
