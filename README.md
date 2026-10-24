@@ -62,7 +62,7 @@ race from the menu (a restart keeps the same weather).
 | Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
 | Veloce F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
 | Swamp King | Lime monster truck on huge knobbly tyres, tube frame and roll cage | Class X: bouncy long-travel suspension, rolls a lot, soaks up rough ground, big jumps |
-| KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
+| KPz Pardel | Boxy Leopard-style tank in Danish angular three-tone camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
 F1 and tank are the odd ones out. The menu bars compare acceleration,
