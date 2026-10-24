@@ -12,7 +12,8 @@ extends RefCounted
 ##             tunnel [from, to], water [[x0, z0, x1, z1], ...] with water_level
 ##             (a route section on "ford" dips under it, one on "wood" becomes a
 ##             bridge over it), landmark [x, z, size] (the jungle pyramid),
-##             gravity (m/s^2, default Earth's), no_rain, and on the Moon
+##             gravity (m/s^2, default Earth's), no_rain, width (road width
+##             multiplier), and on the Moon
 ##             craters [[x, z, radius, depth], ...], crater_field (how many
 ##             small random ones) and base [[from, to], ...] lined with modules
 
@@ -202,13 +203,24 @@ const LIST := [
 		"blurb": "Tarmac and cobbles. Walled streets, square corners",
 		"seed": 2001,
 		# a street circuit round the blocks: down the main avenue, a chicane on
-		# the riverside road, the cobbled old square and back along the boulevard
+		# the riverside road, the cobbled old square and back along the boulevard.
+		# The corners are true arcs (radius 36-50 m) on wider streets, so the
+		# walls stay off the racing line
 		"points": [
-			Vector2(0, 0), Vector2(0, -280), Vector2(0, -378), Vector2(8, -409), Vector2(34, -420), Vector2(210, -420),
-			Vector2(235, -414), Vector2(258, -428), Vector2(280, -434), Vector2(302, -426), Vector2(462, -423), Vector2(484, -414),
-			Vector2(493, -392), Vector2(493, -210), Vector2(490, -165), Vector2(476, -146), Vector2(451, -140), Vector2(350, -140),
-			Vector2(330, -132), Vector2(322, -109), Vector2(322, 56), Vector2(314, 78), Vector2(291, 87), Vector2(84, 87),
-			Vector2(39, 78), Vector2(11, 56), Vector2(0, 28),
+			Vector2(0, 0), Vector2(0, -55), Vector2(0, -110), Vector2(0, -165), Vector2(0, -219), Vector2(0, -274),
+			Vector2(0, -329), Vector2(0, -384), Vector2(1, -393), Vector2(4, -402), Vector2(8, -410), Vector2(13, -417),
+			Vector2(20, -422), Vector2(28, -426), Vector2(37, -429), Vector2(46, -430), Vector2(94, -430), Vector2(142, -430),
+			Vector2(189, -430), Vector2(200, -431), Vector2(209, -436), Vector2(241, -456), Vector2(250, -461), Vector2(261, -462),
+			Vector2(309, -462), Vector2(320, -461), Vector2(329, -456), Vector2(361, -436), Vector2(370, -431), Vector2(381, -430),
+			Vector2(418, -430), Vector2(454, -430), Vector2(463, -429), Vector2(472, -426), Vector2(480, -422), Vector2(487, -417),
+			Vector2(492, -410), Vector2(496, -402), Vector2(499, -393), Vector2(500, -384), Vector2(500, -334), Vector2(500, -283),
+			Vector2(500, -232), Vector2(500, -182), Vector2(499, -173), Vector2(496, -164), Vector2(491, -156), Vector2(484, -149),
+			Vector2(476, -144), Vector2(467, -141), Vector2(458, -140), Vector2(411, -140), Vector2(364, -140), Vector2(355, -139),
+			Vector2(346, -136), Vector2(338, -131), Vector2(331, -124), Vector2(326, -116), Vector2(323, -107), Vector2(322, -98),
+			Vector2(322, -48), Vector2(322, 1), Vector2(322, 51), Vector2(321, 61), Vector2(318, 70), Vector2(312, 78),
+			Vector2(305, 85), Vector2(297, 91), Vector2(288, 94), Vector2(278, 95), Vector2(221, 95), Vector2(164, 95),
+			Vector2(107, 95), Vector2(50, 95), Vector2(40, 94), Vector2(31, 91), Vector2(22, 87), Vector2(15, 80),
+			Vector2(8, 73), Vector2(4, 64), Vector2(1, 55), Vector2(0, 45),
 		],
 		"sections": [[0.00, "asphalt"], [0.55, "cobbles"], [0.66, "asphalt"]],
 		"elevation": [[0.00, 0.0], [0.20, 1.0], [0.40, 3.0], [0.55, 4.0], [0.70, 2.0], [0.85, 0.5]],
@@ -216,6 +228,7 @@ const LIST := [
 		"village": [],
 		"forest": 0.4,
 		"theme": "city",
+		"width": 1.25,
 	},
 ]
 

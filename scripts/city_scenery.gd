@@ -355,7 +355,7 @@ func _lamps_and_trees() -> void:
 			var k := i + (6 if s > 0.0 else 0)
 			var xf := track.frame(k)
 			var base := Vector3(s * (_hw(k) + 2.5), -0.4, 0)
-			if not _at_junction(k, s, 3):
+			if not _at_junction(k, s, 3) and _clear(xf * base, k, _hw(k) + 2.0):
 				_cuboid(_steel, xf, base + Vector3(0, 3.8, 0), Vector3(0.16, 7.6, 0.16), pole)
 				_cuboid(_steel, xf, base + Vector3(-s * 0.9, 7.6, 0), Vector3(1.8, 0.12, 0.12), pole)
 				var mi := MeshInstance3D.new()
@@ -391,6 +391,8 @@ func _fans() -> void:
 					var off := _hw(k) + 3.0 + row * 0.8
 					if _rng.randf() < 0.75 - row * 0.15:
 						var p := Vector3(s * (off + _rng.randf_range(-0.2, 0.2)), -0.4 + row * 0.2, _rng.randf_range(-1.2, 1.2))
+						if not _clear(xf * p, k, _hw(k) + 2.6):
+							continue  # that's the road again, round a corner
 						_crowd.person(xf * Transform3D(Basis(Vector3.UP, s * PI * 0.5 + _rng.randf_range(-0.4, 0.4)), p),
 							_rng.randf() < 0.5)
 		i += _rng.randi_range(30, 55)
