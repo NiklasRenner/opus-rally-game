@@ -3,7 +3,8 @@ extends RefCounted
 ## Dresses the start/finish line like a late-90s arcade rally: a truss gantry
 ## with a banner, a live timing board and start lights, the chequered line and
 ## pole box, sponsor hoardings, flags and bunting, and a crowd hopping up and
-## down. Each stage theme ("" countryside, "circuit", "jungle", "wasteland")
+## down. Each stage theme ("" countryside, "circuit", "jungle", "wasteland",
+## "moon", "city")
 ## gets its own take on it. Built by TrackBuilder; all low poly with pixel
 ## textures, the crowd in one mesh.
 
@@ -74,7 +75,7 @@ func build() -> void:
 	_line()
 	_gantry()
 	match theme:
-		"circuit":
+		"circuit", "city":
 			_grandstand(_pick_side(), -11, -2, 6, true)
 		"":
 			var s := _pick_side()
@@ -290,11 +291,12 @@ func _gantry() -> void:
 	var jungle := theme == "jungle"
 	var wasted := theme == "wasteland"
 	# per theme: truss colour, banner colours
-	var truss_col := {"": Color(0.85, 0.12, 0.1), "circuit": Color(0.78, 0.8, 0.84), "wasteland": Color(0.55, 0.32, 0.2)}
+	var truss_col := {"": Color(0.85, 0.12, 0.1), "circuit": Color(0.78, 0.8, 0.84), "wasteland": Color(0.55, 0.32, 0.2),
+		"moon": Color(0.92, 0.92, 0.9), "city": Color(0.2, 0.22, 0.26)}
 	var banner_fg := {"": Color(1.0, 0.85, 0.1), "circuit": Color(1, 1, 1), "jungle": Color(1.0, 0.85, 0.15),
-		"wasteland": Color(0.85, 0.1, 0.04)}
+		"wasteland": Color(0.85, 0.1, 0.04), "moon": Color(1, 1, 1), "city": Color(1.0, 0.85, 0.1)}
 	var banner_bg := {"": Color(0.08, 0.22, 0.72), "circuit": Color(0.8, 0.06, 0.06), "jungle": Color(0.1, 0.32, 0.12),
-		"wasteland": Color(0.36, 0.34, 0.31)}
+		"wasteland": Color(0.36, 0.34, 0.31), "moon": Color(0.05, 0.08, 0.2), "city": Color(0.1, 0.1, 0.12)}
 	var edge := Color(0.95, 0.95, 0.95) if not wasted else Color(0.3, 0.28, 0.25)
 	var truss := TexGen.material(_truss_tex(), 0.6, truss_col.get(theme, Color.WHITE))
 	truss.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
@@ -397,7 +399,7 @@ func _gantry_feet(g: Node3D, tx: float) -> void:
 					var hay := _tiled(TexGen.hay(), 1.0, Vector3(3, 2, 1))
 					_mesh(_box_mesh(Vector3(1.2, 1.2, 1.6)), hay, Transform3D(Basis.IDENTITY, at + Vector3(0, 0.6, 0)), g)
 					_solid(g.transform * Transform3D(Basis.IDENTITY, at + Vector3(0, 0.6, 0)), Vector3(1.2, 1.2, 1.6))
-				"circuit":
+				"circuit", "city":
 					var tyre := CylinderMesh.new()
 					tyre.top_radius = 0.42
 					tyre.bottom_radius = 0.42
@@ -576,7 +578,7 @@ func _hoardings() -> void:
 
 func _flags_and_crowd() -> void:
 	var wasted := theme == "wasteland"
-	var density: float = {"": 0.85, "circuit": 0.7, "jungle": 0.5, "wasteland": 0.0}.get(theme, 0.6)
+	var density: float = {"": 0.85, "circuit": 0.7, "jungle": 0.5, "wasteland": 0.0, "moon": 0.0, "city": 0.8}.get(theme, 0.6)
 	var designs: Array[ImageTexture] = []
 	if wasted:
 		for k in 3:
@@ -602,7 +604,7 @@ func _flags_and_crowd() -> void:
 			var xf := _frame(k)
 			var hw := _hw(k)
 			# flagpoles behind the boards, bunting strung between them
-			if posmod(k, 3) == 0 and not on_stand:
+			if posmod(k, 3) == 0 and not on_stand and theme != "moon":  # no wind to fly a flag in
 				var base := xf * Vector3(s * (hw + 2.4), _drop(k, hw + 2.4), 0)
 				var tex: ImageTexture = designs[_rng.randi() % designs.size()]
 				_flag(base, s, tex, 5.0)

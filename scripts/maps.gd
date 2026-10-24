@@ -8,10 +8,13 @@ extends RefCounted
 ## jumps     : [lap fraction, height, half-length in metres] crests
 ## village   : [from, to] lap fractions lined with houses (or a list of them)
 ## forest    : tree count multiplier
-## optional  : theme ("wasteland", "jungle" or "circuit"), tunnel [from, to],
-##             water [[x0, z0, x1, z1], ...] with water_level (a route section
-##             on "ford" dips under it, one on "wood" becomes a bridge over it),
-##             landmark [x, z, size] (the jungle pyramid)
+## optional  : theme ("wasteland", "jungle", "circuit", "moon" or "city"),
+##             tunnel [from, to], water [[x0, z0, x1, z1], ...] with water_level
+##             (a route section on "ford" dips under it, one on "wood" becomes a
+##             bridge over it), landmark [x, z, size] (the jungle pyramid),
+##             gravity (m/s^2, default Earth's), no_rain, and on the Moon
+##             craters [[x, z, radius, depth], ...], crater_field (how many
+##             small random ones) and base [[from, to], ...] lined with modules
 
 const LIST := [
 	{
@@ -164,6 +167,55 @@ const LIST := [
 		"water": [[178, -900, 206, 400], [375, -575, 440, -515]],
 		"water_level": -1.5,
 		"landmark": [262, -235, 34],
+	},
+	{
+		"id": "moon",
+		"name": "LUNA BASE",
+		"blurb": "Regolith and dust. Low gravity, long jumps, craters",
+		"seed": 1969,
+		# out from the base across the mare, round the rim of a big crater and
+		# down through two crater floors of loose dust, then back past the
+		# landing pads; a quarter of Earth's gravity, so the crests launch you
+		"points": [
+			Vector2(0, 0), Vector2(0, -195), Vector2(-20, -338), Vector2(-78, -442), Vector2(-182, -494), Vector2(-299, -481),
+			Vector2(-390, -416), Vector2(-429, -312), Vector2(-403, -208), Vector2(-338, -143), Vector2(-325, -52), Vector2(-377, 26),
+			Vector2(-455, 78), Vector2(-494, 182), Vector2(-455, 286), Vector2(-364, 338), Vector2(-247, 325), Vector2(-156, 260),
+			Vector2(-78, 208), Vector2(13, 221), Vector2(104, 273), Vector2(195, 260), Vector2(247, 182), Vector2(234, 104),
+			Vector2(156, 78), Vector2(78, 104), Vector2(26, 78),
+		],
+		"sections": [[0.00, "regolith"], [0.30, "dust"], [0.38, "regolith"], [0.66, "dust"], [0.74, "regolith"]],
+		"elevation": [[0.00, 0.0], [0.10, 1.0], [0.20, 4.0], [0.27, 2.0], [0.31, -5.0], [0.36, -5.0], [0.40, 1.0],
+			[0.48, 6.0], [0.56, 3.0], [0.63, 2.0], [0.67, -4.5], [0.72, -4.5], [0.76, 1.0], [0.85, 3.0], [0.93, 0.5]],
+		"jumps": [[0.205, 1.4, 14.0], [0.555, 1.6, 15.0], [0.85, 1.3, 13.0]],
+		"village": [],
+		"forest": 1.0,
+		"theme": "moon",
+		"gravity": 4.0,
+		"no_rain": true,
+		"craters": [],
+		"crater_field": 110,
+		"base": [[0.02, 0.10], [0.47, 0.52], [0.90, 0.98]],
+	},
+	{
+		"id": "city",
+		"name": "DOWNTOWN GP",
+		"blurb": "Tarmac and cobbles. Walled streets, square corners",
+		"seed": 2001,
+		# a street circuit round the blocks: down the main avenue, a chicane on
+		# the riverside road, the cobbled old square and back along the boulevard
+		"points": [
+			Vector2(0, 0), Vector2(0, -280), Vector2(0, -378), Vector2(8, -409), Vector2(34, -420), Vector2(210, -420),
+			Vector2(235, -414), Vector2(258, -428), Vector2(280, -434), Vector2(302, -426), Vector2(462, -423), Vector2(484, -414),
+			Vector2(493, -392), Vector2(493, -210), Vector2(490, -165), Vector2(476, -146), Vector2(451, -140), Vector2(350, -140),
+			Vector2(330, -132), Vector2(322, -109), Vector2(322, 56), Vector2(314, 78), Vector2(291, 87), Vector2(84, 87),
+			Vector2(39, 78), Vector2(11, 56), Vector2(0, 28),
+		],
+		"sections": [[0.00, "asphalt"], [0.55, "cobbles"], [0.66, "asphalt"]],
+		"elevation": [[0.00, 0.0], [0.20, 1.0], [0.40, 3.0], [0.55, 4.0], [0.70, 2.0], [0.85, 0.5]],
+		"jumps": [],
+		"village": [],
+		"forest": 0.4,
+		"theme": "city",
 	},
 ]
 

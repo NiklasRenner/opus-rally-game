@@ -8,7 +8,7 @@ const SPACING := 3.0
 const CELL := 8.0
 const VERGE := 2.6  # sloped shoulder outside the road edge
 const WIDTH := {"asphalt": 10.0, "gravel": 8.5, "wet": 10.0, "ice": 9.0, "grass": 8.0, "mud": 8.0, "ford": 9.0,
-	"wood": 7.5}
+	"wood": 7.5, "regolith": 11.0, "dust": 11.0, "cobbles": 10.0}
 
 ## Current map definition (see maps.gd), set before build().
 var map: Dictionary = Maps.LIST[0]
@@ -31,6 +31,7 @@ var _dist := PackedFloat32Array()
 var _road_h := PackedFloat32Array()
 var _heights := PackedFloat32Array()
 var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
+var _crater_list: Array = []  # [x, z, radius, depth] on the Moon
 var _rng := RandomNumberGenerator.new()
 
 
@@ -43,12 +44,19 @@ func build() -> void:
 	_build_section_signs()
 	_build_village()
 	_build_spectators()
-	_build_trees()
+	match _theme():
+		"moon":
+			MoonScenery.new(self).build()
+		"city":
+			CityScenery.new(self).build()
+		_:
+			_build_trees()
 	_build_cones()
-	_build_mountains()
+	if _theme() != "city":
+		_build_mountains()  # the city has its skyline instead
 	_build_water()
 	_build_bridges()
-	if _theme() == "circuit":
+	if _theme() in ["circuit", "city"]:
 		_build_kerbs()
 	if map.has("landmark"):
 		_build_pyramid(map["landmark"])
@@ -81,9 +89,16 @@ func prepare() -> void:
 	_sample_spline()
 
 
-## "" for the normal countryside look, "wasteland", "jungle" or "circuit".
+## "" for the normal countryside look, "wasteland", "jungle", "circuit",
+## "moon" or "city".
 func _theme() -> String:
 	return map.get("theme", "")
+
+
+## What's under the wheels off the road: grass, the Moon's dust, or the
+## city's pavements.
+func _offroad() -> String:
+	return {"moon": "dust", "city": "asphalt"}.get(_theme(), "grass")
 
 
 ## Inside one of the map's water areas (harbour, sea)?
@@ -266,9 +281,9 @@ func _build_road() -> void:
 			mat.albedo_color = Color(0.70, 0.72, 0.78)
 		_add_static(arrays, mat, surf, "Road_" + surf)
 	verge.generate_normals()
-	var vmat := TexGen.material(_road_tex("grass"), 1.0)
+	var vmat := TexGen.material(TexGen.concrete() if _theme() == "city" else _road_tex(_offroad()), 1.0)
 	vmat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_add_static(verge.commit_to_arrays(), vmat, "grass", "Verges")
+	_add_static(verge.commit_to_arrays(), vmat, _offroad(), "Verges")
 
 
 func _road_tex(surf: String) -> ImageTexture:
@@ -344,8 +359,15 @@ func _build_terrain() -> void:
 			var n01 := noise.get_noise_2d(wx, wz) * 0.5 + 0.5
 			var edge := smoothstep(VERGE + 6.0, 70.0, _dist[k])
 			var hills := (n01 * n01) * 38.0 - 4.0
+			if _theme() == "moon":
+				hills *= 0.35  # the mare is flat; the craters make the relief
 			var rim := smoothstep(_world_half - 110.0, _world_half, maxf(absf(wx - _center.x), absf(wz - _center.y)))
 			_heights[k] = lerpf(base - 0.3, far_base + hills + 3.0, edge) + rim * 60.0
+			if _theme() == "city":
+				# flat streets and plazas between the blocks
+				_heights[k] = lerpf(base - 0.3, base * 0.8, smoothstep(30.0, 90.0, _dist[k])) + rim * 30.0
+			elif _theme() == "moon":
+				_heights[k] += _craters(wx, wz) * smoothstep(VERGE + 3.0, 24.0, _dist[k])
 			var sink := _water_depth(wx, wz)
 			if sink > 0.0:
 				_heights[k] = lerpf(_heights[k], _water_level() - 5.0, sink)
@@ -363,10 +385,33 @@ func _build_terrain() -> void:
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
-	var mat := TexGen.material(TexGen.grass(), 1.0, Color(0.8, 0.84, 0.82) if rain else Color.WHITE)
+	var ground_tex: Texture2D = {"moon": TexGen.road("dust"), "city": TexGen.concrete()}.get(_theme(), TexGen.grass())
+	var mat := TexGen.material(ground_tex, 1.0, Color(0.8, 0.84, 0.82) if rain else Color.WHITE)
 	mat.vertex_color_use_as_albedo = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_add_static(st.commit_to_arrays(), mat, "grass", "Terrain")
+	_add_static(st.commit_to_arrays(), mat, _offroad(), "Terrain")
+
+
+## Height change from the Moon's craters at a point: a bowl sunk below the
+## plain with a raised rim round it. The map lists the big ones; a field of
+## small ones is scattered from the stage seed.
+func _craters(x: float, z: float) -> float:
+	if _crater_list.is_empty():
+		_crater_list = map.get("craters", []).duplicate()
+		var r := RandomNumberGenerator.new()
+		r.seed = int(map["seed"]) + 21
+		for k in int(map.get("crater_field", 0)):
+			var rad := r.randf_range(6.0, 30.0) * (1.0 if r.randf() < 0.8 else 2.2)
+			_crater_list.append([_center.x + r.randf_range(-1, 1) * _world_half, _center.y + r.randf_range(-1, 1) * _world_half,
+				rad, rad * r.randf_range(0.18, 0.3)])
+	var h := 0.0
+	for c in _crater_list:
+		var d := Vector2(x - (c[0] as float), z - (c[1] as float)).length() / (c[2] as float)
+		if d > 1.8:
+			continue
+		var depth: float = c[3]
+		h += -depth * maxf(1.0 - d * d, 0.0) + depth * 0.4 * exp(-pow((d - 1.0) / 0.28, 2.0))
+	return h
 
 
 func _grid_origin() -> Vector2:
@@ -374,6 +419,18 @@ func _grid_origin() -> Vector2:
 
 
 func _terrain_color(h: float, k: int) -> Color:
+	if _theme() == "moon":
+		# grey plains, darker down in the crater bowls, bright on the rims
+		var mare := Color(0.50, 0.50, 0.49).lerp(Color(0.42, 0.42, 0.43), clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0) * 0.6)
+		if h < -0.8:
+			mare = mare.lerp(Color(0.30, 0.30, 0.32), clampf((-0.8 - h) / 4.0, 0.0, 1.0))
+		elif h > 1.5:
+			mare = mare.lerp(Color(0.66, 0.66, 0.64), clampf((h - 1.5) / 8.0, 0.0, 1.0))
+		return mare
+	if _theme() == "city":
+		# paved streets and squares, with a park here and there
+		var paved := Color(0.70, 0.69, 0.66).lerp(Color(0.62, 0.61, 0.60), clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0))
+		return Color(0.36, 0.52, 0.24) if city_park(k % _grid_n, k / _grid_n) and _dist[k] > 40.0 else paved
 	if _theme() == "wasteland":
 		var ash := Color(0.40, 0.37, 0.32)
 		var scorch := Color(0.24, 0.21, 0.18)
@@ -402,6 +459,12 @@ func _terrain_color(h: float, k: int) -> Color:
 	return c
 
 
+## Is this terrain cell (grid x, z) part of a city park? Parks come in
+## blocks of 64 m.
+func city_park(gx: int, gz: int) -> bool:
+	return posmod(gx / 8 * 7 + gz / 8 * 13 + int(map["seed"]), 9) == 0
+
+
 func terrain_height(x: float, z: float) -> float:
 	var k := _grid_index(x, z)
 	return _heights[k]
@@ -423,6 +486,8 @@ func _grid_index(x: float, z: float) -> int:
 ## Crashable barriers on the outside of sharper corners: stone walls on
 ## tarmac, hay bales on gravel.
 func _build_barriers() -> void:
+	if _theme() == "city":
+		return  # the street circuit is walled the whole way round (CityScenery)
 	var styles := {
 		"asphalt": {"size": Vector3(0.9, 1.1, 3.4), "mat": _box_material(TexGen.stone_wall(), 1.0)},
 		"gravel": {"size": Vector3(1.2, 1.2, 2.6), "mat": _box_material(TexGen.hay(), 1.0)},
@@ -444,6 +509,12 @@ func _build_barriers() -> void:
 		styles["grass"] = logs
 	elif _theme() == "circuit":
 		styles["asphalt"] = styles["wet"]  # armco round the whole lap
+	elif _theme() == "moon":
+		# bags of regolith stacked into berms, the way the base crews build them
+		var bags := {"size": Vector3(1.4, 1.0, 3.2), "mat": _box_material(TexGen.road("dust"), 1.0)}
+		(bags["mat"] as StandardMaterial3D).albedo_color = Color(0.86, 0.84, 0.78)
+		styles["regolith"] = bags
+		styles["dust"] = bags
 	var walls := StaticBody3D.new()
 	walls.name = "Barriers"
 	walls.set_meta("surface", "grass")
@@ -799,8 +870,8 @@ func _tri_uv(st: SurfaceTool, v: Array, uv: Array, n: Vector3) -> void:
 
 ## Little crowds behind tape at hairpins and at the jump.
 func _build_spectators() -> void:
-	if _theme() == "wasteland":
-		return  # nobody left to watch
+	if _theme() in ["wasteland", "moon"]:
+		return  # nobody left to watch, or nobody without a spacesuit
 	var n := points.size()
 	# the crowd draws from its own generator; the stage's one still takes one
 	# number per person as before, so trees and houses stay where they were
@@ -1005,6 +1076,8 @@ func _build_mountains() -> void:
 		cols = {"low": Color(0.34, 0.26, 0.20), "rock": Color(0.40, 0.31, 0.24), "top": Color(0.54, 0.47, 0.40)}  # ash, not snow
 	elif _theme() == "jungle":
 		cols = {"low": Color(0.18, 0.32, 0.20), "rock": Color(0.24, 0.38, 0.27), "top": Color(0.32, 0.46, 0.32)}  # forest to the top
+	elif _theme() == "moon":
+		cols = {"low": Color(0.40, 0.40, 0.40), "rock": Color(0.52, 0.52, 0.51), "top": Color(0.70, 0.70, 0.68)}  # bare grey highlands
 	for k in 22:
 		var a := TAU * k / 22.0 + _rng.randf_range(-0.1, 0.1)
 		var r := _rng.randf_range(900.0, 1150.0) * _world_half / 560.0

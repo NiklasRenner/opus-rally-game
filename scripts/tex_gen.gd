@@ -128,6 +128,45 @@ static func road(kind: String) -> ImageTexture:
 					elif (x + plank * 13) % 29 == 0:
 						c = c.darkened(0.3)
 					img.set_pixel(x, y, Color(c.r, c.g, c.b))
+		"regolith":
+			# packed grey moon dust, pebbled, with the tracks of earlier rovers
+			_noise_fill(img, Color(0.56, 0.56, 0.54), 0.05, rng)
+			_speckle(img, [Color(0.70, 0.70, 0.68), Color(0.40, 0.40, 0.40), Color(0.30, 0.30, 0.31)], 0.16, rng)
+			for y in 64:
+				for x in [14, 15, 16, 17, 18, 45, 46, 47, 48, 49]:
+					var c2 := img.get_pixel(x, y).darkened(0.16)
+					if y % 4 == 0:
+						c2 = c2.darkened(0.15)  # the chevron tread of the rover tyres
+					img.set_pixel(x, y, c2)
+			for y in 64:
+				for x in [0, 1, 2, 61, 62, 63]:
+					img.set_pixel(x, y, Color(0.48, 0.48, 0.48).lerp(img.get_pixel(x, y), rng.randf() * 0.5))
+		"dust":
+			# loose powder: lighter, softer, rippled, no tracks to follow
+			_noise_fill(img, Color(0.64, 0.64, 0.63), 0.035, rng)
+			_speckle(img, [Color(0.74, 0.74, 0.73), Color(0.50, 0.50, 0.50)], 0.1, rng)
+			for y in 64:
+				for x in 64:
+					if (y + int(sin(x * 0.3) * 2.0)) % 9 == 0:
+						img.set_pixel(x, y, img.get_pixel(x, y).darkened(0.08))
+			for k in 6:  # a few dark rocks poking through
+				var p := Vector2i(rng.randi_range(2, 61), rng.randi_range(2, 61))
+				for o in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+					img.set_pixel(p.x + o.x, p.y + o.y, Color(0.30, 0.30, 0.31))
+		"cobbles":
+			# granite setts in rows, the joints dark, each stone its own shade
+			_noise_fill(img, Color(0.26, 0.25, 0.25), 0.02, rng)
+			for row in 16:
+				var shift := (row % 2) * 3
+				for col in 11:
+					var tone := Color(0.50, 0.46, 0.44) * rng.randf_range(0.8, 1.15)
+					if rng.randf() < 0.2:
+						tone = Color(0.56, 0.42, 0.36) * rng.randf_range(0.85, 1.1)
+					for y in range(row * 4, row * 4 + 3):
+						for x in range(col * 6 + shift, col * 6 + shift + 5):
+							var v := rng.randf_range(-0.03, 0.03)
+							img.set_pixel(x % 64, y, Color(tone.r + v, tone.g + v, tone.b + v))
+			_lines(img, Color(0.90, 0.90, 0.86), false)
 	return _tex(img)
 
 

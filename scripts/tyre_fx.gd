@@ -31,10 +31,16 @@ const LOOKS := {
 	"powder": {"puff": [Color(0.97, 0.99, 1.0), Color(0.84, 0.90, 0.97)], "life": 1.2, "size": [0.7, 2.4],
 		"speed": 2.2, "rise": 0.0, "alpha": 0.8, "bits": [Color(1, 1, 1), Color(0.78, 0.88, 1.0)],
 		"bit_ratio": 0.5, "bit_speed": 4.0, "bit_size": 0.06, "kick": 0.5},
+	# no air on the Moon: the dust doesn't billow, it sprays up in arcs and
+	# falls straight back down
+	"moondust": {"puff": [Color(0.74, 0.74, 0.72), Color(0.58, 0.58, 0.58)], "life": 0.9, "size": [0.6, 1.4],
+		"speed": 3.5, "rise": -3.0, "alpha": 0.75, "bits": [Color(0.50, 0.50, 0.50), Color(0.80, 0.80, 0.78)],
+		"bit_ratio": 1.0, "bit_speed": 7.0, "bit_size": 0.08, "kick": 0.85},
 }
 
 const SURFACE_LOOK := {"asphalt": "smoke", "wood": "smoke", "gravel": "dust", "mud": "mud", "grass": "turf",
-	"wet": "spray", "ford": "splash", "ice": "powder", "snow": "powder"}
+	"wet": "spray", "ford": "splash", "ice": "powder", "snow": "powder", "regolith": "moondust", "dust": "moondust",
+	"cobbles": "smoke"}
 
 const PUFFS := 36
 const BITS := 28

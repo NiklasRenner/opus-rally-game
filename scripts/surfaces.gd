@@ -13,7 +13,7 @@ extends RefCounted
 ## mark  : what sliding tyres leave behind: rubber, wet, rut, mud, turf, scrape or none
 ##         (see SkidMarks.KINDS)
 
-const ORDER := ["asphalt", "gravel", "wet", "ice", "grass", "mud", "ford", "wood"]
+const ORDER := ["asphalt", "gravel", "wet", "ice", "grass", "mud", "ford", "wood", "regolith", "dust", "cobbles"]
 
 const DATA := {
 	"asphalt": {"label": "ASPHALT", "peak": 0.08, "grip": 1.30, "slide": 0.80, "drag": 0.012, "bump": 0.00,
@@ -40,6 +40,19 @@ const DATA := {
 	"wood": {"label": "BRIDGE", "peak": 0.10, "grip": 1.00, "slide": 0.72, "drag": 0.016, "bump": 0.012,
 		"hud": Color(0.80, 0.62, 0.38), "fx": Color(0.70, 0.62, 0.50, 0.5), "fx_always": false,
 		"rain": 0.7, "mark": "rubber"},
+	# the Moon: packed grey regolith holds well enough in the low gravity but
+	# lets go into long lazy slides; the fine dust in the crater floors drags
+	# and floats the car about
+	"regolith": {"label": "REGOLITH", "peak": 0.14, "grip": 1.45, "slide": 0.70, "drag": 0.030, "bump": 0.025,
+		"hud": Color(0.78, 0.78, 0.74), "fx": Color(0.70, 0.70, 0.68, 0.8), "fx_always": true,
+		"rain": 1.0, "mark": "rut"},
+	"dust": {"label": "MOON DUST", "peak": 0.18, "grip": 1.05, "slide": 0.60, "drag": 0.075, "bump": 0.015,
+		"hud": Color(0.58, 0.58, 0.62), "fx": Color(0.62, 0.62, 0.62, 0.9), "fx_always": true,
+		"rain": 1.0, "mark": "rut"},
+	# city squares: setts, a touch less grip than tarmac and a fine rumble
+	"cobbles": {"label": "COBBLES", "peak": 0.09, "grip": 1.08, "slide": 0.72, "drag": 0.018, "bump": 0.022,
+		"hud": Color(0.82, 0.66, 0.56), "fx": Color(0.85, 0.85, 0.85, 0.5), "fx_always": false,
+		"rain": 0.62, "mark": "rubber"},
 }
 
 

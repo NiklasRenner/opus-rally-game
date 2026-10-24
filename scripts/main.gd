@@ -49,6 +49,9 @@ func _ready() -> void:
 	total_laps = Game.laps
 	best_lap = Game.best_lap()
 	_setup_environment()
+	# the world keeps its gravity between races, so every stage sets its own
+	var gravity: float = Maps.get_map(Game.map_id).get("gravity", ProjectSettings.get_setting("physics/3d/default_gravity"))
+	PhysicsServer3D.area_set_param(get_world_3d().space, PhysicsServer3D.AREA_PARAM_GRAVITY, gravity)
 
 	track = TrackBuilder.new()
 	track.name = "Track"
@@ -64,6 +67,7 @@ func _ready() -> void:
 	car.place(track.get_spawn_transform(track.count() - 4))
 	car.impact.connect(_on_impact)
 	car.rain = Game.race_rain
+	car.gravity = gravity
 	car.manual_gears = Game.manual_gears
 	var marks := SkidMarks.new()
 	marks.name = "SkidMarks"

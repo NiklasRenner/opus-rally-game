@@ -78,6 +78,9 @@ const SURFACE_SOUND := {
 	"grass": {"roll": [0.07, 300.0], "squeal": [0.0, 0.0], "grain": [1.0, 900.0], "hiss": 0.0, "swish": 0.25, "splash": 0.0, "clack": 0.0},
 	"mud": {"roll": [0.08, 260.0], "squeal": [0.0, 0.0], "grain": [1.5, 600.0], "hiss": 0.0, "swish": 0.25, "splash": 0.03, "clack": 0.0},
 	"ford": {"roll": [0.03, 300.0], "squeal": [0.0, 0.0], "grain": [0.0, 0.0], "hiss": 0.05, "swish": 0.03, "splash": 0.2, "clack": 0.0},
+	"regolith": {"roll": [0.07, 700.0], "squeal": [0.0, 0.0], "grain": [5.0, 1700.0], "hiss": 0.02, "swish": 0.14, "splash": 0.0, "clack": 0.0},
+	"dust": {"roll": [0.05, 380.0], "squeal": [0.0, 0.0], "grain": [2.0, 1100.0], "hiss": 0.03, "swish": 0.2, "splash": 0.0, "clack": 0.0},
+	"cobbles": {"roll": [0.10, 560.0], "squeal": [0.10, 980.0], "grain": [3.0, 1400.0], "hiss": 0.0, "swish": 0.0, "splash": 0.0, "clack": 0.12},
 	"wood": {"roll": [0.08, 420.0], "squeal": [0.1, 950.0], "grain": [0.0, 0.0], "hiss": 0.0, "swish": 0.0, "splash": 0.0, "clack": 0.35},
 }
 
