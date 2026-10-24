@@ -3,10 +3,10 @@
 Late-90s arcade rally in the spirit of Sega Rally / Colin McRae: chunky
 640x360 render, nearest-filtered procedural textures, low-poly car and
 scenery, arcade HUD. Everything (track, cars, textures, sky, engine sound) is
-generated in code, except three vehicles modelled in Blender: the Martello HF,
-the Pleiad 555 and the KPz Pardel tank (sources in `art/`, exported to
-`models/*.glb`). The two rally cars wear pixel-art skins from `models/`; the
-tank is painted in code at startup.
+generated in code, except four vehicles modelled in Blender: the Martello HF,
+the Pleiad 555, the Veloce F1 and the KPz Pardel tank (sources in `art/`,
+exported to `models/*.glb`). The three cars wear pixel-art skins from
+`models/`; the tank is painted in code at startup.
 
 ## Open and play
 
@@ -60,7 +60,7 @@ race from the menu (a restart keeps the same weather).
 | Falke RS | White, big whale-tail wing | Stable, slightly grippier |
 | Cuneo Stradale | Short wedge, green nose | Lightest, sharpest turn-in, least grip |
 | Kart 125 | Go-kart with the driver out in the open | Tiny and twitchy: quickest turn-in, about 110 km/h flat out |
-| Veloce F1 | Late-90s single-seater, high nose, big wings | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac |
+| Veloce F1 | Modern single-seater: halo, sidepods, multi-element wings, navy with a sun-and-bolt livery | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac |
 | KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
@@ -74,9 +74,10 @@ lofts it into a dentable low-poly body. Copy an entry to add a car.
 
 The modelled cars come from `art/cars/build_cars.py`: run it in Blender's
 Scripting tab (with `build_all("<path to this folder>")`) to rebuild their
-.blend files and re-export `models/martello.glb` and `models/pleiad.glb`.
+.blend files and re-export `models/martello.glb`, `models/pleiad.glb` and
+`models/veloce.glb` (the F1 car).
 
-Both wear a skin painted in separate panel pieces (each side, top, front,
+All three wear a skin painted in separate panel pieces (each side, top, front,
 back, windscreen) in `art/cars/<car>_pieces/`, combined into
 `models/<car>_skin.png`. `python art/cars/paint_skin.py <car>` recombines the
 pieces (needs Pillow), so you can retouch any piece in a pixel editor such as

@@ -458,7 +458,70 @@ def paint_pleiad(sk):
     finish(sk)
 
 
-PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad}
+# --------------------------------------------------------------------------- the F1 car
+
+def paint_veloce(sk):
+    """Modern works F1 livery: matte navy, yellow nose tip, red wing elements,
+    a red bolt on a yellow sun disc on the engine cover, big white sponsors
+    (made-up ORBITAL and PAYPIX), number 27."""
+    navy = rgb(0.09, 0.11, 0.24)
+    sun = rgb(1.0, 0.8, 0.1)
+    red = rgb(0.86, 0.08, 0.1)
+    base(sk, navy)
+
+    def bolt(c, r):
+        """Red lightning bolt across a sun disc of radius r (pixels) at c."""
+        sk.disc(c, r, sun)
+        x, y = c
+        pts = [(x - 0.55 * r, y + 0.5 * r), (x + 0.05 * r, y - 0.05 * r), (x - 0.1 * r, y - 0.15 * r),
+               (x + 0.6 * r, y - 0.6 * r), (x - 0.05 * r, y + 0.05 * r), (x + 0.1 * r, y + 0.15 * r)]
+        sk.paint(lambda d: d.polygon(pts, fill=red))
+
+    for side in (-1, 1):
+        # nose tip, front wing endplates, number on the nose
+        sk.side_box(side, 2.2, 2.6, 0.0, 0.6, sun)
+        sk.side_box(side, 2.18, 2.62, 0.04, 0.31, red)
+        sk.side_box(side, 2.18, 2.62, 0.2, 0.23, WHITE)
+        sk.text("27", sk.side_pt(side, 1.75, 0.33), 7, WHITE, bold=True)
+        # sidepods: the big sponsor, a stripe and small stickers
+        sk.text("ORBITAL", sk.side_pt(side, -0.42, 0.4), 14, WHITE, bold=True)
+        sk.side_box(side, 0.2, -1.3, 0.24, 0.27, red)
+        for i, col in enumerate((WHITE, sun, red)):
+            yy = 1.25 - i * 0.14
+            sk.side_box(side, yy, yy - 0.11, 0.25, 0.29, col)
+        # engine cover: sun disc and bolt, number further back
+        bolt(sk.side_pt(side, -0.92, 0.6), 0.15 * sk.s)
+        sk.text("27", sk.side_pt(side, -1.55, 0.36), 7, WHITE, bold=True)
+        sk.text("VELOCE", sk.side_pt(side, 0.85, 0.36), 7, WHITE)
+        # rear wing endplates: sponsor up the plate
+        x0, y0 = sk.side_pt(side, -2.08, 0.72)
+        sk.text("PAYPIX", (x0, y0), 7, WHITE, rotate=90 * side, bold=True)
+        sk.side_box(side, -1.85, -2.31, 0.98, 1.03, red)
+
+    # top: yellow nose tip, red wing elements with sponsors, number, engine
+    # cover bolt, rear wing sponsor reading from behind
+    sk.top_box(-0.12, 0.12, 2.18, 2.6, sun)
+    for sx in (-1, 1):
+        sk.top_box(sx * 0.12, sx * 1.0, 2.15, 2.6, red)
+        sk.text("PAYPIX", sk.px("top", (sx * 0.55, 2.41, 0)), 7, WHITE, rotate=90, bold=True)
+    sk.text("27", sk.px("top", (0.0, 1.75, 0)), 7, WHITE, rotate=90, bold=True)
+    sk.text("VELOCE", sk.px("top", (0.0, 1.1, 0)), 7, sun, rotate=90)
+    bolt(sk.px("top", (0.0, -1.05, 0)), 0.11 * sk.s)
+    sk.text("ORBITAL", sk.px("top", (0.0, -2.12, 0)), 7, WHITE, rotate=-90, bold=True)
+    sk.top_box(-0.6, 0.6, -2.26, -2.3, red)
+
+    # front: nose tip and wing faces; rear: rain light surround, beam wing
+    sk.end_box(True, -0.15, 0.15, 0.1, 0.5, sun)
+    sk.end_box(True, -1.0, -0.15, 0.04, 0.3, red)
+    sk.end_box(True, 0.15, 1.0, 0.04, 0.3, red)
+    sk.end_box(False, -0.6, 0.6, 0.85, 1.05, navy)
+    sk.end_box(False, -0.6, 0.6, 0.97, 1.03, red)
+    sk.end_box(False, -0.12, 0.12, 0.27, 0.37, BLACK)
+
+    finish(sk, wheels=())
+
+
+PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce}
 
 
 def main():

@@ -56,9 +56,6 @@ func build() -> void:
 		_build_kart()
 		return
 	_build_shell()
-	if kind() == "f1":
-		_build_f1()
-		return
 	_build_details()
 	_build_parts()
 
@@ -835,83 +832,6 @@ func _build_kart() -> void:
 	_helmet(Vector3(0, 0.02, 0.27), spec.get("helmet", base), 0.15)
 
 
-## F1 single-seater: the lofted shell is the tub; this adds the cockpit and
-## driver, side pods, wings, suspension arms and the airbox.
-func _build_f1() -> void:
-	var base: Color = _livery("base")
-	var a: Color = _livery("a")
-	var dark := TexGen.flat_material(Color(0.06, 0.06, 0.08), 0.7)
-	var base_mat := TexGen.flat_material(base, 0.4)
-	var a_mat := TexGen.flat_material(a, 0.4)
-	var wl := Cars.wheels(spec)
-	var black := Color(0.05, 0.05, 0.07)
-	var white := Color(0.97, 0.97, 0.95)
-
-	# cockpit opening, driver, airbox intake
-	var cz := -0.3
-	var top := _heights(cz)[5]
-	_box(self, Vector3(0.4, 0.03, 0.66), Vector3(0, top + 0.005, cz), dark)
-	_helmet(Vector3(0, top + 0.09, cz + 0.14), spec.get("helmet", base), 0.15)
-	_box(self, Vector3(0.18, 0.12, 0.05), Vector3(0, 0.22, 0.15), dark)
-
-	# side pods with radiator intakes and the sponsor
-	var sp: Array = spec["sponsor"]
-	for s in [-1.0, 1.0]:
-		var pod := _add_part("pod_l" if s < 0 else "pod_r", "left" if s < 0 else "right", 0.45,
-			Vector3(s * 0.56, -0.44, 0.35), Vector3(0.4, 0.3, 1.3), base, Vector3i(1, 1, 3))
-		_box(pod, Vector3(0.32, 0.2, 0.02), Vector3(0, 0.0, -0.655), dark)
-		_box(pod, Vector3(0.41, 0.06, 1.31), Vector3(0, -0.1, 0), a_mat)
-		var face := FACE_RIGHT if s > 0 else FACE_LEFT
-		_decal(TexGen.pixel_text(sp[0], sp[1], sp[2]), Vector2(0.7, -1), Vector3(s * 0.206, 0.05, 0.05), face, false, pod)
-		# race number on the engine cover
-		var nz := 0.5
-		_decal(TexGen.pixel_text(spec["number"], black, white, black), Vector2(-1, 0.2),
-			Vector3(s * (_half_width(nz) + 0.01), 0.14, nz), face)
-		_add_part("mirror_l" if s < 0 else "mirror_r", "left" if s < 0 else "right", 0.2,
-			Vector3(s * 0.36, top + 0.1, -0.62), Vector3(0.12, 0.07, 0.06), base, Vector3i(1, 1, 1))
-
-	# front wing hung under the nose
-	var fw := _add_part("front_wing", "front", 0.3, Vector3(0, -0.6, -2.38), Vector3(1.9, 0.035, 0.32), a,
-		Vector3i(6, 1, 1))
-	for s in [-1.0, 1.0]:
-		_box(fw, Vector3(0.03, 0.2, 0.42), Vector3(s * 0.95, 0.07, 0.02), base_mat)
-		var flap := _box(fw, Vector3(0.66, 0.03, 0.14), Vector3(s * 0.58, 0.07, 0.12), a_mat)
-		flap.rotation.x = 0.35
-		_box(fw, Vector3(0.03, 0.2, 0.12), Vector3(s * 0.1, 0.1, 0.0), dark)
-	# nose number
-	var nz := -1.95
-	var fwd := Vector3(0, _profile(nz - 0.2).x - _profile(nz + 0.2).x, -0.4).normalized()
-	var normal := Vector3.RIGHT.cross(fwd)
-	_decal(TexGen.pixel_text(spec["number"], black, white, black), Vector2(0.2, -1),
-		Vector3(0, _heights(nz)[5] + 0.015, nz) + normal * 0.01, Basis(Vector3.RIGHT, fwd, normal))
-
-	# rear wing on its end plates
-	var rw := _add_part("rear_wing", "rear", 0.5, Vector3(0, 0.12, 1.98), Vector3(1.0, 0.04, 0.32), a,
-		Vector3i(4, 1, 1))
-	var lower := _box(rw, Vector3(1.0, 0.03, 0.2), Vector3(0, -0.15, 0.08), a_mat)
-	lower.rotation.x = -0.3
-	_box(rw, Vector3(0.05, 0.42, 0.12), Vector3(0, -0.25, 0.04), dark)
-	for s in [-1.0, 1.0]:
-		_box(rw, Vector3(0.03, 0.62, 0.55), Vector3(s * 0.51, -0.17, 0.02), base_mat)
-		_decal(TexGen.pixel_text(sp[0], sp[1], sp[2]), Vector2(0.48, -1), Vector3(s * 0.53, -0.05, 0.02),
-			FACE_RIGHT if s > 0 else FACE_LEFT, false, rw)
-	_box(self, Vector3(0.12, 0.06, 0.02), Vector3(0, -0.42, 2.065), TexGen.flat_material(Color(1.0, 0.15, 0.1), 0.3, true))
-
-	# wishbones from the tub to each hub
-	var x: float = wl["x"]
-	for axle in [[wl["zf"], wl["rf"], wl["wf"]], [wl["zr"], wl["rr"], wl["wr"]]]:
-		var z: float = axle[0]
-		var hy := _hub_y(axle[1])
-		var hx: float = x - (axle[2] as float) * 0.5
-		for s in [-1.0, 1.0]:
-			var hub := Vector3(s * hx, hy, z)
-			var inner: float = _half_width(z) * 0.9 * s
-			_rod(self, hub + Vector3(0, 0.08, 0), Vector3(inner, hy + 0.12, z - 0.15), 0.03, dark)
-			_rod(self, hub + Vector3(0, 0.08, 0), Vector3(inner, hy + 0.12, z + 0.15), 0.03, dark)
-			_rod(self, hub - Vector3(0, 0.06, 0), Vector3(inner, hy - 0.04, z - 0.15), 0.03, dark)
-			_rod(self, hub - Vector3(0, 0.06, 0), Vector3(inner, hy - 0.04, z + 0.15), 0.03, dark)
-
-
 # --------------------------------------------------------------------------- modelled in Blender
 
 const MESH_Y := -0.72  # ground level in car space; the Blender models sit on their origin
@@ -957,6 +877,8 @@ func _build_mesh() -> void:
 			var w := root.find_child(n, true, false)
 			if w:
 				w.free()
+	if kind() == "f1":
+		_helmet(spec["helmet_pos"], spec["helmet"], 0.15)  # looks into the corners
 	if not is_tank():
 		return
 	_turret = root.find_child("Turret", true, false)
@@ -984,7 +906,8 @@ func _car_materials() -> Dictionary:
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"Flap": TexGen.flat_material(spec["flaps"], 0.9),
 		"Tyre": TexGen.material(TexGen.tread(), 0.95),
-		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5)), 0.4),
+		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5), spec.get("rim_ring", Color(0, 0, 0, 0))), 0.4),
+		"Tail": TexGen.flat_material(Color(1.0, 0.12, 0.08), 0.3, true),
 	}
 
 

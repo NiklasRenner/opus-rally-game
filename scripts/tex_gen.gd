@@ -735,12 +735,13 @@ static func _make_tank_cross() -> ImageTexture:
 
 # --------------------------------------------------------------------------- modelled cars
 
-## Wheel face: tyre sidewall round a spoked rim and a hub.
-static func rim(col: Color, spokes := 5) -> ImageTexture:
-	return _cached("rim|%s|%d" % [col.to_html(), spokes], _make_rim.bind(col, spokes))
+## Wheel face: tyre sidewall round a spoked rim (0 spokes: a flat cover) and
+## a hub, with an optional coloured ring on the tyre wall.
+static func rim(col: Color, spokes := 5, ring := Color(0, 0, 0, 0)) -> ImageTexture:
+	return _cached("rim|%s|%d|%s" % [col.to_html(), spokes, ring.to_html()], _make_rim.bind(col, spokes, ring))
 
 
-static func _make_rim(col: Color, spokes: int) -> ImageTexture:
+static func _make_rim(col: Color, spokes: int, ring: Color) -> ImageTexture:
 	var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
 	for y in 32:
 		for x in 32:
@@ -749,11 +750,13 @@ static func _make_rim(col: Color, spokes: int) -> ImageTexture:
 			var ang := fposmod(d.angle() * spokes / TAU, 1.0)
 			var c := Color(0.07, 0.07, 0.07)  # tyre wall
 			if r < 0.68:
-				c = col if ang < (0.45 if spokes < 7 else 0.35) or r < 0.25 or r > 0.6 else col.darkened(0.7)
+				c = col if spokes == 0 or ang < (0.45 if spokes < 7 else 0.35) or r < 0.25 or r > 0.6 else col.darkened(0.7)
 			if r < 0.12:
 				c = col.darkened(0.3)
 			if r > 0.68 and r < 0.72:
 				c = col.darkened(0.25)
+			if ring.a > 0.0 and r > 0.78 and r < 0.86:
+				c = ring
 			img.set_pixel(x, y, c)
 	return _tex(img)
 
