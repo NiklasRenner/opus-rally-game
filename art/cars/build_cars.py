@@ -386,6 +386,8 @@ def build_car(c):
         f1_parts(B, c, root, M)
     elif c.get("kind") == "truck":
         truck_parts(B, c, root, M)
+    elif c.get("kind") == "hyper":
+        hyper_parts(B, c, root, M)
     else:
         saloon_parts(B, c, root, M)
     make_wheels(B, c, root, M)
@@ -468,6 +470,158 @@ def saloon_parts(B, c, root, M):
     g.cyl((c["exhaust_x"], ry - 0.11, 0.26), "Y", 0.035, 0.01, "Trim", segs=8)
     B.make("Exhaust", g, (c["exhaust_x"], ry, 0.26), hull, M)
 
+
+
+# --------------------------------------------------------------------------- the hypercar
+
+def body_x(body, y, z):
+    """Half width of the lofted body's skin at length y and height z."""
+    pts = [(x, zz) for x, zz in body.ring(y) if x > 0]
+    best = pts[0][0]
+    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+        if min(z0, z1) <= z <= max(z0, z1) and z0 != z1:
+            best = max(best, lerp(x0, x1, (z - z0) / (z1 - z0)))
+    return best
+
+
+def hyper_extras(g, body):
+    """Chrome C on each flank, engine cover louvres and spine, rear deck vents."""
+    # the C: a thin chrome bar standing just proud of the skin, from the
+    # A-pillar back under the side glass, round behind the door in front of
+    # the rear wheel and forward along the sill to the front wheel
+    y_top, (y_back, z_low) = body.c["c_line"]
+    y_front = body.c["wheel_y"][0] - body.arch_r() - 0.1
+    z_top = body.heights(y_top)[4] - 0.05
+    ry, rz, zc = y_back - y_top, (z_top - z_low) / 2, (z_top + z_low) / 2
+    pts = [(lerp(y_front, y_top, k / 6), body.heights(lerp(y_front, y_top, k / 6))[4] - 0.05) for k in range(7)]
+    pts += [(y_top + ry * math.sin(a), zc + rz * math.cos(a)) for a in (math.pi * i / 14 for i in range(1, 14))]
+    pts += [(lerp(y_top, y_front, k / 6), z_low) for k in range(7)]
+    for s in (-1, 1):
+        for (y0, z0), (y1, z1) in zip(pts, pts[1:]):
+            a = (s * (body_x(body, y0, z0) + 0.012), y0, z0)
+            b = (s * (body_x(body, y1, z1) + 0.012), y1, z1)
+            rod(g, a, b, 0.035, "Chrome")
+    # engine cover: a raised spine down the middle, louvres either side
+    for y0, y1 in ((-0.62, -1.05), (-1.05, -1.9)):
+        za, zb = body.heights(y0)[5], body.heights(y1)[5]
+        g.hull([(sx * 0.045, y, z + dz) for sx in (-1, 1) for (y, z) in ((y0, za), (y1, zb)) for dz in (-0.01, 0.05)],
+               "Livery")
+    for i in range(6):
+        y = -1.2 - i * 0.11
+        z = body.heights(y)[5]
+        for sx in (-1, 1):
+            g.box((sx * 0.38, y, z + 0.006), (0.46, 0.05, 0.02), "Trim")
+
+
+def hyper_parts(B, c, root, M):
+    """Mid-engined hypercar: lofted two-tone body with the chrome C, front
+    fascia with a horseshoe grille, slit headlamps with four LED dots,
+    a dark intake and silver splitter; a full-width red light bar, mesh
+    rear panel and a big diffuser round one central exhaust; mirrors on
+    stalks and a flush rear spoiler."""
+    body = Body(c)
+    g = G()
+    body.build(g)
+    for extra in c.get("body_extras", []):
+        extra(g, body)
+    # slit headlamps on the top of each front wing, four round LEDs in each
+    for s in (-1, 1):
+        y0, y1 = body.front() - 0.1, body.front() - 0.3
+        xi, xo = 0.42, 0.78
+        za, zb = body.heights(y0)[5], body.heights(y1)[5]
+        g.hull([(s * x, y, z + dz) for x in (xi, xo) for (y, z) in ((y0, za), (y1, zb)) for dz in (-0.01, 0.02)],
+               "Trim")
+        for i in range(4):
+            x = lerp(xi + 0.05, xo - 0.05, i / 3)
+            yy = lerp(y0, y1, 0.45)
+            zz = lerp(za, zb, 0.45) + 0.022
+            g.cyl((s * x, yy, zz), "Z", 0.032, 0.012, "Lamp", segs=8)
+    hull = B.make("Body", g, (0, 0, 0.55), root, M)
+
+    fy, ry = body.front(), body.rear()
+    hwf, hwr = body.half_width(fy - 0.15), body.half_width(ry + 0.15)
+    # front fascia: wraps the nose under the lamps, horseshoe grille in the
+    # middle, a wide dark intake with a silver splitter along the bottom
+    bt = c["bumper_top"]
+    g = G()
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (hwf + 0.01, fy - 0.45, 0.14), (hwf + 0.01, fy - 0.45, bt[0]), (hwf * 0.9, fy + 0.04, 0.16),
+        (hwf * 0.88, fy + 0.02, bt[0] - 0.02), (hwf * 0.97, fy - 0.14, bt[0]), (hwf * 0.95, fy - 0.03, 0.13)]], "Livery")
+    gy = fy + 0.045
+    # horseshoe: chrome rim round a dark mesh, rounded top, flat-ish base
+    shoe = []
+    for i in range(15):
+        a = math.pi * (-0.05 + 1.1 * i / 14)
+        shoe.append((0.17 * math.cos(a), 0.36 + 0.15 * math.sin(a)))
+    shoe = [(0.13, 0.2), (0.155, 0.27)] + shoe + [(-0.155, 0.27), (-0.13, 0.2)]
+    g.hull([(x, y, z) for x, z in shoe for y in (gy - 0.04, gy)], "Trim")
+    for (x0, z0), (x1, z1) in zip(shoe, shoe[1:]):
+        rod(g, (x0, gy + 0.005, z0), (x1, gy + 0.005, z1), 0.03, "Chrome")
+    rod(g, (shoe[-1][0], gy + 0.005, shoe[-1][1]), (shoe[0][0], gy + 0.005, shoe[0][1]), 0.03, "Chrome")
+    g.cyl((0, gy + 0.012, 0.465), "Y", 0.032, 0.01, "Tail", segs=10)  # little red oval badge
+    # lower intakes either side of the grille and the splitter
+    for sx in (-1, 1):
+        g.hull([(sx * x, y, z) for (x, z) in ((0.22, 0.17), (0.22, 0.3), (0.72, 0.17), (0.66, 0.3))
+                for y in (fy - 0.03, fy + 0.035)], "Trim")
+    g.box((0, fy + 0.05, 0.14), (hwf * 1.85, 0.06, 0.025), "Chrome")
+    B.make("Bumper_F", g, (0, fy - 0.15, 0.32), hull, M)
+
+    # rear: diffuser and the central exhaust under the mesh panel
+    g = G()
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (hwr + 0.01, ry + 0.38, 0.22), (hwr + 0.01, ry + 0.38, bt[1]), (hwr * 0.92, ry - 0.03, 0.3),
+        (hwr * 0.92, ry - 0.03, bt[1] - 0.02), (hwr * 0.98, ry + 0.1, bt[1]), (hwr * 0.95, ry + 0.05, 0.26)]], "Livery")
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (0.82, ry + 0.3, 0.12), (0.82, ry - 0.12, 0.3), (0.82, ry + 0.3, 0.16), (0.82, ry - 0.04, 0.3)]], "Trim")
+    for x in (-0.66, -0.44, 0.44, 0.66):  # diffuser strakes
+        g.hull([(x + dx, y, z) for dx in (-0.012, 0.012) for (y, z) in [
+            (ry + 0.25, 0.11), (ry - 0.14, 0.12), (ry - 0.14, 0.29)]], "Trim")
+    ex = [(-0.22, 0.17), (0.22, 0.17), (0.25, 0.25), (0.2, 0.31), (-0.2, 0.31), (-0.25, 0.25)]
+    for (x0, z0), (x1, z1) in zip(ex, ex[1:] + ex[:1]):
+        rod(g, (x0, ry - 0.08, z0), (x1, ry - 0.08, z1), 0.03, "Chrome")
+    g.hull([(x * 0.9, y, z) for x, z in ex for y in (ry - 0.07, ry + 0.05)], "Trim")
+    for x in (-0.11, 0.0, 0.11):
+        g.cyl((x, ry - 0.085, 0.24), "Y", 0.045, 0.01, "Steel", segs=8)
+    B.make("Bumper_R", g, (0, ry + 0.15, 0.3), hull, M)
+
+    # the light bar: one red line across the tail, curling down at the ends
+    g = G()
+    z = c["tail_z"]
+    hw = body_x(body, ry + 0.02, z) - 0.03
+    pts = [(lerp(-hw, hw, i / 10), ry - 0.012, z) for i in range(11)]
+    for s in (-1, 1):
+        end = [(s * (hw + 0.02), ry + 0.04, z - 0.03), (s * (hw + 0.035), ry + 0.12, z - 0.09),
+               (s * (hw + 0.035), ry + 0.22, z - 0.12)]
+        if s < 0:
+            pts = list(reversed(end)) + pts
+        else:
+            pts = pts + end
+    for a, b in zip(pts, pts[1:]):
+        rod(g, a, b, 0.035, "Tail")
+    B.make("LightBar", g, (0, ry, z), hull, M)
+
+    # flush spoiler along the tail of the engine cover
+    g = G()
+    wy = c["wing_y"]
+    wz = body.heights(wy)[5]
+    g.hull([(sx * x, wy + dy, wz + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.76, 0.12, 0.03), (0.76, 0.12, 0.05), (0.8, -0.2, 0.06), (0.8, -0.2, 0.09)]], "Livery")
+    for sx in (-1, 1):
+        g.box((sx * 0.5, wy - 0.04, wz + 0.02), (0.04, 0.12, 0.05), "Trim")
+    B.make("Spoiler", g, (0, wy, wz + 0.06), hull, M)
+
+    # mirrors on thin stalks off the door tops
+    my = c["mirror_y"]
+    mh = body.heights(my)[4]
+    for s, n in ((-1, "L"), (1, "R")):
+        g = G()
+        x = body.half_width(my)
+        rod(g, (s * (x - 0.03), my, mh + 0.02), (s * (x + 0.12), my - 0.05, mh + 0.1), 0.025, "Trim")
+        g.hull([(s * (x + dx), my + dy, mh + dz) for (dx, dy, dz) in [
+            (0.08, -0.04, 0.07), (0.08, -0.04, 0.15), (0.22, -0.07, 0.08), (0.22, -0.07, 0.14),
+            (0.08, 0.05, 0.09), (0.08, 0.05, 0.14), (0.22, 0.02, 0.09), (0.22, 0.02, 0.13)]], "Livery")
+        g.box((s * (x + 0.15), my - 0.075, mh + 0.11), (0.12, 0.01, 0.05), "Chrome")
+        B.make("Mirror_" + n, g, (s * (x + 0.15), my, mh + 0.1), hull, M)
 
 
 def make_wheels(B, c, root, M):
@@ -838,6 +992,19 @@ CARS = [
          glass_y=(0.8, -0.38), pillars=[9.0], b_pillar=9.0, mirror_y=0.72,
          wheel_y=(1.45, -1.45), wheel_x=1.05, wheel_r=0.75, wheel_w=0.8,
          screen=((0.8, 2.02), (0.5, 2.44))),
+    dict(name="Bellatrix", file="bellatrix", kind="hyper", paint=(0.12, 0.42, 0.85), flaps=(0.1, 0.1, 0.1),
+         rims=(0.22, 0.23, 0.25), half_len=2.3,
+         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8,
+         # low, wide mid-engined coupe: short rounded nose, long raked screen,
+         # a roof that runs straight into the engine cover, cut-off tail
+         profile=[(2.28, 0.44, 0.4), (2.22, 0.58, 0.54), (2.05, 0.66, 0.62), (1.6, 0.72, 0.68), (1.2, 0.77, 0.72),
+                  (0.88, 0.82, 0.76), (0.45, 1.05, 0.8), (0.05, 1.17, 0.84), (-0.35, 1.19, 0.86),
+                  (-0.8, 1.13, 0.87), (-1.3, 1.04, 0.89), (-1.8, 0.98, 0.9), (-2.1, 0.95, 0.9), (-2.24, 0.9, 0.86)],
+         glass_y=(0.8, -0.8), pillars=[9.0], b_pillar=9.0, mirror_y=0.72,
+         c_line=(-0.45, (-0.9, 0.32)),  # chrome C: where its top run ends, its back and its bottom run
+         wheel_y=(1.4, -1.32), wheel_x=0.87, wheel_r=0.36, wheel_w=(0.3, 0.36),
+         bumper_top=(0.42, 0.6), tail_z=0.8, wing_y=-1.98,
+         body_extras=[hyper_extras], screen=((0.88, 0.82), (0.05, 1.17))),
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
          wheel_y=(1.72, -1.42), wheel_x=0.84, wheel_r=(0.32, 0.35), wheel_w=(0.3, 0.42)),

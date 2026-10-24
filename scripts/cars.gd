@@ -98,6 +98,29 @@ const LIST := [
 		"shapes": [[Vector3(2.0, 0.26, 4.7), Vector3(0, -0.30, -0.15)], [Vector3(0.7, 0.4, 1.2), Vector3(0, 0.0, 0.4)]],
 	},
 	{
+		"id": "bellatrix",
+		"class": "S",
+		"name": "BELLATRIX 16",
+		"blurb": "Quad-turbo hypercar, blue and gunmetal",
+		"number": "16",
+		"plate": "BX 16",
+		"mesh": "res://models/bellatrix.glb",
+		"nose": -2.33,
+		"skin": "res://models/bellatrix_skin.png",
+		"spokes": 10,
+		"rims": Color(0.22, 0.23, 0.25),
+		"flaps": Color(0.1, 0.1, 0.1),
+		# carbon splitter and diffuser go first, the light bar and flush spoiler after
+		"parts": [["Bumper_F", "front", 0.3], ["Bumper_R", "rear", 0.35], ["Spoiler", "rear", 0.45],
+			["LightBar", "rear", 0.6], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]],
+		"wheels": {"x": 0.87, "zf": -1.4, "zr": 1.32, "rf": 0.36, "rr": 0.36, "wf": 0.3, "wr": 0.36},
+		# heavy but brutally quick: a little behind the F1 off the line, faster flat
+		# out, less downforce so it slides more in fast corners
+		"stats": {"power": 4.0, "grip": 1.08, "steer": 0.97, "mass": 1700.0,
+			"gearing": 0.7, "drag": 0.7, "downforce": 1.8, "inertia": 1.1, "pitch": 0.85},
+		"shapes": [[Vector3(1.95, 0.57, 4.6), Vector3(0, -0.085, 0)], [Vector3(1.2, 0.26, 2.0), Vector3(0, 0.33, 0.2)]],
+	},
+	{
 		"id": "swamp",
 		"type": "truck",
 		"class": "X",
@@ -180,7 +203,7 @@ const RETIRED := {"kaze": "KAZE GT4", "falke": "FALKE RS", "cuneo": "CUNEO STRAD
 ## Racing classes, fastest first. Each keeps its own highscores, best laps and
 ## ghosts, so a rally car never chases an F1 time.
 const CLASSES := {
-	"S": {"name": "FORMULA", "col": Color(0.95, 0.15, 0.1)},
+	"S": {"name": "SUPER", "col": Color(0.95, 0.15, 0.1)},
 	"A": {"name": "RALLY", "col": Color(1.0, 0.84, 0.1)},
 	"X": {"name": "EXTREME", "col": Color(0.45, 0.75, 0.3)},
 }

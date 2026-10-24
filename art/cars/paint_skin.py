@@ -704,7 +704,94 @@ def paint_veloce(sk):
     finish(sk, wheels=())
 
 
-PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp}
+# --------------------------------------------------------------------------- the hypercar
+
+def paint_bellatrix(sk):
+    """Two-tone hypercar: bright blue nose, bonnet, front wings and the front
+    of the doors, dark gunmetal behind the chrome C, over the roof and the
+    engine cover. Dark mesh tail panel with the wordmark under the light bar,
+    a darker spine down the bonnet. Made-up marque BELLATRIX."""
+    blue = rgb(0.12, 0.42, 0.88)
+    deep = rgb(0.07, 0.27, 0.66)
+    gun = rgb(0.22, 0.23, 0.26)
+    mesh = rgb(0.06, 0.06, 0.07)
+    silver = rgb(0.78, 0.8, 0.83)
+    base(sk, blue)
+
+    # the chrome C (build_cars.py, c_line): top run under the side glass,
+    # round behind the door, bottom run along the sill
+    y_top, y_back, z_low = -0.45, -0.9, 0.32
+
+    def c_top(y):
+        return lerp(0.71, 0.81, min(max((0.85 - y) / 1.3, 0.0), 1.0))
+
+    for side in (-1, 1):
+        piece = "side_r" if side > 0 else "side_l"
+        o = sk.L["pieces"][piece]["origin"]
+        u = sk.L["pieces"][piece]["u"][1]
+        x0, y0, x1, y1 = sk.rect(piece)
+
+        def two_tone(d, o=o, u=u, x0=x0, y0=y0, x1=x1, y1=y1):
+            zt = c_top(y_top)
+            zc, rz, ry = (zt + z_low) / 2, (zt - z_low) / 2, y_top - y_back
+            for px in range(x0, x1):
+                wy = o[1] + (px - x0 + 0.5) / sk.s * u
+                for py in range(y0, y1):
+                    z = o[2] - (py - y0 + 0.5) / sk.s
+                    if wy > 0.88:
+                        dark = False  # front wing: all blue
+                    elif z > c_top(wy) + 0.015:
+                        dark = True  # pillars and roof edge
+                    elif z < z_low - 0.015:
+                        dark = True  # sills
+                    elif wy < y_top:
+                        dark = ((wy - y_top) / ry) ** 2 + ((z - zc) / rz) ** 2 > 1.0
+                    else:
+                        dark = False
+                    if dark:
+                        d.point((px, py), fill=gun)
+        sk.paint(two_tone)
+        # shut line and handle on the door, inside the C
+        sk.side_box(side, 0.86, 0.847, 0.3, 0.72, deep)
+        sk.side_box(side, -0.32, -0.42, 0.66, 0.68, rgb(0.05, 0.18, 0.5))
+        # side intake behind the C, small wordmark on the sill
+        sk.paint(lambda d, side=side: d.polygon([sk.side_pt(side, -0.98, 0.72), sk.side_pt(side, -1.02, 0.42),
+                                                  sk.side_pt(side, -0.9, 0.36), sk.side_pt(side, -0.93, 0.7)], fill=mesh))
+        sk.text("BELLATRIX", sk.side_pt(side, 0.25, 0.25), 7, silver)
+
+    # top: blue bonnet with a darker spine, gunmetal roof and engine cover,
+    # a dark band of glass over the engine
+    sk.top_box(-1.0, 1.0, 0.85, -2.4, gun)
+    sk.top_box(-0.035, 0.035, 2.3, 0.88, deep)
+    for sx in (-1, 1):
+        sk.top_box(sx * 0.3, sx * 0.32, 2.1, 0.95, deep)
+    sk.top_box(-0.42, 0.42, -0.62, -1.05, mesh)
+
+    # front: dark lower lip, red badge sits on the grille (geometry)
+    sk.end_box(True, -0.95, 0.95, 0.0, 0.16, mesh)
+
+    # rear: gunmetal tail with a black mesh panel under the light bar, the
+    # wordmark between them, black diffuser
+    sk.end_box(False, -1.0, 1.0, 0.0, 1.6, gun)
+    sk.end_box(False, -0.8, 0.8, 0.34, 0.68, mesh)
+    for i in range(9):
+        z = 0.36 + i * 0.036
+        sk.end_box(False, -0.78, 0.78, z, z + 0.012, rgb(0.14, 0.14, 0.16))
+    for i in range(22):
+        x = -0.76 + i * 0.072
+        sk.end_box(False, x, x + 0.012, 0.35, 0.67, rgb(0.14, 0.14, 0.16))
+    sk.text("BELLATRIX", sk.px("rear", (0, 0, 0.73)), 7, silver, bold=True)
+    sk.end_box(False, -1.0, 1.0, 0.0, 0.3, mesh)
+
+    finish(sk, wheels=(1.4, -1.32))
+
+
+def lerp(a, b, t):
+    return a + (b - a) * t
+
+
+PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp,
+            "bellatrix": paint_bellatrix}
 
 
 def main():
