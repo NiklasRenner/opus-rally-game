@@ -94,6 +94,10 @@ func _build_mesh() -> void:
 	_axle_y = [_axles[0].position.y if _axles[0] else 0.0, _axles[1].position.y if _axles[1] else 0.0]
 	add_child(root)
 	var mats := _tank_materials() if is_tank() else _car_materials()
+	for m in mats.values():
+		var bm := m as BaseMaterial3D
+		if bm and bm.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED:
+			bm.vertex_color_use_as_albedo = true  # light baked into the model (art/cars/build_cars.py)
 	for mi in root.find_children("*", "MeshInstance3D", true, false):
 		var mesh: Mesh = (mi as MeshInstance3D).mesh
 		for s in mesh.get_surface_count():
@@ -276,25 +280,30 @@ func _make_dentable(mi: MeshInstance3D) -> void:
 			idx.resize(v.size())
 			for i in v.size():
 				idx[i] = i
+		# light baked into the model, if any, is where the dent scuffs start from
+		var baked: PackedColorArray = arr[Mesh.ARRAY_COLOR] if arr[Mesh.ARRAY_COLOR] != null else PackedColorArray()
 		var verts := PackedVector3Array()
 		var uvs := PackedVector2Array()
+		var colors := PackedColorArray()
 		for i in idx:
 			verts.append(v[i])
 			uvs.append(uv[i])
+			colors.append(baked[i] if not baked.is_empty() else Color.WHITE)
 		var mat := mi.get_surface_override_material(s)
-		_add_deformable(mi, verts, uvs, mat if mat else mesh.surface_get_material(s))
+		_add_deformable(mi, verts, uvs, mat if mat else mesh.surface_get_material(s), colors)
 	mi.mesh = null
 
 
-## A dentable triangle soup. Its vertex colours (white, scuffed darker by
-## dents) tint the material's texture.
-func _add_deformable(parent: Node3D, verts: PackedVector3Array, uvs: PackedVector2Array, mat: Material) -> void:
+## A dentable triangle soup. Its vertex colours (the model's baked light, or
+## white, scuffed darker by dents) tint the material's texture.
+func _add_deformable(parent: Node3D, verts: PackedVector3Array, uvs: PackedVector2Array, mat: Material,
+		colors := PackedColorArray()) -> void:
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	var colors := PackedColorArray()
-	colors.resize(verts.size())
-	colors.fill(Color.WHITE)
+	if colors.is_empty():
+		colors.resize(verts.size())
+		colors.fill(Color.WHITE)
 	var mi := MeshInstance3D.new()
 	mi.mesh = ArrayMesh.new()
 	parent.add_child(mi)

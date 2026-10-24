@@ -389,6 +389,8 @@ def build_car(c):
     else:
         saloon_parts(B, c, root, M)
     make_wheels(B, c, root, M)
+    radii = c["wheel_r"] if isinstance(c["wheel_r"], tuple) else (c["wheel_r"],) * 2
+    bake_light(coll, [(wy, r, r) for wy, r in zip(c["wheel_y"], radii)], c.get("bottom", 0.2) if c.get("kind") == "truck" else 0.0)
     if B.pieces:
         c["layout"] = {"size": SKIN, "px_per_m": B.px_m, "pieces": B.pieces, "faces": B.layout}
     return coll
@@ -598,7 +600,7 @@ def truck_parts(B, c, root, M):
     for sx in (-1, 1):
         rod(g, (sx * 0.72, -0.6, top), (sx * 0.72, -1.85, top), t, "Frame", 8)
         rod(g, (sx * 0.72, -0.6, top), (sx * 0.78, -1.85, 1.98), t, "Frame", 8)
-    shade_tubes(B.make("Frame", g, (0, 0, 1.1), hull, M))
+    B.make("Frame", g, (0, 0, 1.1), hull, M)
 
     # light bar on the roof: red housing, five round lamps
     g = G()
@@ -635,7 +637,7 @@ def truck_parts(B, c, root, M):
                 hi = (sx * 0.5, wy + dy, 1.42)
                 g.cyl((lo[0], lo[1], (lo[2] + hi[2]) / 2), "Z", 0.075, 0.42, "Frame", segs=8)
                 rod(g, lo, hi, 0.035, "Chrome")
-        shade_tubes(B.make("Axle_" + n, g, (0, wy, r), root, M))
+        B.make("Axle_" + n, g, (0, wy, r), root, M)
 
 
 def rod(g, a, b, t, key, sides=4):
@@ -655,20 +657,54 @@ def rod(g, a, b, t, key, sides=4):
     g.hull([p + o for p in (a, b) for o in ring], key)
 
 
-def shade_tubes(ob):
-    """Bake light into vertex colours on the tube frame and diff housings:
-    tops catch the sun, undersides fall into shadow, so flat colour reads as
-    round metal."""
-    me = ob.data
-    keys = [m.name.split(".")[0] for m in me.materials]
-    attr = me.color_attributes.new("Col", "BYTE_COLOR", "CORNER")
-    for poly in me.polygons:
-        n = poly.normal
-        lit = 0.6 + 0.4 * max(min(n.z * 0.8 + n.y * 0.2 + 0.25, 1.0), 0.0)
-        if keys[poly.material_index] not in ("Frame", "Steel"):
-            lit = 1.0
-        for li in poly.loop_indices:
-            attr.data[li].color = (lit, lit, lit, 1.0)
+# light baked into vertex colours, multiplied over each material in game
+SPINNING = ("Wheel_", "RoadWheel_", "Sprocket_", "Idler_", "ReturnRoller_")  # baked light would turn with them
+TUBES = ("Frame", "Steel")  # round metal: the strongest top-to-bottom gradient
+PAINTED = ("Livery", "Glass", "Paint_Green", "Paint_DarkGreen")  # skins carry their own shading
+
+
+def bake_light(coll, wheels=(), ground=0.0):
+    """Bake retro lighting into vertex colours on every part of a model:
+    - facing: tops catch the sun, undersides fall into shadow (strongest on
+      round tubes, gentle on painted panels so the livery stays readable)
+    - occlusion: parts close to the ground, the underbody and the area round
+      each wheel arch (wheels as (y, centre z, radius)) are darkened.
+    Spinning parts get a flat, slightly dark tone instead."""
+    bpy.context.view_layer.update()
+    for ob in coll.objects:
+        if ob.type != "MESH":
+            continue
+        me = ob.data
+        keys = [m.name.split(".")[0] for m in me.materials]
+        attr = me.color_attributes.get("Col") or me.color_attributes.new("Col", "BYTE_COLOR", "CORNER")
+        mw = ob.matrix_world
+        rot = mw.to_3x3()
+        spin = ob.name.startswith(SPINNING)
+        for poly in me.polygons:
+            key = keys[poly.material_index] if keys else ""
+            n = (rot @ poly.normal).normalized()
+            up = max(min(n.z * 0.8 + n.y * 0.2 + 0.25, 1.0), 0.0)
+            if key in ("Lamp", "Tail", "Glass"):
+                face = 1.0  # lights glow, glass keeps its painted glints
+            elif key in TUBES:
+                face = 0.6 + 0.4 * up
+            elif key in PAINTED:
+                face = 0.86 + 0.14 * up
+            else:
+                face = 0.72 + 0.28 * up
+            for li in poly.loop_indices:
+                if spin:
+                    attr.data[li].color = (0.92, 0.92, 0.92, 1.0)
+                    continue
+                p = mw @ me.vertices[me.loops[li].vertex_index].co
+                occ = 0.72 + 0.28 * smoothstep(ground + 0.05, ground + 0.6, p.z)
+                for (wy, wz, wr) in wheels:
+                    d = math.hypot(p.y - wy, p.z - wz)
+                    if d < wr + 0.35:
+                        occ *= 0.78 + 0.22 * smoothstep(wr - 0.05, wr + 0.35, d)
+                lit = face * occ if key not in ("Lamp", "Tail") else 1.0
+                attr.data[li].color = (lit, lit, lit, 1.0)
+        me.color_attributes.active_color = attr
 
 
 def f1_parts(B, c, root, M):
