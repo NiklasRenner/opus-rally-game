@@ -162,8 +162,19 @@ to about 100 deg.
   trackside TV.
 - **HUD** (`scripts/hud.gd`): total, lap and best times, a start-to-goal
   progress bar, tach with redline, gear, big italic speed, a minimap coloured
-  by surface, and a damage diagram. A synthesised engine and skid sound is in
-  `scripts/engine_audio.gd`.
+  by surface, and a damage diagram.
+- **Sound** (`scripts/engine_synth.gd`, played by `scripts/engine_audio.gd`):
+  all synthesised, no audio files. Each vehicle has its own engine: the
+  Martello a raspy turbo four with anti-lag pops and a fluttering blow-off,
+  the Pleiad a burbling flat four, the Balear a revvy non-turbo four, the
+  Veloce a V10 scream and the Pardel a knocking V12 diesel with clanking
+  tracks. Upshifts cut and bang, lifting off crackles, straight-cut gears
+  whine. Tyres sound different on every surface (squeal on tarmac, crunch on
+  gravel, spray in the wet, swish on grass), plus wind, rain on the body,
+  crashes and landings. The bonnet and bumper cameras hear more intake and
+  road. `tools/audio_preview.gd` renders it all to WAV files to listen to
+  without driving:
+  `godot --headless --path . --script res://tools/audio_preview.gd -- <out dir>`.
 
 ## Tuning tips
 
