@@ -8,6 +8,7 @@ var cam: CameraRig
 var hud: Hud
 var audio: EngineAudio
 var overlay: RaceMenu
+var look: RetroLook
 
 # race state read by the HUD
 var race_time := 0.0
@@ -39,6 +40,8 @@ var _ghost_splits := PackedFloat32Array()
 # weather / time of day
 var _headlights := false
 var _rain: CPUParticles3D
+var _env: Environment
+var _sun: DirectionalLight3D
 
 
 func _ready() -> void:
@@ -104,6 +107,12 @@ func _ready() -> void:
 	layer.add_child(overlay)
 	_progress_index = track.count() - 4
 
+	look = RetroLook.new()
+	look.env = _env
+	look.sun = _sun
+	add_child(look)
+	look.setup(self, Game.retro_look)
+
 
 func _setup_environment() -> void:
 	var theme: String = Maps.get_map(Game.map_id).get("theme", "")
@@ -127,6 +136,7 @@ func _setup_environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	_env = env
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = p["sun_dir"]
@@ -135,6 +145,7 @@ func _setup_environment() -> void:
 	sun.shadow_enabled = p["shadows"]
 	sun.directional_shadow_max_distance = 120.0
 	add_child(sun)
+	_sun = sun
 	_headlights = p["headlights"]
 
 
@@ -172,6 +183,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not finished:
 			overlay.open_pause()
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("look"):
+		Game.retro_look = not Game.retro_look
+		look.set_enabled(Game.retro_look)
+		_flash("ARCADE LOOK" if Game.retro_look else "MODERN LOOK", 1.0)
 	elif finished:
 		return
 	elif event.is_action_pressed("camera"):

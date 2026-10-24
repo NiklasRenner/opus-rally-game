@@ -25,6 +25,7 @@ exported to `models/*.glb`). The three cars wear pixel-art skins from
 | Change camera (Chase, Far chase, Hood, Bumper, TV) | C | Y |
 | Reset onto road | R | Back |
 | Repair car | T | |
+| Arcade / modern lighting | F2 | |
 | Pause / back | Esc | Start |
 
 The same list is in the game: Esc > CONTROLS.

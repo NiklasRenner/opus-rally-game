@@ -14,6 +14,7 @@ const CONTROLS := [
 	["CAMERA", "C", "Y"],
 	["RESET TO ROAD", "R", "BACK"],
 	["REPAIR", "T", ""],
+	["ARCADE / MODERN LOOK", "F2", ""],
 	["PAUSE", "ESC", "START"],
 ]
 
@@ -200,7 +201,7 @@ func _draw_controls(vs: Vector2) -> void:
 	RetroUI.text(self, r.position + Vector2(300, 58), "PAD", 11, RetroUI.CYAN, 3)
 	for i in CONTROLS.size():
 		var row: Array = CONTROLS[i]
-		var y := r.position.y + 80 + i * 20
+		var y := r.position.y + 78 + i * 18
 		RetroUI.text(self, Vector2(r.position.x + 20, y), row[0], 13, Color.WHITE, 3)
 		RetroUI.text(self, Vector2(r.position.x + 200, y), row[1], 13, RetroUI.YELLOW, 3)
 		RetroUI.text(self, Vector2(r.position.x + 300, y), row[2], 13, RetroUI.YELLOW, 3)
