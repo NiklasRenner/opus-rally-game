@@ -15,7 +15,7 @@ static func palette(theme: String, rain: bool) -> Dictionary:
 		"cloud_hi": Color(0.98, 0.98, 1.0), "cloud_lo": Color(0.72, 0.76, 0.86), "cloud_cover": 0.0,
 		"sun_dir": Vector3(-48, -35, 0), "sun_color": Color(1.0, 0.96, 0.86), "sun_energy": 1.15,
 		"ambient": Color(0.62, 0.70, 0.85), "ambient_energy": 0.75,
-		"fog": Color(0.62, 0.76, 0.96), "fog_density": 0.0011, "headlights": false, "shadows": true,
+		"fog": Color(0.62, 0.76, 0.96), "fog_density": 0.0008, "headlights": false, "shadows": true,
 	}
 	match theme:
 		"wasteland":
@@ -39,7 +39,8 @@ static func palette(theme: String, rain: bool) -> Dictionary:
 		p["sun_energy"] = (p["sun_energy"] as float) * 0.45
 		p["ambient"] = (p["ambient"] as Color).lerp(grey.lightened(0.3), 0.5)
 		p["fog"] = (p["fog"] as Color).lerp(grey, 0.7)
-		p["fog_density"] = maxf(p["fog_density"] as float, 0.0028) * 1.4
+		# thicker, but not so thick the hills lose their shape and colour
+		p["fog_density"] = maxf(p["fog_density"] as float, 0.0018) * 1.2
 		p["shadows"] = false
 		p["headlights"] = true
 	return p

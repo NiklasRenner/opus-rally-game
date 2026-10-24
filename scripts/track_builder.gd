@@ -1006,7 +1006,7 @@ func _build_mountains() -> void:
 		for m in peaks:
 			var h := rng.randf_range(160.0, 360.0) * (1.0 if m == 0 else rng.randf_range(0.55, 0.8))
 			var off := along * (0.0 if m == 0 else rng.randf_range(-1.0, 1.0) * 220.0) + Vector3(cos(a), 0, sin(a)) * m * 60.0
-			Mountains.add(st, rng, off, h, rng.randf_range(180.0, 300.0) * (h / 300.0 + 0.3), sty, haze)
+			Mountains.add(st, rng, off, h, rng.randf_range(180.0, 300.0) * (h / 300.0 + 0.3), sty, haze, along)
 		var mi := MeshInstance3D.new()
 		mi.mesh = st.commit()
 		mi.material_override = mat
