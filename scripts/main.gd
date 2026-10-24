@@ -111,6 +111,7 @@ func _ready() -> void:
 	look = RetroLook.new()
 	look.env = _env
 	look.sun = _sun
+	look.car = car
 	look.sky_colors = [_palette["sky_top"], _palette["sky_horizon"], _palette["sky_ground"]]
 	add_child(look)
 	look.setup(self, Game.retro_look)

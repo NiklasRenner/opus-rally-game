@@ -1,16 +1,19 @@
 class_name RetroLook
 extends Node
-## The arcade look for a race, switched with F2: light falls off in a few
-## soft steps instead of a smooth ramp (Saturn / PS1 era Gouraud), the sun
-## casts hard-edged shadows, colours are rounded to 15-bit like the consoles
-## had, and the fog is a depth fog that closes in on the distance.
+## The arcade look for a race, switched with F2: sunlight falls off across a
+## surface in a few soft steps instead of a smooth ramp (Saturn / PS1 era
+## shading), the sun casts hard-edged shadows, the car's windows reflect a
+## flat fake sky, and the fog is a depth fog that closes in on the distance.
 ## It works by swapping every lit StandardMaterial3D in the scene for a shader
-## copy with a banded light(), and swapping them back when it's switched off.
+## copy with its own light(), and swapping them back when it's switched off.
 ## Unshaded, see-through and billboard materials are left alone.
+##
+## Only the angle between a face and the sun is stepped. Anything that changes
+## with distance (shadows, headlight falloff, fog, reflections on the road)
+## stays smooth, because stepping those draws rings round the camera and car.
 
 const BANDS := 4.0  # lit steps between the ambient-only side and full sun
 const BAND_SOFTNESS := 0.2  # 0 = hard cel edges, 0.5 = smooth ramp again
-const COLOR_LEVELS := 32.0  # per channel, 5 bits like the 15-bit consoles
 
 const SHADER := """
 shader_type spatial;
@@ -30,8 +33,8 @@ uniform float alpha_scissor = 0.5;
 uniform float bands = 3.0;
 uniform float softness = 0.2;
 uniform float wrap = 0.25;
-// glossy things (glass, paint, wet roads) reflect a three-band fake sky
-// instead of the real one, like the environment maps of the time
+// the car's windows reflect a three-band fake sky instead of the real one,
+// like the environment maps of the time
 uniform float mirror = 0.0;
 uniform vec3 sky_hi : source_color = vec3(0.5, 0.6, 0.8);
 uniform vec3 sky_lo : source_color = vec3(0.7, 0.8, 0.9);
@@ -70,33 +73,22 @@ float stepped(float v) {
 }
 
 void light() {
-	// wrapped a little so faces just past side-on still catch the lowest step
-	float lit = stepped(clamp((dot(NORMAL, LIGHT) + wrap) / (1.0 + wrap), 0.0, 1.0) * ATTENUATION);
-	DIFFUSE_LIGHT += LIGHT_COLOR * lit / PI;
-	// the sun's sheen on rough ground seen edge-on (the road ahead), smooth not
-	// stepped; glossy things get their fake sky instead
-	if (LIGHT_IS_DIRECTIONAL && mirror == 0.0) {
-		float edge = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-		SPECULAR_LIGHT += LIGHT_COLOR * spec * 0.22 * edge * lit;
+	if (LIGHT_IS_DIRECTIONAL) {
+		// the sun: step the facing only (wrapped a little so faces just past
+		// side-on still catch the lowest step), then shadow it as usual; a bit
+		// brighter to make up for the specular sheen rough surfaces no longer get
+		float facing = stepped(clamp((dot(NORMAL, LIGHT) + wrap) / (1.0 + wrap), 0.0, 1.0));
+		DIFFUSE_LIGHT += LIGHT_COLOR * facing * ATTENUATION * 1.1 / PI;
+		// one hard-edged highlight on the car's paint and glass
+		if (gloss > 0.0) {
+			float h = max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0);
+			float shine = pow(h, exp2(10.0 * (1.0 - roughness_v) + 1.0));
+			SPECULAR_LIGHT += LIGHT_COLOR * gloss * smoothstep(0.45, 0.55, shine) * ATTENUATION;
+		}
+	} else {
+		// headlights: plain Lambert, stepping their falloff would draw rings
+		DIFFUSE_LIGHT += LIGHT_COLOR * clamp(dot(NORMAL, LIGHT), 0.0, 1.0) * ATTENUATION / PI;
 	}
-	// one hard-edged highlight for the glossy stuff (car paint)
-	if (gloss > 0.0) {
-		float h = max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0);
-		float shine = pow(h, exp2(10.0 * (1.0 - roughness_v) + 1.0));
-		SPECULAR_LIGHT += LIGHT_COLOR * gloss * smoothstep(0.45, 0.55, shine) * step(0.5, ATTENUATION);
-	}
-}
-"""
-
-const POST_SHADER := """
-shader_type canvas_item;
-
-uniform sampler2D screen : hint_screen_texture, filter_nearest;
-uniform float levels = 32.0;
-
-void fragment() {
-	vec3 c = texture(screen, SCREEN_UV).rgb;
-	COLOR = vec4(floor(c * (levels - 1.0) + 0.5) / (levels - 1.0), 1.0);
 }
 """
 
@@ -104,12 +96,12 @@ static var _shaders := {}
 
 var env: Environment
 var sun: DirectionalLight3D
+var car: Node  # its glass gets the fake sky
 var enabled := false
 var sky_colors: Array = [Color(0.3, 0.5, 0.9), Color(0.6, 0.78, 0.98), Color(0.4, 0.5, 0.45)]  # top, horizon, ground
 
 var _root: Node
-var _post: CanvasLayer
-var _copies := {}  # StandardMaterial3D -> ShaderMaterial
+var _copies := {}  # [StandardMaterial3D, on the car] -> ShaderMaterial
 var _swaps: Array = []  # [object, slot, index, original material]
 var _modern := {}  # environment and sun settings to put back
 
@@ -117,9 +109,7 @@ var _modern := {}  # environment and sun settings to put back
 ## Start watching `root` (the race scene) and switch the look on or off.
 func setup(root: Node, on: bool) -> void:
 	_root = root
-	_modern = {"fog_mode": env.fog_mode, "fog_density": env.fog_density,
-		"shadow_mode": sun.directional_shadow_mode, "shadow_distance": sun.directional_shadow_max_distance,
-		"shadow_blur": sun.shadow_blur,
+	_modern = {"fog_mode": env.fog_mode, "fog_density": env.fog_density, "shadow_blur": sun.shadow_blur,
 		"shadow_quality": ProjectSettings.get_setting("rendering/lights_and_shadows/directional_shadow/soft_shadow_filter_quality", 2)}
 	get_tree().node_added.connect(_on_node_added)
 	set_enabled(on)
@@ -134,7 +124,6 @@ func set_enabled(on: bool) -> void:
 	else:
 		_restore()
 	_set_environment(on)
-	_set_post(on)
 
 
 func _exit_tree() -> void:
@@ -149,7 +138,7 @@ func _on_node_added(node: Node) -> void:
 		_convert_node.call_deferred(node)
 
 
-# --------------------------------------------------------------------------- lighting, fog, palette
+# --------------------------------------------------------------------------- shadows and fog
 
 func _set_environment(on: bool) -> void:
 	if on:
@@ -162,40 +151,14 @@ func _set_environment(on: bool) -> void:
 		env.fog_depth_end = end
 		env.fog_depth_curve = 0.75
 		env.fog_density = 1.0
-		# one shadow map over a short range, no blur: hard, crisp shadows
-		sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-		sun.directional_shadow_max_distance = 70.0
+		# same shadow maps and range as before, just no blur or soft filter
 		sun.shadow_blur = 0.0
 		RenderingServer.directional_soft_shadow_filter_set_quality(RenderingServer.SHADOW_QUALITY_HARD)
 	else:
 		env.fog_mode = _modern["fog_mode"]
 		env.fog_density = _modern["fog_density"]
-		sun.directional_shadow_mode = _modern["shadow_mode"]
-		sun.directional_shadow_max_distance = _modern["shadow_distance"]
 		sun.shadow_blur = _modern["shadow_blur"]
 		RenderingServer.directional_soft_shadow_filter_set_quality(_modern["shadow_quality"])
-
-
-## 15-bit colour over the 3D view (under the HUD, which is on layer 1).
-func _set_post(on: bool) -> void:
-	if not on:
-		if _post:
-			_post.queue_free()
-			_post = null
-		return
-	_post = CanvasLayer.new()
-	_post.layer = 0
-	var rect := ColorRect.new()
-	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var mat := ShaderMaterial.new()
-	var sh := Shader.new()
-	sh.code = POST_SHADER
-	mat.shader = sh
-	mat.set_shader_parameter("levels", COLOR_LEVELS)
-	rect.material = mat
-	_post.add_child(rect)
-	add_child(_post)
 
 
 # --------------------------------------------------------------------------- material swapping
@@ -228,11 +191,12 @@ func _convert_node(node: Node) -> void:
 			if m:
 				_swap(mi, "surface", s, m)
 				continue
-		_swap(mesh, "mesh", s, mesh.surface_get_material(s))
+		_swap_mesh(gi, mesh, s)
 
 
 func _swap(obj: Object, slot: String, idx: int, mat: Material) -> void:
-	var copy := _copy(mat)
+	var on_car := car != null and is_instance_valid(car) and car.is_ancestor_of(obj as Node)
+	var copy := _copy(mat, on_car)
 	if copy == null:
 		return
 	match slot:
@@ -243,6 +207,17 @@ func _swap(obj: Object, slot: String, idx: int, mat: Material) -> void:
 		"mesh":
 			(obj as Mesh).surface_set_material(idx, copy)
 	_swaps.append([obj, slot, idx, mat])
+
+
+## A material that lives on the mesh resource itself.
+func _swap_mesh(gi: GeometryInstance3D, mesh: Mesh, s: int) -> void:
+	var mat := mesh.surface_get_material(s)
+	var on_car := car != null and is_instance_valid(car) and car.is_ancestor_of(gi)
+	var copy := _copy(mat, on_car)
+	if copy == null:
+		return
+	mesh.surface_set_material(s, copy)
+	_swaps.append([mesh, "mesh", s, mat])
 
 
 func _restore() -> void:
@@ -261,12 +236,13 @@ func _restore() -> void:
 
 
 ## The shader copy of a material, or null if it should stay as it is.
-func _copy(mat: Material) -> ShaderMaterial:
+func _copy(mat: Material, on_car: bool) -> ShaderMaterial:
 	if not mat is BaseMaterial3D:
 		return null
 	var m := mat as BaseMaterial3D
-	if _copies.has(m):
-		return _copies[m]
+	var key := [m, on_car]
+	if _copies.has(key):
+		return _copies[key]
 	if m.shading_mode != BaseMaterial3D.SHADING_MODE_PER_PIXEL or m.billboard_mode != BaseMaterial3D.BILLBOARD_DISABLED \
 			or m.uv1_triplanar or m.next_pass != null or m.normal_enabled \
 			or m.transparency not in [BaseMaterial3D.TRANSPARENCY_DISABLED, BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR]:
@@ -285,10 +261,12 @@ func _copy(mat: Material) -> ShaderMaterial:
 	sm.set_shader_parameter("uv1_offset", m.uv1_offset)
 	sm.set_shader_parameter("roughness_v", m.roughness)
 	sm.set_shader_parameter("spec", m.metallic_specular)
-	sm.set_shader_parameter("gloss", clampf((0.6 - m.roughness) * m.metallic_specular, 0.0, 0.5))
-	var mirror := clampf((0.45 - m.roughness) * m.metallic_specular * 1.2, 0.0, 0.35)
-	sm.set_shader_parameter("mirror", mirror)
-	if mirror > 0.0:
+	if on_car:  # a hard highlight on a whole road would be a hard-edged blob
+		sm.set_shader_parameter("gloss", clampf((0.6 - m.roughness) * m.metallic_specular, 0.0, 0.5))
+	# only the car's glass: on the road the band edges would sit at a fixed
+	# distance from the camera and draw a ring round it
+	if on_car and m.roughness < 0.2:
+		sm.set_shader_parameter("mirror", 0.3)
 		sm.set_shader_parameter("sky_hi", sky_colors[0])
 		sm.set_shader_parameter("sky_lo", sky_colors[1])
 		sm.set_shader_parameter("ground_col", sky_colors[2])
@@ -298,7 +276,7 @@ func _copy(mat: Material) -> ShaderMaterial:
 	sm.set_shader_parameter("bands", BANDS)
 	sm.set_shader_parameter("softness", BAND_SOFTNESS)
 	sm.render_priority = m.render_priority
-	_copies[m] = sm
+	_copies[key] = sm
 	return sm
 
 
