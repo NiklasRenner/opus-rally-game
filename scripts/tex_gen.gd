@@ -680,3 +680,54 @@ static func _make_barrel() -> ImageTexture:
 			img.set_pixel(x, y, Color(0.9, 0.75, 0.1) if (x + y) % 4 < 2 else Color(0.1, 0.1, 0.08))
 	_speckle(img, [Color(0.6, 0.35, 0.15)], 0.1, rng)
 	return _tex(img)
+
+
+# --------------------------------------------------------------------------- tank
+
+## Three-colour NATO camouflage (green, brown, black) in big soft-edged blobs,
+## with a little grime. Tiles in both directions; one tile is 2.5 m on the tank.
+static func camo() -> ImageTexture:
+	return _cached("camo", _make_camo)
+
+
+static func _make_camo() -> ImageTexture:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2
+	var green := Color(0.21, 0.26, 0.15)
+	var brown := Color(0.31, 0.23, 0.15)
+	var black := Color(0.09, 0.09, 0.08)
+	var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
+	for y in 64:
+		for x in 64:
+			# whole periods across the tile so the pattern wraps
+			var a := TAU * x / 64.0
+			var b := TAU * y / 64.0
+			var k := sin(a * 2.0 + cos(b) * 1.3) + sin(b * 3.0 - a + 0.7) * 0.8 + sin(a + b * 2.0 + 2.1) * 0.6
+			var c := green
+			if k > 0.75:
+				c = brown
+			elif k < -0.85:
+				c = black
+			var v := rng.randf_range(-0.025, 0.025)
+			img.set_pixel(x, y, Color(c.r + v, c.g + v, c.b + v))
+	_speckle(img, [Color(0.33, 0.30, 0.22)], 0.03, rng)  # dust
+	return _tex(img)
+
+
+## Balkenkreuz: black cross with a white outline on transparent pixels.
+static func tank_cross() -> ImageTexture:
+	return _cached("cross", _make_tank_cross)
+
+
+static func _make_tank_cross() -> ImageTexture:
+	var img := Image.create(11, 11, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for y in 11:
+		for x in 11:
+			var dx := absi(x - 5)
+			var dy := absi(y - 5)
+			if mini(dx, dy) <= 1:
+				img.set_pixel(x, y, Color(0.05, 0.05, 0.05))  # arms
+			elif mini(dx, dy) <= 2 and maxi(dx, dy) >= 2:
+				img.set_pixel(x, y, Color(0.95, 0.95, 0.9))  # white edging
+	return ImageTexture.create_from_image(img)

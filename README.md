@@ -3,7 +3,9 @@
 Late-90s arcade rally in the spirit of Sega Rally / Colin McRae: chunky
 640x360 render, nearest-filtered procedural textures, low-poly car and
 scenery, arcade HUD. Everything (track, car, textures, sky, engine sound) is
-generated in code, so there are no asset files.
+generated in code. The one exception is the KPz Pardel tank, modelled in
+Blender (`art/tank/leopard_tank.blend`, exported to `models/leopard.glb`) and
+painted in game with the same procedural textures.
 
 ## Open and play
 
@@ -59,6 +61,7 @@ race from the menu (a restart keeps the same weather).
 | Kart 125 | Go-kart with the driver out in the open | Tiny and twitchy: quickest turn-in, about 110 km/h flat out |
 | Veloce F1 | Late-90s single-seater, high nose, big wings | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac |
 | Tank T-98 | Camo tank with turret, tracks and road wheels | Just for fun: slow (about 110 km/h), grippy, pivots on the spot, shrugs off most damage |
+| KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Like the T-98 but a touch quicker and tougher; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
 kart, F1 and tank are the odd ones out. The menu bars compare acceleration,

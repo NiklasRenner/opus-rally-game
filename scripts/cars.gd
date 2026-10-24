@@ -247,6 +247,35 @@ const LIST := [
 		# collision boxes [size, centre]: wider hull and a turret
 		"shapes": [[Vector3(2.0, 0.62, 4.3), Vector3(0, 0.0, 0)], [Vector3(1.3, 0.45, 1.6), Vector3(0, 0.5, 0.2)]],
 	},
+	{
+		"id": "pardel",
+		"type": "tank",
+		"name": "KPZ PARDEL",
+		"blurb": "Boxy German heavy. Wedge turret, stabilised gun",
+		"number": "211",
+		# modelled in Blender (art/tank) instead of lofted from a profile; the
+		# profile here only marks the nose and tail for lights and the camera
+		"mesh": "res://models/leopard.glb",
+		"width": 2.2,
+		"profile": [[-2.28, 0.34, 0.1], [2.22, 0.3, 0.1]],
+		"taper": 0.9,
+		"flare": 0.0,
+		"arches": false,
+		"a_pillar": -1.0,
+		"b_pillar": 0.0,
+		"lights": "round",
+		"livery": {"kind": "camo", "base": Color(0.21, 0.26, 0.15), "a": Color(0.31, 0.23, 0.15), "b": Color(0.09, 0.09, 0.08)},
+		"roof": Color(0.21, 0.26, 0.15),
+		"trim": Color(0.12, 0.14, 0.09),
+		"rims": Color(0.21, 0.26, 0.15),
+		"flaps": Color(0.1, 0.1, 0.1),
+		"wing": [],
+		"pod": 0,
+		"scoop": 0.0,
+		"stats": {"power": 0.95, "grip": 1.15, "steer": 0.9, "mass": 1800.0,
+			"drag": 1.8, "pivot": 1.0, "armour": 0.25, "pitch": 0.4},
+		"shapes": [[Vector3(2.1, 0.6, 4.4), Vector3(0, 0.03, 0)], [Vector3(1.6, 0.42, 2.4), Vector3(0, 0.57, 0.15)]],
+	},
 ]
 
 
