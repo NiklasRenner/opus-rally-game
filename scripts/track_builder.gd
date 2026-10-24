@@ -439,8 +439,8 @@ func _build_barriers() -> void:
 	add_child(walls)
 	var n := points.size()
 	for i in n:
-		if i < 8 or i > n - 8:
-			continue  # keep the start area open
+		if i < StartArea.REACH + 3 or i > n - StartArea.REACH - 3:
+			continue  # the start area has its own hoardings
 		var t0 := tangents[wrapi(i - 4, 0, n)]
 		var t1 := tangents[wrapi(i + 4, 0, n)]
 		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
@@ -526,56 +526,12 @@ func _chevron(pos: Vector3, tangent: Vector3, out_sign: float) -> void:
 # --------------------------------------------------------------------------- dressing
 
 func _build_start_line() -> void:
-	var i := 0
-	var hw := widths[i] * 0.5
-	var flat := tangents[i]
-	flat.y = 0.0
-	flat = flat.normalized()
-	var line := MeshInstance3D.new()
-	var pm := PlaneMesh.new()
-	pm.size = Vector2(widths[i], 2.0)
-	line.mesh = pm
-	line.material_override = TexGen.material(TexGen.checker(), 0.9)
-	line.position = points[i] + Vector3(0, 0.03, 0)
-	add_child(line)
-	line.look_at(line.position + flat, Vector3.UP)
-	var bas := Basis.looking_at(flat, Vector3.UP)
-	var red := TexGen.flat_material(Color(0.85, 0.1, 0.1), 0.6)
-	for s in [-1.0, 1.0]:
-		var post := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = Vector3(0.6, 6.0, 0.6)
-		post.mesh = bm
-		post.material_override = red
-		post.position = points[i] + _side(i) * s * (hw + VERGE + 0.5) + Vector3(0, 2.6, 0)
-		add_child(post)
-		var body := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var shape := BoxShape3D.new()
-		shape.size = bm.size
-		cs.shape = shape
-		body.add_child(cs)
-		body.position = post.position
-		add_child(body)
-	var beam := MeshInstance3D.new()
-	var beam_mesh := BoxMesh.new()
-	beam_mesh.size = Vector3(widths[i] + VERGE * 2.0 + 2.0, 1.4, 0.5)
-	beam.mesh = beam_mesh
-	beam.material_override = TexGen.flat_material(Color(0.1, 0.25, 0.75), 0.6)
-	beam.transform = Transform3D(bas, points[i] + Vector3(0, 5.8, 0))
-	add_child(beam)
-	for dir in [1.0, -1.0]:
-		var label := Label3D.new()
-		label.text = "START  /  FINISH"
-		label.font_size = 160
-		label.outline_size = 24
-		label.modulate = Color(1.0, 0.85, 0.1)
-		label.outline_modulate = Color(0.05, 0.05, 0.1)
-		label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		label.position = Vector3(0, 0, 0.3 * dir)
-		if dir < 0.0:
-			label.rotation.y = PI
-		beam.add_child(label)
+	StartArea.new(self).build()
+
+
+## Inside the space kept free round the start/finish dressing?
+func _near_start(p: Vector3) -> bool:
+	return Vector2(p.x - points[0].x, p.z - points[0].z).length() < StartArea.CLEAR_RADIUS
 
 
 func _build_section_signs() -> void:
@@ -640,7 +596,7 @@ func _build_village() -> void:
 				var off := widths[i] * 0.5 + VERGE + 3.0 + size.x * 0.5
 				var pos: Vector3 = points[i] + _side(i) * s * off
 				# keep clear of other parts of the route and of the water
-				if _road_dist(pos.x, pos.z) < off - 1.0 or _in_water(pos.x, pos.z, size.x * 0.6 + 2.0):
+				if _road_dist(pos.x, pos.z) < off - 1.0 or _in_water(pos.x, pos.z, size.x * 0.6 + 2.0) or _near_start(pos):
 					continue
 				var flat := tangents[i]
 				flat.y = 0.0
@@ -888,7 +844,7 @@ func _build_trees() -> void:
 		var side := 1.0 if _rng.randf() < 0.5 else -1.0
 		var p := points[i] + _side(i) * side * off + Vector3(_rng.randf_range(-5, 5), 0, _rng.randf_range(-5, 5))
 		var min_clear := widths[i] * 0.5 + VERGE + 2.5
-		if _road_dist(p.x, p.z) < min_clear or _in_water(p.x, p.z) or Vector2(p.x, p.z).distance_to(landmark) < 34.0:
+		if _road_dist(p.x, p.z) < min_clear or _in_water(p.x, p.z) or Vector2(p.x, p.z).distance_to(landmark) < 34.0 				or _near_start(p):
 			continue
 		var nearest := nearest_index(p, i)
 		if distance_to_road(p, nearest) < min_clear:
@@ -924,7 +880,7 @@ func _build_trees() -> void:
 		var side := 1.0 if _rng.randf() < 0.5 else -1.0
 		var off := widths[i] * 0.5 + VERGE + _rng.randf_range(3.0, 14.0)
 		var p := points[i] + _side(i) * side * off
-		if _road_dist(p.x, p.z) < widths[i] * 0.5 + VERGE + 2.0 or _in_water(p.x, p.z):
+		if _road_dist(p.x, p.z) < widths[i] * 0.5 + VERGE + 2.0 or _in_water(p.x, p.z) or _near_start(p):
 			continue
 		p.y = terrain_height(p.x, p.z) - 0.1
 		var mi := MeshInstance3D.new()
