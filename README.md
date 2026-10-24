@@ -61,12 +61,12 @@ race from the menu (a restart keeps the same weather). Each launch starts on
 | Car | Style | Handling |
 |---|---|---|
 | Martello HF | Boxy Delta-style hatch with flared arches, Martini-style stripes | All-rounder |
-| Pleiad 555 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
+| Saksen 777 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
 | Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
-| Veloce F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
-| Bellatrix 16 | Low, wide mid-engined hypercar: bright blue nose and gunmetal tail split by a chrome C on each flank, horseshoe grille, full-width red light bar, louvred engine cover | Class S with the F1: a touch slower off the line, faster flat out (about 240 km/h), heavier and with less downforce, so it slides more in fast corners but shrugs off knocks better |
+| Peak F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
+| Bongatti 27 | Low, wide mid-engined hypercar: bright blue nose and gunmetal tail split by a chrome C on each flank, horseshoe grille, full-width red light bar, louvred engine cover | Class S with the F1: a touch slower off the line, faster flat out (about 240 km/h), heavier and with less downforce, so it slides more in fast corners but shrugs off knocks better |
 | Swamp King | Lime monster truck on huge knobbly tyres, tube frame and roll cage | Class X: bouncy long-travel suspension, rolls a lot, soaks up rough ground, big jumps |
-| KPz Pardel | Boxy Leopard-style tank in Danish angular three-tone camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
+| Holger Danske | Boxy Leopard-style tank in Danish angular three-tone camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
 F1, the hypercar and the tank are the odd ones out. The menu bars compare acceleration,
@@ -95,7 +95,7 @@ LibreSprite, Krita or GIMP and run it again; `--repaint` paints the pieces
 from scratch. The builder writes `art/cars/<car>_layout.json` with every
 face's outline in the skin.
 
-The Pardel is `art/tank/leopard_tank.blend`, exported to `models/leopard.glb`;
+The Holger Danske is `art/tank/leopard_tank.blend`, exported to `models/leopard.glb`;
 its camouflage, crosses and number are painted in code (`TexGen.camo`,
 `CarModel`).
 
@@ -175,8 +175,8 @@ Based on how arcade rally games and classic game car-physics write-ups do it:
 - **Sound** (`scripts/engine_synth.gd`, played by `scripts/engine_audio.gd`):
   all synthesised, no audio files. Each vehicle has its own engine: the
   Martello a raspy turbo four with anti-lag pops and a fluttering blow-off,
-  the Pleiad a burbling flat four, the Balear a revvy non-turbo four, the
-  Veloce a snarling V10 and the Pardel a deep, lumpy V12 diesel with
+  the Saksen a burbling flat four, the Balear a revvy non-turbo four, the
+  Peak a snarling V10 and the Holger Danske a deep, lumpy V12 diesel with
   rumbling, clanking tracks. The engine is band-limited to each profile's
   `top` so high revs never alias into whistles. Upshifts cut and bang,
   lifting off crackles, straight-cut gears whine. Tyres sound different on every surface (squeal on tarmac, crunch on
