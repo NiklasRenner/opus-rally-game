@@ -839,6 +839,8 @@ func _build_village() -> void:
 				# keep clear of other parts of the route and of the water
 				if _road_dist(pos.x, pos.z) < off - 1.0 or _in_water(pos.x, pos.z, size.x * 0.6 + 2.0) or _near_start(pos):
 					continue
+				if _cliff and _cliff.blocked(pos, i):
+					continue
 				var bas := frame(i).basis
 				var house := Node3D.new()
 				house.transform = Transform3D(bas, pos)
@@ -1056,12 +1058,12 @@ func _build_spectators() -> void:
 			var k := wrap_index(i + _rng.randi_range(-6, 6))
 			var off := widths[k] * 0.5 + VERGE + _rng.randf_range(4.0, 8.0)
 			var pos := points[k] + _side(k) * inside * off
-			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 else points[k].y - 0.45
+			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 or _cliff else points[k].y - 0.45
 			var face := points[k] + Vector3(0, pos.y - points[k].y, 0)
 			var hop := _rng.randi() % 3 == 0
 			# inside a tight corner another part of the road can pass close by
 			var near := nearest_index(pos, k)
-			if distance_to_road(pos, near) < widths[near] * 0.5 + VERGE + 1.5:
+			if distance_to_road(pos, near) < widths[near] * 0.5 + VERGE + 1.5 or (_cliff and _cliff.blocked(pos, near)):
 				continue
 			crowd.person(Transform3D(Basis.looking_at(face - pos, Vector3.UP), pos), hop)
 	var mi := crowd.make()
@@ -1102,9 +1104,8 @@ func _build_trees() -> void:
 		var nearest := nearest_index(p, i)
 		if distance_to_road(p, nearest) < min_clear:
 			continue
-		if _cliff and _cliff.side[nearest] != 0.0 and _cliff._toward_drop(nearest, p.x, p.z) < 0.0 \
-				and distance_to_road(p, nearest) < widths[nearest] * 0.5 + VERGE + CliffRoad.WALL_BACK:
-			continue  # inside the rock wall
+		if _cliff and _cliff.blocked(p, nearest):
+			continue  # inside a rock wall or over the edge
 		p.y = terrain_height(p.x, p.z) - 0.2
 		var mi := MeshInstance3D.new()
 		if wasteland:
@@ -1137,6 +1138,8 @@ func _build_trees() -> void:
 		var off := widths[i] * 0.5 + VERGE + _rng.randf_range(3.0, 14.0)
 		var p := points[i] + _side(i) * side * off
 		if _road_dist(p.x, p.z) < widths[i] * 0.5 + VERGE + 2.0 or _in_water(p.x, p.z) or _near_start(p):
+			continue
+		if _cliff and _cliff.blocked(p, nearest_index(p, i)):
 			continue
 		p.y = terrain_height(p.x, p.z) - 0.1
 		var mi := MeshInstance3D.new()

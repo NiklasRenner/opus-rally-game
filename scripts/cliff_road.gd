@@ -41,6 +41,28 @@ func _toward_drop(i: int, x: float, z: float) -> float:
 	return ((x - track.points[i].x) * sd.x + (z - track.points[i].z) * sd.z) * side[i]
 
 
+## Is there no room for a tree, a fan or a house at p? True inside or under
+## a rock wall (its whole footprint, back to the slope behind), and out over
+## a drop close to the road. `hint` is a road sample near p.
+func blocked(p: Vector3, hint: int) -> bool:
+	for o in range(-24, 25):
+		var i := track.wrap_index(hint + o)
+		if side[i] == 0.0:
+			continue
+		var t := track.tangents[i]
+		var flat := Vector2(t.x, t.z).normalized()
+		var rel := Vector2(p.x - track.points[i].x, p.z - track.points[i].z)
+		if absf(rel.dot(flat)) > TrackBuilder.SPACING:
+			continue  # not alongside this sample
+		var across := _toward_drop(i, p.x, p.z)
+		var e := track.widths[i] * 0.5 + TrackBuilder.VERGE
+		if across < 0.0 and -across < e + WALL_BACK + 2.0:
+			return true  # in the rock
+		if across > 0.0 and across < e + 6.0:
+			return true  # on the lip or in mid-air
+	return false
+
+
 ## The lie of the land with no road: the valley floor, rising into the
 ## massif on the far side ("massif": [x where it starts, slope]), with some
 ## lumps on it.
@@ -206,9 +228,11 @@ func _wall_height(i: int) -> float:
 	return h
 
 
-## The rock wall along samples i0..i1 on side s (+1 right): a jagged face
-## from the verge's outer edge up to the top, leaning back a little, then the
-## top running back to meet the slope. The face is solid.
+## The rock wall along samples i0..i1 on side s (+1 right): a solid lump of
+## rock. A jagged face from the verge's outer edge up to the top, leaning back
+## a little, the top running back to meet the slope, a back face down to the
+## ground and closed ends, all solid, so there's no seeing or driving round
+## behind it. It ramps down towards its ends to meet the ground beyond.
 func _wall(i0: int, i1: int, s: float) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -219,31 +243,49 @@ func _wall(i0: int, i1: int, s: float) -> void:
 		var p := track.points[i]
 		var sd := track._side(i) * s
 		var e := track.widths[i] * 0.5 + TrackBuilder.VERGE
-		var top := _wall_height(i)
+		var ramp := 0.3 + 0.7 * smoothstep(0.0, 8.0, minf(i - i0, i1 - i))
+		var top := _wall_height(i) * ramp
 		var jag := func(k: float) -> float: return _noise.get_noise_2d(i * 5.0, k * 40.0) * 0.6
 		# profile across the road: [offset out from the centre, height above it]
 		var prof := [[e - 0.05, -0.6], [e + 0.35 + jag.call(1.0), top * 0.3], [e + 0.8 + jag.call(2.0), top * 0.65],
-			[e + 1.4 + jag.call(3.0), top], [e + 4.0 + jag.call(4.0), top + 0.8], [e + WALL_BACK, 0.0]]
+			[e + 1.4 + jag.call(3.0), top], [e + 4.0 + jag.call(4.0), top + 0.8], [e + WALL_BACK, 0.0], [e + WALL_BACK, 0.0]]
+		var last := prof.size() - 1
 		var col: Array = []
 		for k in prof.size():
 			var q: Vector3 = p + sd * (prof[k][0] as float)
 			q.y = p.y + (prof[k][1] as float)
-			if k == prof.size() - 1:
+			if k == last - 1:
 				q.y = maxf(ground(q.x, q.z), p.y + top * 0.5) - 0.3  # down onto the slope behind
+			elif k == last:
+				q.y = minf(ground(q.x, q.z), p.y) - 1.0  # and on down into the ground
 			col.append(q)
 		if not prev.is_empty():
-			for k in prof.size() - 1:
+			for k in last:
 				var a: Vector3 = prev[k]
 				var b: Vector3 = prev[k + 1]
 				var c: Vector3 = col[k]
 				var d: Vector3 = col[k + 1]
-				var shade := 0.82 + 0.1 * k  # darker low down, sunlit at the top
+				var shade := 0.82 + 0.1 * mini(k, 3)  # darker low down, sunlit at the top
 				_rock_quad(st, a, b, c, d, v, shade)
-				if k < 3:
-					faces.append_array(PackedVector3Array([a, b, d, a, d, c]))
+				faces.append_array(PackedVector3Array([a, b, d, a, d, c]))
+		if i == i0 or i == i1:
+			_end_cap(st, col, faces)
 		prev = col
 		v += TrackBuilder.SPACING / 4.0
 	_add(st, faces, "RockWall")
+
+
+## Close the end of a rock wall: its cross-section as a fan of triangles.
+func _end_cap(st: SurfaceTool, col: Array, faces: PackedVector3Array) -> void:
+	var c0: Vector3 = col[0]
+	for k in range(1, col.size() - 1):
+		var a: Vector3 = col[k]
+		var b: Vector3 = col[k + 1]
+		for q in [c0, a, b]:
+			st.set_color(Color(0.86, 0.86, 0.86))
+			st.set_uv(Vector2((q.x + q.z) / 4.0, q.y / 4.0))
+			st.add_vertex(q)
+		faces.append_array(PackedVector3Array([c0, a, b]))
 
 
 ## The cliff under the road edge along i0..i1 on side s: from the verge's
