@@ -98,10 +98,11 @@ const LIST := [
 		"parts": [["FrontWing", "front", 0.12], ["RearWing", "rear", 0.2], ["Sidepod_L", "left", 0.3],
 			["Sidepod_R", "right", 0.3], ["Mirror_L", "left", 0.1], ["Mirror_R", "right", 0.1]],
 		"wheels": {"x": 0.84, "zf": -1.72, "zr": 1.42, "rf": 0.32, "rr": 0.35, "wf": 0.3, "wr": 0.42},
+		# out-pulls the hypercar to 200 km/h; the wings' drag holds its top speed below it
 		# eight-speed seamless-shift box, like the real thing
 		"gears": [3.3, 2.68, 2.22, 1.87, 1.6, 1.39, 1.22, 1.09],
-		"stats": {"power": 2.0, "grip": 1.1, "steer": 0.95, "mass": 800.0,
-			"gearing": 0.78, "drag": 0.7, "downforce": 3.5, "inertia": 0.85, "pitch": 1.45, "armour": 1.8,
+		"stats": {"power": 2.5, "grip": 1.1, "steer": 0.95, "mass": 800.0,
+			"gearing": 0.78, "drag": 1.1, "downforce": 3.5, "inertia": 0.85, "pitch": 1.45, "armour": 1.8,
 			"shift": 0.4},
 		"shapes": [[Vector3(2.0, 0.26, 4.7), Vector3(0, -0.30, -0.15)], [Vector3(0.7, 0.4, 1.2), Vector3(0, 0.0, 0.4)]],
 	},
@@ -122,12 +123,12 @@ const LIST := [
 		"parts": [["Bumper_F", "front", 0.3], ["Bumper_R", "rear", 0.35], ["Spoiler", "rear", 0.45],
 			["LightBar", "rear", 0.6], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]],
 		"wheels": {"x": 0.87, "zf": -1.4, "zr": 1.32, "rf": 0.36, "rr": 0.36, "wf": 0.3, "wr": 0.36},
-		# heavy but brutally quick: a little behind the F1 off the line, faster flat
-		# out, less downforce so it slides more in fast corners
+		# heavy but brutally quick: behind the F1 up to 200 km/h, a little faster
+		# flat out; lazy turn-in and less downforce, so it slides more in corners
 		# seven-speed twin-clutch
 		"gears": [3.3, 2.74, 2.29, 1.92, 1.62, 1.38, 1.18],
-		"stats": {"power": 4.0, "grip": 1.08, "steer": 0.97, "mass": 1700.0,
-			"gearing": 0.7, "drag": 0.7, "downforce": 1.8, "inertia": 1.1, "pitch": 0.85, "shift": 0.5},
+		"stats": {"power": 4.0, "grip": 1.04, "steer": 0.92, "mass": 1700.0,
+			"gearing": 0.7, "drag": 0.7, "downforce": 1.8, "inertia": 1.35, "pitch": 0.85, "shift": 0.5},
 		"shapes": [[Vector3(1.95, 0.57, 4.6), Vector3(0, -0.085, 0)], [Vector3(1.2, 0.26, 2.0), Vector3(0, 0.33, 0.2)]],
 	},
 	{
@@ -155,7 +156,7 @@ const LIST := [
 		# bump_soak: how much rough ground still shakes it; roll_tame: lower lets it lean
 		# three-speed slushbox: short first to heave the weight, big gaps after
 		"gears": [3.5, 2.43, 1.79],
-		"stats": {"power": 1.35, "grip": 1.0, "steer": 0.85, "mass": 2000.0, "gearing": 0.85, "drag": 1.5,
+		"stats": {"power": 1.6, "grip": 1.06, "steer": 0.85, "mass": 2000.0, "gearing": 0.85, "drag": 1.5,
 			"armour": 0.6, "travel": 2.0, "spring": 0.45, "damper": 0.35, "bump_soak": 0.35, "roll_tame": 0.3,
 			"pitch": 0.7, "shift": 1.5},
 		"shapes": [[Vector3(1.7, 0.45, 4.6), Vector3(0, 0.2, 0)], [Vector3(1.85, 0.62, 4.2), Vector3(0, 0.66, 0)],
@@ -174,7 +175,7 @@ const LIST := [
 		# the spot, armour: damage taken, pitch: engine note
 		# four forward gears like the real tank's box, slow to change
 		"gears": [3.5, 2.62, 2.08, 1.73],
-		"stats": {"power": 0.95, "grip": 1.15, "steer": 0.9, "mass": 1800.0,
+		"stats": {"power": 0.95, "grip": 1.02, "steer": 0.9, "mass": 1800.0,
 			"drag": 1.8, "pivot": 1.0, "armour": 0.25, "pitch": 0.4, "shift": 1.75},
 		"dents": ["Hull", "Turret", "SideSkirt_L", "SideSkirt_R", "SkirtArmor_L", "SkirtArmor_R"],
 		"parts": [["SideSkirt_L", "left", 0.45], ["SideSkirt_R", "right", 0.45], ["SkirtArmor_L", "left", 0.7],
