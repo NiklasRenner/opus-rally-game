@@ -18,24 +18,30 @@ from mathutils import Vector, Matrix
 
 
 SKIN = 512  # skin size in pixels for cars painted in pieces
-PX_M = 75.0  # skin pixels per metre
+PX_M = 75.0  # skin pixels per metre, unless the car says otherwise (px_m)
 
 
 def pieces(c):
-    """Panel pieces of the skin: pixel rect and the projection onto it."""
-    (sy0, sz0), (sy1, sz1) = c["screen"]
-    sl = math.hypot(sy1 - sy0, sz1 - sz0)
-    down = ((sy0 - sy1) / sl, (sz0 - sz1) / sl)  # from the screen top towards its base
-    return {
-        # sides and top cover 4.5 m of length, front and back 2 m of width, 1.6 m of height
-        "side_r": dict(rect=[0, 0, 338, 120], origin=[0, -2.25, 1.6], u=[0, 1, 0], v=[0, 0, -1]),
-        "side_l": dict(rect=[0, 120, 338, 120], origin=[0, 2.25, 1.6], u=[0, -1, 0], v=[0, 0, -1]),
-        "top": dict(rect=[0, 240, 338, 150], origin=[-1.0, -2.25, 0], u=[0, 1, 0], v=[1, 0, 0]),
-        "front": dict(rect=[338, 0, 150, 120], origin=[1.0, 0, 1.6], u=[-1, 0, 0], v=[0, 0, -1]),
-        "rear": dict(rect=[338, 120, 150, 120], origin=[-1.0, 0, 1.6], u=[1, 0, 0], v=[0, 0, -1]),
-        "screen": dict(rect=[338, 240, 150, 66], origin=[1.0, sy1, sz1], u=[-1, 0, 0], v=[0, down[0], down[1]]),
+    """Panel pieces of the skin: pixel rect and the projection onto it. Sides
+    and top cover the car's length (2 x half_len), front and back 2 m of
+    width, everything 1.6 m of height, at px_m pixels per metre."""
+    L, S = c.get("half_len", 2.25), c.get("px_m", PX_M)
+    lw, h, w = round(2 * L * S), round(1.6 * S), round(2 * S)
+    out = {
+        "side_r": dict(rect=[0, 0, lw, h], origin=[0, -L, 1.6], u=[0, 1, 0], v=[0, 0, -1]),
+        "side_l": dict(rect=[0, h, lw, h], origin=[0, L, 1.6], u=[0, -1, 0], v=[0, 0, -1]),
+        "top": dict(rect=[0, 2 * h, lw, w], origin=[-1.0, -L, 0], u=[0, 1, 0], v=[1, 0, 0]),
+        "front": dict(rect=[lw, 0, w, h], origin=[1.0, 0, 1.6], u=[-1, 0, 0], v=[0, 0, -1]),
+        "rear": dict(rect=[lw, h, w, h], origin=[-1.0, 0, 1.6], u=[1, 0, 0], v=[0, 0, -1]),
         "under": dict(rect=[496, 496, 16, 16], origin=[0, 0, 0], u=[0, 0, 0], v=[0, 0, 0]),
     }
+    if "screen" in c:
+        (sy0, sz0), (sy1, sz1) = c["screen"]
+        sl = math.hypot(sy1 - sy0, sz1 - sz0)
+        down = ((sy0 - sy1) / sl, (sz0 - sz1) / sl)  # from the screen top towards its base
+        out["screen"] = dict(rect=[lw, 2 * h, w, round(0.88 * S)], origin=[1.0, sy1, sz1], u=[-1, 0, 0],
+                             v=[0, down[0], down[1]])
+    return out
 
 
 def piece_for(n, key):
@@ -49,13 +55,13 @@ def piece_for(n, key):
     return "front" if n.y > 0 else "rear"
 
 
-def piece_px(pc, p):
+def piece_px(pc, p, s=PX_M):
     r, o, u, v = pc["rect"], pc["origin"], pc["u"], pc["v"]
     d = (p[0] - o[0], p[1] - o[1], p[2] - o[2])
     if not any(u):
         return (r[0] + r[2] / 2, r[1] + r[3] / 2)
-    return (r[0] + (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) * PX_M,
-            r[1] + (d[0] * v[0] + d[1] * v[1] + d[2] * v[2]) * PX_M)
+    return (r[0] + (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) * s,
+            r[1] + (d[0] * v[0] + d[1] * v[1] + d[2] * v[2]) * s)
 
 
 def smoothstep(e0, e1, x):
@@ -115,7 +121,7 @@ class G:
         t = bmesh.new()
         vs = [t.verts.new(p) for p in pts]
         r = bmesh.ops.convex_hull(t, input=vs)
-        bmesh.ops.delete(t, geom=r["geom_interior"] + r["geom_unused"], context="VERTS")
+        bmesh.ops.delete(t, geom=list(dict.fromkeys(r["geom_interior"] + r["geom_unused"])), context="VERTS")
         bmesh.ops.dissolve_limit(t, angle_limit=math.radians(1), verts=t.verts[:], edges=t.edges[:])
         self._merge(t, key)
 
@@ -155,6 +161,7 @@ class Builder:
         self.col = coll
         self.world = {}
         self.pieces = pieces(c) if c else None
+        self.px_m = c.get("px_m", PX_M) if c else PX_M
         self.layout = []  # painted faces: piece, material, outline in skin pixels
 
     def make(self, name, g, origin, parent=None, mats=None):
@@ -193,7 +200,7 @@ class Builder:
                 continue
             if self.pieces:
                 piece = piece_for(n, key)
-                pts = [piece_px(self.pieces[piece], l.vert.co) for l in f.loops]
+                pts = [piece_px(self.pieces[piece], l.vert.co, self.px_m) for l in f.loops]
                 for l, (px, py) in zip(f.loops, pts):
                     l[lay].uv = (px / SKIN, 1.0 - py / SKIN)
                 if key in ("Livery", "Glass"):
@@ -366,10 +373,23 @@ def build_car(c):
         "Flap": material("Flap." + name, c["flaps"], 0.9),
         "Tyre": material("Tyre." + name, (0.05, 0.05, 0.05), 0.95),
         "Rim": material("Rim." + name, c["rims"], 0.4, 0.6),
+        "Tail": material("Tail." + name, (0.9, 0.08, 0.05), 0.3, emit=True),
     }
     B = Builder(coll, c)
-    body = Body(c)
     root = B.empty(name, (0, 0, 0))
+    if c.get("kind") == "f1":
+        f1_parts(B, c, root, M)
+    else:
+        saloon_parts(B, c, root, M)
+    make_wheels(B, c, root, M)
+    if B.pieces:
+        c["layout"] = {"size": SKIN, "px_per_m": B.px_m, "pieces": B.pieces, "faces": B.layout}
+    return coll
+
+
+def saloon_parts(B, c, root, M):
+    """Lofted body, bumpers, mirrors, wing, light pod, mud flaps, exhaust."""
+    body = Body(c)
 
     g = G()
     body.build(g)
@@ -439,9 +459,14 @@ def build_car(c):
     g.cyl((c["exhaust_x"], ry - 0.11, 0.26), "Y", 0.035, 0.01, "Trim", segs=8)
     B.make("Exhaust", g, (c["exhaust_x"], ry, 0.26), hull, M)
 
-    # wheels: tyre tread, inner sidewall and a textured rim face on the outside
-    r, w = c["wheel_r"], c["wheel_w"]
-    for (wy, front) in ((c["wheel_y"][0], "F"), (c["wheel_y"][1], "R")):
+
+
+def make_wheels(B, c, root, M):
+    """Tyre tread, inner sidewall and a textured rim face on the outside.
+    wheel_r and wheel_w can be one size or (front, rear)."""
+    for i, (wy, front) in enumerate(((c["wheel_y"][0], "F"), (c["wheel_y"][1], "R"))):
+        r = c["wheel_r"][i] if isinstance(c["wheel_r"], tuple) else c["wheel_r"]
+        w = c["wheel_w"][i] if isinstance(c["wheel_w"], tuple) else c["wheel_w"]
         for s, side in ((-1, "L"), (1, "R")):
             g = G()
             x = s * c["wheel_x"]
@@ -461,9 +486,6 @@ def build_car(c):
             keys += ["Rim", "Trim"]
             g.faces(verts, faces, keys)
             B.make("Wheel_" + front + side, g, (x, wy, r), root, M)
-    if B.pieces:
-        c["layout"] = {"size": SKIN, "px_per_m": PX_M, "pieces": B.pieces, "faces": B.layout}
-    return coll
 
 
 # --------------------------------------------------------------------------- the cars
@@ -524,6 +546,106 @@ def delta_wing(g, body):
         g.box((sx * 0.45, y - 0.08, z - 0.01), (0.05, 0.12, 0.04), "Trim")
 
 
+def rod(g, a, b, t, key):
+    """A thin square bar from a to b."""
+    a, b = Vector(a), Vector(b)
+    d = (b - a).normalized()
+    side = d.cross(Vector((0, 0, 1)))
+    if side.length < 1e-3:
+        side = Vector((1, 0, 0))
+    side = side.normalized() * t / 2
+    up = side.cross(d).normalized() * t / 2
+    g.hull([p + sx * side + sz * up for p in (a, b) for sx in (-1, 1) for sz in (-1, 1)], key)
+
+
+def f1_parts(B, c, root, M):
+    """Modern single-seater: needle nose, tub with a halo, airbox, undercut
+    sidepods, floor, multi-element front wing, tall rear wing with a beam
+    wing, pushrod-style wishbones. Low-poly convex pieces."""
+    g = G()
+    # nose and tub
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (0.06, 2.5, 0.19), (0.06, 2.5, 0.28), (0.12, 1.95, 0.2), (0.12, 1.95, 0.42),
+        (0.2, 1.3, 0.18), (0.2, 1.3, 0.52)]], "Livery")
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (0.2, 1.3, 0.16), (0.2, 1.3, 0.52), (0.33, 0.3, 0.15), (0.33, 0.3, 0.62),
+        (0.33, -0.45, 0.15), (0.33, -0.45, 0.62)]], "Livery")
+    g.box((0, -0.08, 0.62), (0.42, 0.72, 0.03), "Trim")  # cockpit opening
+    # engine cover with the airbox over the roll hoop, tapering to the gearbox
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (0.32, -0.42, 0.16), (0.3, -0.42, 0.63), (0.12, -0.48, 0.96), (0.12, -0.66, 0.95),
+        (0.2, -1.2, 0.16), (0.18, -1.2, 0.62), (0.12, -1.9, 0.18), (0.1, -1.9, 0.42),
+        (0.07, -2.05, 0.24), (0.06, -2.05, 0.36)]], "Livery")
+    g.box((0, -0.455, 0.865), (0.17, 0.03, 0.13), "Trim")  # airbox mouth
+    g.box((0, -2.06, 0.32), (0.08, 0.02, 0.06), "Tail")  # rain light
+    # floor with edge fences
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (0.45, 1.15, 0.05), (0.45, 1.15, 0.08), (0.8, 0.6, 0.05), (0.8, 0.6, 0.08),
+        (0.8, -1.05, 0.05), (0.8, -1.05, 0.08), (0.5, -1.75, 0.06), (0.5, -1.75, 0.09)]], "Trim")
+    # halo: centre post and the hoop round the cockpit
+    rod(g, (0, 0.33, 0.6), (0, 0.24, 0.8), 0.05, "Livery")
+    rod(g, (-0.22, 0.2, 0.8), (0.22, 0.2, 0.8), 0.05, "Livery")
+    for sx in (-1, 1):
+        rod(g, (sx * 0.22, 0.2, 0.8), (sx * 0.29, -0.15, 0.78), 0.05, "Livery")
+        rod(g, (sx * 0.29, -0.15, 0.78), (sx * 0.31, -0.42, 0.62), 0.05, "Livery")
+    # wishbones and pushrods from the tub to the hubs
+    for i, (wy, r, w) in enumerate(zip(c["wheel_y"], c["wheel_r"], c["wheel_w"])):
+        hx = c["wheel_x"] - w / 2
+        for sx in (-1, 1):
+            hub = Vector((sx * hx, wy, r))
+            inner_x = sx * (0.17 if i == 0 else 0.2)
+            for dz, z_in in ((0.07, 0.42), (-0.06, 0.22)):
+                rod(g, hub + Vector((0, 0, dz)), (inner_x, wy + 0.18, z_in), 0.03, "Trim")
+                rod(g, hub + Vector((0, 0, dz)), (inner_x, wy - 0.18, z_in), 0.03, "Trim")
+    hull = B.make("Body", g, (0, 0, 0.35), root, M)
+
+    # undercut sidepods with dark inlets
+    for sx, n in ((-1, "L"), (1, "R")):
+        g = G()
+        g.hull([(sx * x, y, z) for (x, y, z) in [
+            (0.36, 0.22, 0.34), (0.72, 0.22, 0.34), (0.36, 0.22, 0.58), (0.7, 0.22, 0.56),
+            (0.42, 0.12, 0.2), (0.6, 0.12, 0.22), (0.34, -0.45, 0.18), (0.72, -0.45, 0.24),
+            (0.34, -0.45, 0.58), (0.7, -0.45, 0.52), (0.26, -1.3, 0.17), (0.4, -1.3, 0.2),
+            (0.24, -1.3, 0.36), (0.36, -1.3, 0.32)]], "Livery")
+        g.box((sx * 0.54, 0.225, 0.45), (0.3, 0.02, 0.18), "Trim")
+        B.make("Sidepod_" + n, g, (sx * 0.5, -0.5, 0.38), hull, M)
+        g = G()
+        rod(g, (sx * 0.31, 0.32, 0.62), (sx * 0.48, 0.36, 0.7), 0.025, "Trim")
+        g.hull([(sx * x, y, z) for (x, y, z) in [
+            (0.46, 0.4, 0.66), (0.6, 0.4, 0.66), (0.46, 0.4, 0.75), (0.6, 0.4, 0.75),
+            (0.47, 0.32, 0.67), (0.59, 0.32, 0.67), (0.47, 0.32, 0.74), (0.59, 0.32, 0.74)]], "Livery")
+        g.box((sx * 0.53, 0.315, 0.705), (0.1, 0.01, 0.06), "Chrome")
+        B.make("Mirror_" + n, g, (sx * 0.5, 0.36, 0.7), hull, M)
+
+    # front wing: three elements rising towards the endplates, nose pillars
+    g = G()
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (0.95, 2.56, 0.06), (0.95, 2.56, 0.085), (0.95, 2.26, 0.07), (0.95, 2.26, 0.095)]], "Livery")
+    for sx in (-1, 1):
+        g.hull([(sx * x, y, z) for (x, y, z) in [
+            (0.12, 2.36, 0.11), (0.12, 2.24, 0.12), (0.12, 2.36, 0.13), (0.12, 2.24, 0.14),
+            (0.94, 2.38, 0.15), (0.94, 2.24, 0.17), (0.94, 2.38, 0.17), (0.94, 2.24, 0.19)]], "Livery")
+        g.hull([(sx * x, y, z) for (x, y, z) in [
+            (0.3, 2.28, 0.17), (0.3, 2.2, 0.18), (0.3, 2.28, 0.19), (0.3, 2.2, 0.2),
+            (0.94, 2.3, 0.23), (0.94, 2.2, 0.25), (0.94, 2.3, 0.25), (0.94, 2.2, 0.27)]], "Livery")
+        g.box((sx * 0.96, 2.4, 0.17), (0.02, 0.42, 0.25), "Livery")
+        g.box((sx * 0.06, 2.36, 0.16), (0.02, 0.14, 0.12), "Trim")
+    B.make("FrontWing", g, (0, 2.38, 0.15), hull, M)
+
+    # rear wing: endplates, main plane and flap, beam wing, centre pylon
+    g = G()
+    for sx in (-1, 1):
+        g.box((sx * 0.53, -2.08, 0.72), (0.025, 0.45, 0.6), "Livery")
+    g.hull([(sx * 0.52, y, z) for sx in (-1, 1) for (y, z) in [
+        (-1.95, 0.86), (-1.95, 0.89), (-2.2, 0.9), (-2.2, 0.93)]], "Livery")
+    g.hull([(sx * 0.52, y, z) for sx in (-1, 1) for (y, z) in [
+        (-2.12, 0.96), (-2.12, 0.98), (-2.28, 1.0), (-2.28, 1.02)]], "Livery")
+    g.hull([(sx * 0.46, y, z) for sx in (-1, 1) for (y, z) in [
+        (-1.95, 0.44), (-1.95, 0.47), (-2.14, 0.46), (-2.14, 0.49)]], "Livery")
+    g.box((0, -2.05, 0.66), (0.04, 0.1, 0.42), "Trim")
+    B.make("RearWing", g, (0, -2.08, 0.75), hull, M)
+
+
 CARS = [
     dict(name="Pleiad", file="pleiad", paint=(0.1, 0.22, 0.66), flaps=(0.95, 0.95, 0.95), rims=(0.85, 0.68, 0.22),
          hw=0.865, roof_hw=0.62, flare=0.075, bottom=0.2, nose_round=0.84,
@@ -546,6 +668,9 @@ CARS = [
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=4, wing_y=-1.43,
          body_extras=[delta_extras, delta_lamps], wing=delta_wing,
          screen=((0.88, 0.86), (0.25, 1.36))),
+    dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
+         rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
+         wheel_y=(1.72, -1.42), wheel_x=0.84, wheel_r=(0.32, 0.35), wheel_w=(0.3, 0.42)),
 ]
 
 
