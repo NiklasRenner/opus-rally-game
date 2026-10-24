@@ -6,11 +6,17 @@ cross-section points, wheel arches and separate parts that the game can dent
 or knock off. Front is +Y, up is +Z and the ground is at z = 0; glTF export
 turns that into Godot's -Z forward.
 
-Every painted face gets UVs into one 256x256 livery atlas by projecting it
-from the side, top, front or back (see uv_atlas). The game paints the atlas
-in TexGen.livery() with the same mapping, so stripes, logos, lights and
-plates land in the right place on every part.
+Every painted face gets UVs into one livery atlas by projecting it from the
+side, top, front or back. Two ways to paint it:
+- cars without "pieces": a 256x256 atlas the game paints itself in
+  TexGen.livery(), with the mapping in atlas_px.
+- cars with "pieces" (the Martello): a 512x512 skin made of separate panel
+  pieces (each side, top, front, back, windscreen), each projected straight
+  onto its own panel. The builder writes <car>_layout.json with every face's
+  outline in the skin; paint_skin.py paints the pieces from it (or you paint
+  them by hand) and combines them into models/<car>_skin.png.
 """
+import json
 import bpy, bmesh, math, os
 from mathutils import Vector, Matrix
 
@@ -34,6 +40,46 @@ def atlas_px(p, n):
     if n.y > 0:  # front, seen from ahead
         return ((AW - x) / (2 * AW) * 128, 192 + (AH - z) / AH * 64)
     return (128 + (x + AW) / (2 * AW) * 128, 192 + (AH - z) / AH * 64)
+
+
+SKIN = 512  # skin size in pixels for cars painted in pieces
+PX_M = 80.0  # skin pixels per metre
+
+
+def pieces(c):
+    """Panel pieces of the skin: pixel rect and the projection onto it."""
+    (sy0, sz0), (sy1, sz1) = c["screen"]
+    sl = math.hypot(sy1 - sy0, sz1 - sz0)
+    down = ((sy0 - sy1) / sl, (sz0 - sz1) / sl)  # from the screen top towards its base
+    return {
+        "side_r": dict(rect=[0, 0, 336, 128], origin=[0, -2.1, 1.6], u=[0, 1, 0], v=[0, 0, -1]),
+        "side_l": dict(rect=[0, 128, 336, 128], origin=[0, 2.1, 1.6], u=[0, -1, 0], v=[0, 0, -1]),
+        "top": dict(rect=[0, 256, 336, 160], origin=[-1.0, -2.1, 0], u=[0, 1, 0], v=[1, 0, 0]),
+        "front": dict(rect=[336, 0, 160, 128], origin=[1.0, 0, 1.6], u=[-1, 0, 0], v=[0, 0, -1]),
+        "rear": dict(rect=[336, 128, 160, 128], origin=[-1.0, 0, 1.6], u=[1, 0, 0], v=[0, 0, -1]),
+        "screen": dict(rect=[336, 256, 160, 72], origin=[1.0, sy1, sz1], u=[-1, 0, 0], v=[0, down[0], down[1]]),
+        "under": dict(rect=[496, 496, 16, 16], origin=[0, 0, 0], u=[0, 0, 0], v=[0, 0, 0]),
+    }
+
+
+def piece_for(n, key):
+    if key == "Glass" and n.y > 0.3 and n.z > 0.3:
+        return "screen"
+    ax = max(range(3), key=lambda i: abs(n[i]))
+    if ax == 0:
+        return "side_r" if n.x > 0 else "side_l"
+    if ax == 2:
+        return "top" if n.z > 0 else "under"
+    return "front" if n.y > 0 else "rear"
+
+
+def piece_px(pc, p):
+    r, o, u, v = pc["rect"], pc["origin"], pc["u"], pc["v"]
+    d = (p[0] - o[0], p[1] - o[1], p[2] - o[2])
+    if not any(u):
+        return (r[0] + r[2] / 2, r[1] + r[3] / 2)
+    return (r[0] + (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) * PX_M,
+            r[1] + (d[0] * v[0] + d[1] * v[1] + d[2] * v[2]) * PX_M)
 
 
 def smoothstep(e0, e1, x):
@@ -129,9 +175,11 @@ class G:
 
 
 class Builder:
-    def __init__(self, coll):
+    def __init__(self, coll, c=None):
         self.col = coll
         self.world = {}
+        self.pieces = pieces(c) if c and c.get("pieces") else None
+        self.layout = []  # painted faces: piece, material, outline in skin pixels
 
     def make(self, name, g, origin, parent=None, mats=None):
         origin = Vector(origin)
@@ -166,6 +214,14 @@ class Builder:
                 for l in f.loops:
                     d = l.vert.co - origin
                     l[lay].uv = (math.atan2(d.z, d.y) / math.tau * 8, d.x * 4)
+                continue
+            if self.pieces:
+                piece = piece_for(n, key)
+                pts = [piece_px(self.pieces[piece], l.vert.co) for l in f.loops]
+                for l, (px, py) in zip(f.loops, pts):
+                    l[lay].uv = (px / SKIN, 1.0 - py / SKIN)
+                if key in ("Livery", "Glass"):
+                    self.layout.append({"piece": piece, "mat": key, "poly": [[round(x, 2), round(y, 2)] for x, y in pts]})
                 continue
             for l in f.loops:
                 px, py = atlas_px(l.vert.co, n)
@@ -217,10 +273,10 @@ class Body:
     def arch_r(self):
         return self.c["wheel_r"] + 0.07
 
-    def half_width(self, y):
+    def half_width(self, y, flares=True):
         c = self.c
         w = c["hw"]
-        for wy in c["wheel_y"]:
+        for wy in (c["wheel_y"] if flares else ()):
             dy = abs(y - wy)
             if c.get("box_flare"):
                 w += c["flare"] * min(max(1.0 - (dy - self.arch_r() * 0.95) / 0.06, 0.0), 1.0)
@@ -251,9 +307,11 @@ class Body:
     def ring(self, y):
         h = self.heights(y)
         w = self.half_width(y)
+        # boxy flares are bolted onto the lower body; the shoulder stays slim
+        w0 = self.half_width(y, False) if self.c.get("box_flare") else w
         cab = self.cab(y)
-        roof = lerp(w * 0.93, self.c["roof_hw"], cab)
-        right = [(w * 0.84, h[0]), (w, h[1]), (w + 0.012, h[2]), (w, h[3]), (w * 0.965, h[4]),
+        roof = lerp(w0 * 0.93, self.c["roof_hw"], cab)
+        right = [(w * 0.84, h[0]), (w, h[1]), (w + 0.012, h[2]), (lerp(w0, w, 0.5), h[3]), (w0 * 0.965, h[4]),
                  (roof, h[5] - 0.05 * cab - 0.012), (roof * 0.86, h[5]), (roof * 0.42, h[5] + 0.018)]
         return [(x, z) for x, z in right] + [(-x, z) for x, z in reversed(right)]
 
@@ -265,14 +323,17 @@ class Body:
             y -= 0.1
         for wy in self.c["wheel_y"]:
             ys += [wy - self.arch_r(), wy + self.arch_r(), wy]
-        bp = self.c["b_pillar"]
-        ys += [bp - 0.05, bp + 0.05]
+        for bp in self.pillars():
+            ys += [bp - 0.05, bp + 0.05]
         ys = sorted({round(v, 4) for v in ys if self.rear() - 1e-4 <= v <= self.front() + 1e-4}, reverse=True)
         out = []
         for v in ys:
             if not out or out[-1] - v > 0.03:
                 out.append(v)
         return out
+
+    def pillars(self):
+        return self.c.get("pillars", [self.c["b_pillar"]])
 
     def build(self, g):
         ys = self.stations()
@@ -282,7 +343,6 @@ class Body:
         for y, r in zip(ys, rings):
             verts += [(x, y, z) for x, z in r]
         faces, keys = [], []
-        bp = self.c["b_pillar"]
         for j in range(len(ys) - 1):
             yc = (ys[j] + ys[j + 1]) / 2
             cab = self.cab(yc)
@@ -293,7 +353,8 @@ class Body:
                 if e == n - 1:
                     key = "Trim"  # underside
                 elif e in (4, n - 6):  # side window band
-                    if cab > 0.55 and abs(yc - bp) > 0.05 and self.c["glass_y"][1] < yc < self.c["glass_y"][0]:
+                    if cab > 0.55 and min(abs(yc - bp) for bp in self.pillars()) > 0.05 \
+                            and self.c["glass_y"][1] < yc < self.c["glass_y"][0]:
                         key = "Glass"
                 elif 5 <= e <= n - 7:  # roof: screens where it slopes
                     p = [Vector(verts[i]) for i in (a, b, c)]
@@ -333,7 +394,7 @@ def build_car(c):
         "Tyre": material("Tyre." + name, (0.05, 0.05, 0.05), 0.95),
         "Rim": material("Rim." + name, c["rims"], 0.4, 0.6),
     }
-    B = Builder(coll)
+    B = Builder(coll, c)
     body = Body(c)
     root = B.empty(name, (0, 0, 0))
 
@@ -427,6 +488,8 @@ def build_car(c):
             keys += ["Rim", "Trim"]
             g.faces(verts, faces, keys)
             B.make("Wheel_" + front + side, g, (x, wy, r), root, M)
+    if B.pieces:
+        c["layout"] = {"size": SKIN, "px_per_m": PX_M, "pieces": B.pieces, "faces": B.layout}
     return coll
 
 
@@ -459,18 +522,30 @@ def subaru_wing(g, body):
 
 
 def delta_extras(g, body):
-    # bonnet louvres and a rear roof spoiler lip are painted / part of the body
+    # bonnet vents
     y = 1.25
     z = body.heights(y)[5]
-    for s in (-1, 1):
-        g.box((s * 0.42, y, z + 0.012), (0.3, 0.26, 0.02), "Trim")
+    for sx in (-1, 1):
+        g.box((sx * 0.4, y, z + 0.012), (0.28, 0.24, 0.02), "Trim")
+
+
+def delta_lamps(g, body):
+    # four round headlamps in the black band across the nose: big outer, small inner
+    y = body.front() - 0.005
+    for sx in (-1, 1):
+        for x, r in ((0.6, 0.085), (0.38, 0.068)):
+            g.cyl((sx * x, y, 0.625), "Y", r + 0.014, 0.03, "Chrome", segs=10)
+            g.cyl((sx * x, y + 0.016, 0.625), "Y", r, 0.012, "Lamp", segs=10)
 
 
 def delta_wing(g, body):
-    y = -1.5
+    # roof spoiler along the top edge of the hatch, on two small feet
+    y = -1.43
     z = body.heights(y)[5]
     g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
-        (0.66, 0.02, -0.01), (0.66, -0.3, -0.06), (0.66, -0.3, -0.01), (0.62, 0.02, 0.02)]], "Livery")
+        (0.64, 0.02, 0.0), (0.64, 0.02, 0.035), (0.64, -0.3, -0.07), (0.64, -0.3, -0.04)]], "Livery")
+    for sx in (-1, 1):
+        g.box((sx * 0.45, y - 0.08, z - 0.01), (0.05, 0.12, 0.04), "Trim")
 
 
 CARS = [
@@ -483,13 +558,16 @@ CARS = [
          bumper_top=(0.56, 0.62), exhaust_x=-0.55, pod=4, wing_y=-1.88,
          body_extras=[subaru_extras], wing=subaru_wing),
     dict(name="Martello", file="martello", paint=(0.95, 0.95, 0.94), flaps=(0.08, 0.2, 0.62), rims=(0.92, 0.92, 0.9),
-         hw=0.85, roof_hw=0.66, flare=0.085, box_flare=True, bottom=0.2, nose_round=0.9,
-         profile=[(1.98, 0.6, 0.56), (1.92, 0.76, 0.72), (1.4, 0.8, 0.77), (0.86, 0.86, 0.82), (0.2, 1.4, 0.9),
-                  (-1.52, 1.4, 0.94), (-1.86, 1.0, 0.96), (-1.98, 0.84, 0.82)],
-         glass_y=(0.85, -1.8), b_pillar=-0.42, mirror_y=0.72,
+         hw=0.835, roof_hw=0.665, flare=0.11, box_flare=True, bottom=0.2, nose_round=0.93,
+         # short upright Delta hatch: flat bonnet with a slight wedge, steep screen,
+         # long flat roof, near-vertical hatch over a tall tail panel
+         profile=[(2.02, 0.54, 0.5), (2.0, 0.71, 0.67), (1.95, 0.75, 0.71), (1.4, 0.8, 0.76), (0.88, 0.86, 0.82),
+                  (0.25, 1.36, 0.86), (-1.45, 1.35, 0.9), (-1.72, 0.96, 0.9), (-1.95, 0.62, 0.58)],
+         glass_y=(0.85, -1.32), pillars=[-0.33, -1.0], b_pillar=-0.33, mirror_y=0.78,
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
-         bumper_top=(0.56, 0.6), exhaust_x=-0.5, pod=4, wing_y=-1.5,
-         body_extras=[delta_extras], wing=delta_wing),
+         bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=4, wing_y=-1.43,
+         body_extras=[delta_extras, delta_lamps], wing=delta_wing,
+         pieces=True, screen=((0.88, 0.86), (0.25, 1.36))),
 ]
 
 
@@ -515,6 +593,9 @@ def build_all(repo):
         reset_scene()
         coll = build_car(c)
         export(coll, os.path.join(repo, "models", c["file"] + ".glb"))
+        if "layout" in c:
+            with open(os.path.join(repo, "art", "cars", c["file"] + "_layout.json"), "w", newline="\n") as f:
+                json.dump(c.pop("layout"), f)
         blend = os.path.join(repo, "art", "cars", c["file"] + ".blend")
         bpy.ops.wm.save_as_mainfile(filepath=blend, compress=True)
         if os.path.exists(blend + "1"):

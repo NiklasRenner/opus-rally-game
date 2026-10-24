@@ -954,21 +954,21 @@ static func _make_glass(spec: Dictionary) -> ImageTexture:
 	return _tex(img)
 
 
-## Wheel face: tyre sidewall round a rim with five spokes and a hub.
-static func rim(col: Color) -> ImageTexture:
-	return _cached("rim|" + col.to_html(), _make_rim.bind(col))
+## Wheel face: tyre sidewall round a spoked rim and a hub.
+static func rim(col: Color, spokes := 5) -> ImageTexture:
+	return _cached("rim|%s|%d" % [col.to_html(), spokes], _make_rim.bind(col, spokes))
 
 
-static func _make_rim(col: Color) -> ImageTexture:
+static func _make_rim(col: Color, spokes: int) -> ImageTexture:
 	var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
 	for y in 32:
 		for x in 32:
 			var d := Vector2(x - 15.5, y - 15.5)
 			var r := d.length() / 16.0
-			var ang := fposmod(d.angle() * 5.0 / TAU, 1.0)
+			var ang := fposmod(d.angle() * spokes / TAU, 1.0)
 			var c := Color(0.07, 0.07, 0.07)  # tyre wall
 			if r < 0.68:
-				c = col if ang < 0.45 or r < 0.25 or r > 0.6 else col.darkened(0.7)
+				c = col if ang < (0.45 if spokes < 7 else 0.35) or r < 0.25 or r > 0.6 else col.darkened(0.7)
 			if r < 0.12:
 				c = col.darkened(0.3)
 			if r > 0.68 and r < 0.72:

@@ -43,9 +43,9 @@ const LIST := [
 		"mesh": "res://models/martello.glb",
 		"profile": [[-2.01, 0.04, 0.0]],
 		"livery": {"kind": "bands", "base": Color(0.95, 0.95, 0.94), "a": Color(0.08, 0.20, 0.62), "b": Color(0.86, 0.10, 0.10)},
-		"atlas": {"front": 1.98, "rear": -1.98, "belt": 0.9, "doors": [0.85, -0.42, -0.87], "band": 0.76, "sponsor_z": 0.44,
-			"bonnet": [1.9, 0.85], "roof": [0.15, -1.45], "screen": 0.2, "head": [0.6, 0.72], "tail": [0.79, 0.92],
-			"bumper": 0.6},
+		# skin painted in pieces by art/cars/paint_skin.py
+		"skin": "res://models/martello_skin.png",
+		"spokes": 8,
 		"rims": Color(0.92, 0.92, 0.90),
 		"flaps": Color(0.08, 0.20, 0.62),
 		"stats": {"power": 1.0, "grip": 1.0, "steer": 1.0, "mass": 1200.0},

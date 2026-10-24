@@ -970,19 +970,21 @@ func _build_mesh() -> void:
 
 
 func _car_materials() -> Dictionary:
-	var glass := _tex_mat(TexGen.glass(spec), 0.08, Color.WHITE)
+	# a painted skin covers body and glass; otherwise TexGen paints the livery atlas
+	var skin: Texture2D = load(spec["skin"]) if spec.has("skin") else TexGen.livery(spec)
+	var glass := _tex_mat(skin if spec.has("skin") else TexGen.glass(spec), 0.08, Color.WHITE)
 	glass.metallic_specular = 0.9
 	var chrome := TexGen.flat_material(Color(0.75, 0.75, 0.78), 0.2)
 	chrome.metallic = 0.8
 	return {
-		"Livery": _tex_mat(TexGen.livery(spec), 0.3, Color.WHITE),
+		"Livery": _tex_mat(skin, 0.3, Color.WHITE),
 		"Glass": glass,
 		"Trim": TexGen.flat_material(Color(0.07, 0.07, 0.08), 0.7),
 		"Chrome": chrome,
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"Flap": TexGen.flat_material(spec["flaps"], 0.9),
 		"Tyre": TexGen.material(TexGen.tread(), 0.95),
-		"Rim": TexGen.material(TexGen.rim(spec["rims"]), 0.4),
+		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5)), 0.4),
 	}
 
 

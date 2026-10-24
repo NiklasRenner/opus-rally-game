@@ -74,9 +74,18 @@ lofts it into a dentable low-poly body. Copy an entry to add a car.
 The modelled cars come from `art/cars/build_cars.py`: run it in Blender's
 Scripting tab (with `build_all("<path to this folder>")`) to rebuild their
 .blend files and re-export `models/martello.glb` and `models/pleiad.glb`.
-Every painted face is projected into one 256x256 livery atlas, which
-`TexGen.livery()` paints with stripes, names, numbers, lights and plates
-using the spec's `atlas` positions. The tank lives in `art/tank/`.
+
+- **Pleiad:** every painted face is projected into one 256x256 livery atlas,
+  which `TexGen.livery()` paints in game using the spec's `atlas` positions.
+- **Martello:** its skin is painted in separate panel pieces (each side, top,
+  front, back, windscreen) in `art/cars/martello_pieces/`, then combined into
+  `models/martello_skin.png`. `python art/cars/paint_skin.py martello`
+  recombines the pieces (needs Pillow), so you can retouch any piece in a
+  pixel editor such as LibreSprite, Krita or GIMP and run it again;
+  `--repaint` paints the pieces from scratch. The builder writes
+  `art/cars/martello_layout.json` with every face's outline in the skin.
+
+The tank lives in `art/tank/`.
 
 ## Stages
 
