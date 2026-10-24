@@ -165,27 +165,36 @@ func _load_records() -> void:
 			_records = data
 			last_initials = _records.get("last_initials", "AAA")
 			manual_gears = _records.get("manual_gears", false)
-	if int(_records.get("version", 1)) < RECORDS_VERSION:
-		_migrate_to_classes()
+	# also run on every start, as a build from before the classes may have
+	# saved under the old keys since
+	if _migrate_to_classes() or int(_records.get("version", 1)) < RECORDS_VERSION:
 		_records["version"] = RECORDS_VERSION
 		_save_records()
 
 
 ## Saves from before car classes: sort each highscore, best lap and ghost into
-## the class of the car that set it.
-func _migrate_to_classes() -> void:
-	var old_races: Dictionary = _records.get("races", {})
-	var races := {}
-	for key: String in old_races:
-		for e: Dictionary in old_races[key]:
+## the class of the car that set it, merging with what that class already has.
+## Returns true if anything moved.
+func _migrate_to_classes() -> bool:
+	var changed := false
+	var races: Dictionary = _records.get("races", {})
+	var old_race := RegEx.create_from_string("^.+_\\d+lap$")
+	for key: String in races.keys():
+		if old_race.search(key) == null:
+			continue
+		for e: Dictionary in races[key]:
 			var k := "%s_%s" % [key, Cars.class_of(e.get("car", ""))]
-			if not races.has(k):
-				races[k] = []
-			(races[k] as Array).append(e)  # the old order is kept, so still sorted
+			var list: Array = races.get(k, [])
+			list.append(e)
+			list.sort_custom(func(x: Dictionary, y: Dictionary) -> bool: return (x["time"] as float) < (y["time"] as float))
+			races[k] = list.slice(0, MAX_SCORES)
+		races.erase(key)
+		changed = true
 	_records["races"] = races
 
-	# ghosts: <map>_<n>lap.ghost -> <map>_<n>lap_<class>.ghost; their splits
-	# also give each class's laps, which help place the old best laps
+	# ghosts: <map>_<n>lap.ghost -> <map>_<n>lap_<class>.ghost, keeping the faster
+	# one if the class already has a ghost; their splits also give each class's
+	# laps, which help place the old best laps
 	var ghost_laps := {}  # lap_key -> fastest lap in that class's ghosts
 	var rx := RegEx.create_from_string("^(.+)_(\\d+)lap\\.ghost$")
 	var files := DirAccess.get_files_at(GHOST_DIR) if DirAccess.dir_exists_absolute(GHOST_DIR) else PackedStringArray()
@@ -194,25 +203,35 @@ func _migrate_to_classes() -> void:
 		if m == null:
 			continue
 		var base := file.get_basename()
-		var g := load_ghost(base)
+		var g := _read_ghost(_ghost_path(base))
 		var cls := Cars.class_of(g.get("car", ""))
-		var target := _ghost_path("%s_%s" % [base, cls])
-		if not FileAccess.file_exists(target):
-			DirAccess.rename_absolute(_ghost_path(base), target)
+		var key := "%s_%s" % [base, cls]
+		if (g.get("time", INF) as float) < ghost_time(key):
+			DirAccess.remove_absolute(_ghost_path(key))
+			DirAccess.rename_absolute(_ghost_path(base), _ghost_path(key))
+		else:
+			DirAccess.remove_absolute(_ghost_path(base))
+		changed = true
 		var splits: PackedFloat32Array = g.get("splits", PackedFloat32Array())
 		var lk := lap_key(m.get_string(1), cls)
 		for i in splits.size():
 			var t := splits[i] - (splits[i - 1] if i > 0 else 0.0)
 			ghost_laps[lk] = minf(ghost_laps.get(lk, INF), t)
 
-	var old_laps: Dictionary = _records.get("best_laps", {})
-	var laps_out := {}
-	for id: String in old_laps:
-		var t: float = old_laps[id]
-		laps_out[lap_key(id, _class_of_best_lap(id, t, ghost_laps, races))] = t
+	# best laps: old keys are the bare map id, new ones end in a class letter
+	var laps: Dictionary = _records.get("best_laps", {})
+	for id: String in laps.keys():
+		if Cars.CLASSES.has(id.get_slice("_", id.get_slice_count("_") - 1)):
+			continue
+		var t: float = laps[id]
+		var lk := lap_key(id, _class_of_best_lap(id, t, ghost_laps, races))
+		laps[lk] = minf(laps.get(lk, INF), t)
+		laps.erase(id)
+		changed = true
 	for lk: String in ghost_laps:
-		laps_out[lk] = minf(laps_out.get(lk, INF), ghost_laps[lk])
-	_records["best_laps"] = laps_out
+		laps[lk] = minf(laps.get(lk, INF), ghost_laps[lk])
+	_records["best_laps"] = laps
+	return changed
 
 
 ## Which class an old per-map best lap was most likely set in: a ghost lap that
@@ -248,8 +267,16 @@ func _ghost_path(key: String) -> String:
 ##          "frames": PackedFloat32Array (x, y, z, qx, qy, qz, qw per sample),
 ##          "splits": PackedFloat32Array (race time at the end of each lap),
 ##          "car": String (Cars id)}
+## A ghost set in another class is never handed out, so you only race your own.
 func load_ghost(key: String = race_key()) -> Dictionary:
-	var path := _ghost_path(key)
+	var g := _read_ghost(_ghost_path(key))
+	var cls := key.get_slice("_", key.get_slice_count("_") - 1)
+	if Cars.CLASSES.has(cls) and Cars.class_of(g.get("car", "")) != cls:
+		return {}
+	return g
+
+
+func _read_ghost(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
 	var f := FileAccess.open(path, FileAccess.READ)
