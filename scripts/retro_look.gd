@@ -144,7 +144,14 @@ func _process(_delta: float) -> void:
 func _on_node_added(node: Node) -> void:
 	if enabled and node is GeometryInstance3D:
 		# the mesh and materials are often set right after add_child
-		_convert_node.call_deferred(node)
+		_convert_later.call_deferred(node.get_instance_id())
+
+
+## The deferred half of _on_node_added, by id: the node may be freed by then.
+func _convert_later(id: int) -> void:
+	var node := instance_from_id(id) as Node
+	if node:
+		_convert_node(node)
 
 
 # --------------------------------------------------------------------------- shadows and fog
@@ -225,9 +232,11 @@ func _swap(gi: GeometryInstance3D, obj: Object, slot: String, idx: int, mat: Mat
 
 func _restore() -> void:
 	for sw in _swaps:
-		var obj: Object = sw[0]
-		if not is_instance_valid(obj):
+		# parts that broke off or were cleared away are gone already; check
+		# before assigning, a freed object can't even go into a variable
+		if not is_instance_valid(sw[0]):
 			continue
+		var obj: Object = sw[0]
 		match sw[1]:
 			"override":
 				(obj as GeometryInstance3D).material_override = sw[3]
