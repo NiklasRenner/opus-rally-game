@@ -3,8 +3,10 @@ extends RefCounted
 ## The cars you can pick in the menu: models built in Blender (art/) with
 ## a few small handling tweaks (kept close so records stay comparable).
 ##
-## type    : "car" (default), "f1" or "tank"
+## type    : "car" (default), "f1", "truck" or "tank"
 ## class   : racing class (see CLASSES); records and ghosts are kept per class
+## ground_y: ground level in car space for the model (default -0.72)
+## frame   : tube frame colour (the truck)
 ## mesh    : the model in models/; nose: z of its nose in car space
 ## skin    : its painted skin (art/cars/paint_skin.py); the tank is painted in code
 ## rims, spokes, rim_ring: wheel face colour, spoke count (0 = cover), tyre ring
@@ -96,6 +98,34 @@ const LIST := [
 		"shapes": [[Vector3(2.0, 0.26, 4.7), Vector3(0, -0.30, -0.15)], [Vector3(0.7, 0.4, 1.2), Vector3(0, 0.0, 0.4)]],
 	},
 	{
+		"id": "swamp",
+		"type": "truck",
+		"class": "X",
+		"name": "SWAMP KING",
+		"blurb": "Monster truck: bouncy, soaks up the rough",
+		"number": "7",
+		"plate": "SK 7",
+		"mesh": "res://models/swamp.glb",
+		"nose": -2.45,
+		# the wheels hang a long way below the chassis, so the ground is lower in car space
+		"ground_y": -1.03,
+		"skin": "res://models/swamp_skin.png",
+		"rims": Color(1.0, 0.5, 0.05),
+		"spokes": 8,
+		"frame": Color(0.8, 0.08, 0.06),
+		"flaps": Color(0.1, 0.1, 0.1),
+		"dents": ["Body"],
+		"parts": [["LightBar", "front", 0.35], ["Mirror_L", "left", 0.25], ["Mirror_R", "right", 0.25]],
+		"wheels": {"x": 0.98, "zf": -1.45, "zr": 1.45, "rf": 0.75, "rr": 0.75, "wf": 0.55, "wr": 0.55},
+		# travel, spring, damper: long soft suspension that keeps bouncing;
+		# bump_soak: how much rough ground still shakes it; roll_tame: lower lets it lean
+		"stats": {"power": 1.35, "grip": 1.0, "steer": 0.85, "mass": 2000.0, "gearing": 0.85, "drag": 1.5,
+			"armour": 0.6, "travel": 2.0, "spring": 0.45, "damper": 0.35, "bump_soak": 0.35, "roll_tame": 0.3,
+			"pitch": 0.7},
+		"shapes": [[Vector3(1.7, 0.45, 4.6), Vector3(0, 0.2, 0)], [Vector3(1.85, 0.62, 4.2), Vector3(0, 0.66, 0)],
+			[Vector3(1.6, 0.44, 1.15), Vector3(0, 1.19, -0.22)], [Vector3(1.5, 0.6, 1.3), Vector3(0, 1.26, 1.22)]],
+	},
+	{
 		"id": "pardel",
 		"class": "X",
 		"type": "tank",
@@ -151,7 +181,7 @@ const RETIRED := {"kaze": "KAZE GT4", "falke": "FALKE RS", "cuneo": "CUNEO STRAD
 const CLASSES := {
 	"S": {"name": "FORMULA", "col": Color(0.95, 0.15, 0.1)},
 	"A": {"name": "RALLY", "col": Color(1.0, 0.84, 0.1)},
-	"X": {"name": "ARMOUR", "col": Color(0.45, 0.75, 0.3)},
+	"X": {"name": "EXTREME", "col": Color(0.45, 0.75, 0.3)},
 }
 const DEFAULT_CLASS := "A"
 ## Classes of retired cars, for sorting their old records into the right table.

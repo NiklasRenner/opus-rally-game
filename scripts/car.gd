@@ -88,6 +88,7 @@ var body_slip := 0.0  # angle between heading and travel, for HUD / tests
 var _upside_down_time := 0.0
 var track_skid := 0.0  # tank: how much the tracks are skidding sideways to pivot
 var _m := 1.0  # mass / reference mass: scales chassis forces so every vehicle rides alike
+var _rest := SUSP_REST  # suspension travel: SUSP_REST times the spec's "travel"
 
 var _pending_place: Variant = null  # Transform3D applied inside _integrate_forces
 var _smoke: CPUParticles3D
@@ -98,6 +99,7 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	mass = spec["stats"]["mass"]
 	_m = mass / Cars.REF_MASS
+	_rest = SUSP_REST * stat("travel")
 	collision_layer = 2
 	collision_mask = 1 | 8
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
@@ -339,6 +341,9 @@ func _physics_process(delta: float) -> void:
 			surf_votes[w.surface] = surf_votes.get(w.surface, 0) + 1
 		if w.sliding:
 			sliding += 1
+	# solid axles (the truck) follow their wheels
+	model.place_axles(wheels[0].dist - wheels[1].dist, wheels[2].dist - wheels[3].dist,
+		(wheels[0].dist + wheels[1].dist) * 0.5 - _rest_dist(), (wheels[2].dist + wheels[3].dist) * 0.5 - _rest_dist())
 	if not surf_votes.is_empty():
 		var best := 0
 		for k in surf_votes:
@@ -482,7 +487,7 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 	var xf := global_transform
 	var up := xf.basis.y
 	var origin := xf * w.pos
-	var ray_len := SUSP_REST + WHEEL_RADIUS
+	var ray_len := _rest + WHEEL_RADIUS
 	var query := PhysicsRayQueryParameters3D.create(origin, origin - up * ray_len, 1, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 
@@ -525,11 +530,12 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 	var rel := contact - global_position
 	var pv := linear_velocity + angular_velocity.cross(rel)
 	var susp_vel := pv.dot(up)
-	var f_susp := (SPRING * compression - DAMPER * susp_vel) * _m
-	if compression > SUSP_REST * 0.85:
-		f_susp += (compression - SUSP_REST * 0.85) * SPRING * 6.0 * _m  # bump stop
+	var f_susp := (SPRING * stat("spring") * compression - DAMPER * stat("damper") * susp_vel) * _m
+	if compression > _rest * 0.85:
+		f_susp += (compression - _rest * 0.85) * SPRING * 6.0 * _m  # bump stop
 	if bump > 0.0 and speed > 2.0:
-		f_susp += _rng.randf_range(-1.0, 1.0) * bump * 2943.0 * _m * clampf(speed / 15.0, 0.0, 1.5)
+		# rough ground shakes the car; long-travel suspension soaks most of it up
+		f_susp += _rng.randf_range(-1.0, 1.0) * bump * 2943.0 * _m * clampf(speed / 15.0, 0.0, 1.5) * stat("bump_soak")
 	f_susp = maxf(f_susp, 0.0)
 	w.weight = f_susp
 	apply_force(up * f_susp, origin - global_position)
@@ -586,17 +592,22 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 	var f := Vector2(f_long, f_lat)
 
 	# apply grip forces slightly above the contact to tame body roll (arcade)
-	var apply_at := contact + up * 0.35 - global_position
+	var apply_at := contact + up * 0.35 * stat("roll_tame") - global_position
 	apply_force(fwd * f.x + side * f.y, apply_at)
 
 	# wheel spin for visuals / rpm
-	var target_spin := v_long / WHEEL_RADIUS
+	var target_spin := v_long / w.radius
 	if w.spinning and absf(drive_force) > 10.0:
 		target_spin += signf(drive_force) * 25.0
 	if handbrake and not w.front:
 		target_spin = 0.0
 	w.spin = lerpf(w.spin, target_spin, clampf(delta * 20.0, 0.0, 1.0))
 	_place_wheel(w, delta)
+
+
+## Wheel's distance below its attach point at rest on flat ground.
+func _rest_dist() -> float:
+	return _rest + WHEEL_RADIUS - Cars.REF_MASS * 9.81 / (4.0 * SPRING * stat("spring"))
 
 
 func _place_wheel(w: Wheel, delta: float) -> void:

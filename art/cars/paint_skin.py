@@ -543,6 +543,83 @@ def paint_balear(sk):
     finish(sk)
 
 
+# --------------------------------------------------------------------------- the monster truck
+
+def paint_swamp(sk):
+    """Monster truck in lime splatter camo with yellow and orange swirls, a
+    blacked-out grille and big outlined lettering (made-up SWAMP KING)."""
+    import random
+    rnd = random.Random(7)
+    lime = rgb(0.55, 0.85, 0.12)
+    green = rgb(0.18, 0.42, 0.08)
+    dark = rgb(0.08, 0.22, 0.05)
+    yellow = rgb(1.0, 0.85, 0.08)
+    orange = rgb(1.0, 0.45, 0.05)
+    base(sk, lime)
+
+    def splatter(d):
+        for _ in range(420):
+            x, y = rnd.uniform(0, sk.size), rnd.uniform(0, sk.size)
+            r = rnd.uniform(2, 9)
+            d.ellipse((x - r, y - r * 0.7, x + r, y + r * 0.7), fill=green if rnd.random() < 0.7 else dark)
+            for _ in range(3):  # drips and flecks round each blot
+                fx, fy = x + rnd.uniform(-2, 2) * r, y + rnd.uniform(-2, 2) * r
+                d.rectangle((fx, fy, fx + 1, fy + 1), fill=dark)
+    sk.paint(splatter)
+
+    def outlined(text, centre, height, fill, rotate=0, italic=False):
+        for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1)):
+            sk.text(text, (centre[0] + dx * 2, centre[1] + dy * 2), height, BLACK, rotate=rotate, bold=True, italic=italic)
+        sk.text(text, centre, height, fill, rotate=rotate, bold=True, italic=italic)
+
+    for side in (-1, 1):
+        # swirls: big yellow and orange arcs sweeping along the bed and doors
+        for (y0, y1, z0, z1, col, w) in ((-2.4, 0.0, 1.45, 2.5, yellow, 5), (-1.8, 0.7, 1.58, 2.3, orange, 4),
+                                         (0.2, 2.4, 1.45, 2.4, yellow, 4)):
+            box = sk.side_oval(side, y0, y1, z0, z1)
+            sk.paint(lambda d, box=box, col=col, w=w: d.arc(box, 15, 165, fill=col, width=w))
+        # the name reads front to back on both sides
+        first, second = (-1.15, 0.2) if side > 0 else (0.2, -1.15)
+        outlined("SWAMP", sk.side_pt(side, first, 1.75), 14, orange, italic=True)
+        outlined("KING", sk.side_pt(side, second, 1.75), 14, yellow, italic=True)
+        # number on the door, stickers on the front wing
+        sk.side_box(side, 0.62, 0.34, 1.82, 1.98, WHITE)
+        sk.text("7", sk.side_pt(side, 0.48, 1.9), 7, BLACK, bold=True)
+        for i, col in enumerate((yellow, RED, WHITE)):
+            yy = 1.85 - i * 0.15
+            sk.side_box(side, yy, yy - 0.12, 1.5, 1.56, col)
+        sk.text("PIXEL TYRES", sk.side_pt(side, 1.3, 1.62), 7, BLACK)
+
+    # top: bonnet name reading from in front, splatter, bed liner
+    outlined("KING", sk.px("top", (0.0, 1.5, 0)), 14, yellow, rotate=90, italic=True)
+    sk.top_box(-0.8, 0.8, -0.55, -1.95, rgb(0.12, 0.12, 0.12))
+    for i in range(6):
+        y = -0.7 - i * 0.22
+        sk.top_box(-0.78, 0.78, y, y - 0.05, rgb(0.2, 0.2, 0.2))
+
+    # front: blacked-out grille, headlamps, bumper plate
+    sk.end_box(True, -0.6, 0.6, 1.4, 1.72, BLACK)
+    for i in range(5):
+        z = 1.44 + i * 0.055
+        sk.end_box(True, -0.45, 0.45, z, z + 0.02, rgb(0.15, 0.15, 0.16))
+    for s_ in (-1, 1):
+        sk.disc(sk.px("front", (s_ * 0.6, 0, 1.6)), 0.07 * sk.s, rgb(1.0, 0.97, 0.82))
+        sk.end_box(True, s_ * 0.68, s_ * 0.86, 1.45, 1.52, AMBER)
+    outlined("SWAMP KING", sk.px("front", (0, 0, 1.86)), 7, orange)
+
+    # rear: tailgate name, tail lights, plate
+    outlined("SWAMP KING", sk.px("rear", (0, 0, 1.68)), 7, orange)
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.66, s_ * 0.88, 1.45, 1.75, BLACK)
+        sk.end_box(False, s_ * 0.68, s_ * 0.86, 1.6, 1.73, RED)
+        sk.end_box(False, s_ * 0.68, s_ * 0.86, 1.47, 1.58, AMBER)
+    sk.end_box(False, -0.2, 0.2, 1.42, 1.52, YELLOW)
+    sk.text("SK 7", sk.px("rear", (0, 0, 1.47)), 7, BLACK, bold=True)
+
+    sun_strip(sk, "SWAMP KING", BLACK, yellow)
+    finish(sk, wheels=())
+
+
 # --------------------------------------------------------------------------- the F1 car
 
 def paint_veloce(sk):
@@ -627,7 +704,7 @@ def paint_veloce(sk):
     finish(sk, wheels=())
 
 
-PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear}
+PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp}
 
 
 def main():
