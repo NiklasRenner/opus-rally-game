@@ -20,6 +20,12 @@ extends RefCounted
 ## plan    : optional [z, width] keys for bodies that aren't one width (F1 tub)
 ## bottom  : optional underside height of the lofted shell (default -0.24)
 ## glass   : false for open cockpits (tall parts of the profile stay painted)
+## mesh    : a model built in Blender (art/) instead of the lofted body; the
+##           profile then only marks the nose. Cars painted with the livery
+##           atlas (TexGen.livery) say where things are in "atlas".
+## dents, parts: mesh nodes that dent, and [node, zone, threshold] bolt-ons
+##           that fall off (cars default to body and bumpers / bumpers, wing,
+##           light pod and mirrors)
 ## Extra stats: gearing (final drive multiplier, >1 = shorter gears / lower top
 ## speed), drag, downforce, inertia (yaw inertia vs a saloon), pitch (engine note).
 ## Chassis forces (springs, brakes, yaw assists) scale with mass so light and
@@ -34,22 +40,14 @@ const LIST := [
 		"plate": "MH 4",
 		"banner": ["RALLYE", Color(1, 1, 1), Color(0.08, 0.20, 0.62)],
 		"sponsor": ["PIXEL OIL", Color(0.86, 0.10, 0.10), Color(0.97, 0.97, 0.95)],
-		"width": 1.76,
-		"profile": [[-1.98, 0.14, 0.08], [-1.86, 0.25, 0.19], [-0.85, 0.37, 0.31], [-0.15, 0.93, 0.36],
-			[1.22, 0.93, 0.38], [1.80, 0.62, 0.40], [1.98, 0.52, 0.40]],
-		"taper": 0.80,
-		"flare": 0.06,
-		"a_pillar": -0.85,
-		"b_pillar": 0.45,
-		"lights": "square",
+		"mesh": "res://models/martello.glb",
+		"profile": [[-2.01, 0.04, 0.0]],
 		"livery": {"kind": "bands", "base": Color(0.95, 0.95, 0.94), "a": Color(0.08, 0.20, 0.62), "b": Color(0.86, 0.10, 0.10)},
-		"roof": Color(0.95, 0.95, 0.94),
-		"trim": Color(0.12, 0.12, 0.14),
+		"atlas": {"front": 1.98, "rear": -1.98, "belt": 0.9, "doors": [0.85, -0.42, -0.87], "band": 0.8, "sponsor_z": 0.47,
+			"bonnet": [1.9, 0.85], "roof": [0.15, -1.45], "screen": 0.2, "head": [0.6, 0.72], "tail": [0.64, 0.8],
+			"plate": 0.72},
 		"rims": Color(0.92, 0.92, 0.90),
 		"flaps": Color(0.08, 0.20, 0.62),
-		"wing": [1.20, 0.05, 0.32],
-		"pod": 4,
-		"scoop": 0.0,
 		"stats": {"power": 1.0, "grip": 1.0, "steer": 1.0, "mass": 1200.0},
 	},
 	{
@@ -60,22 +58,14 @@ const LIST := [
 		"plate": "PL 555",
 		"banner": ["PLEIAD", Color(1.0, 0.82, 0.08), Color(0.10, 0.22, 0.66)],
 		"sponsor": ["STAR 7", Color(0.10, 0.22, 0.66), Color(1.0, 0.82, 0.08)],
-		"width": 1.74,
-		"profile": [[-2.02, 0.15, 0.06], [-1.90, 0.25, 0.18], [-0.78, 0.37, 0.31], [-0.05, 0.89, 0.34],
-			[0.95, 0.89, 0.36], [1.45, 0.49, 0.40], [1.95, 0.47, 0.40], [2.02, 0.38, 0.32]],
-		"taper": 0.82,
-		"flare": 0.05,
-		"a_pillar": -0.78,
-		"b_pillar": 0.42,
-		"lights": "square",
+		"mesh": "res://models/pleiad.glb",
+		"profile": [[-2.21, 0.04, 0.0]],
 		"livery": {"kind": "split", "base": Color(0.10, 0.22, 0.66), "a": Color(0.10, 0.22, 0.66), "b": Color(1.0, 0.82, 0.08)},
-		"roof": Color(0.10, 0.22, 0.66),
-		"trim": Color(0.12, 0.12, 0.14),
+		"atlas": {"front": 2.18, "rear": -2.18, "belt": 0.9, "doors": [0.9, -0.35, -0.87], "sponsor_z": 0.42,
+			"bonnet": [2.05, 0.95], "roof": [0.05, -0.7], "screen": 0.1, "head": [0.6, 0.71], "tail": [0.68, 0.82],
+			"plate": 0.74},
 		"rims": Color(0.85, 0.68, 0.22),
 		"flaps": Color(0.95, 0.95, 0.95),
-		"wing": [1.80, 0.20, 0.34],
-		"pod": 4,
-		"scoop": -1.30,
 		"stats": {"power": 0.97, "grip": 1.04, "steer": 0.98, "mass": 1230.0},
 	},
 	{
@@ -219,35 +209,6 @@ const LIST := [
 		"shapes": [[Vector3(2.0, 0.26, 4.7), Vector3(0, -0.30, -0.15)], [Vector3(0.7, 0.4, 1.2), Vector3(0, 0.0, 0.4)]],
 	},
 	{
-		"id": "tank",
-		"type": "tank",
-		"name": "TANK T-98",
-		"blurb": "Just for fun. Slow, heavy, pivots on the spot",
-		"number": "98",
-		"width": 2.0,
-		"profile": [[-2.15, 0.0, -0.08], [-1.55, 0.24, 0.13], [1.9, 0.28, 0.17], [2.12, 0.12, 0.03]],
-		"taper": 0.9,
-		"flare": 0.0,
-		"arches": false,
-		"a_pillar": -1.0,
-		"b_pillar": 0.0,
-		"lights": "round",
-		"livery": {"kind": "camo", "base": Color(0.38, 0.42, 0.24), "a": Color(0.22, 0.27, 0.15), "b": Color(0.45, 0.36, 0.22)},
-		"roof": Color(0.38, 0.42, 0.24),
-		"trim": Color(0.22, 0.24, 0.15),
-		"rims": Color(0.3, 0.32, 0.2),
-		"flaps": Color(0.1, 0.1, 0.1),
-		"wing": [],
-		"pod": 0,
-		"scoop": 0.0,
-		# drag: extra air resistance (lower top speed), pivot: skid-steer turn on
-		# the spot, armour: damage taken, pitch: engine note
-		"stats": {"power": 0.85, "grip": 1.15, "steer": 0.9, "mass": 1700.0,
-			"drag": 1.9, "pivot": 1.0, "armour": 0.3, "pitch": 0.45},
-		# collision boxes [size, centre]: wider hull and a turret
-		"shapes": [[Vector3(2.0, 0.62, 4.3), Vector3(0, 0.0, 0)], [Vector3(1.3, 0.45, 1.6), Vector3(0, 0.5, 0.2)]],
-	},
-	{
 		"id": "pardel",
 		"type": "tank",
 		"name": "KPZ PARDEL",
@@ -272,8 +233,16 @@ const LIST := [
 		"wing": [],
 		"pod": 0,
 		"scoop": 0.0,
+		# drag: extra air resistance (lower top speed), pivot: skid-steer turn on
+		# the spot, armour: damage taken, pitch: engine note
 		"stats": {"power": 0.95, "grip": 1.15, "steer": 0.9, "mass": 1800.0,
 			"drag": 1.8, "pivot": 1.0, "armour": 0.25, "pitch": 0.4},
+		"dents": ["Hull", "Turret", "SideSkirt_L", "SideSkirt_R", "SkirtArmor_L", "SkirtArmor_R"],
+		"parts": [["SideSkirt_L", "left", 0.45], ["SideSkirt_R", "right", 0.45], ["SkirtArmor_L", "left", 0.7],
+			["SkirtArmor_R", "right", 0.7], ["Headlight_L", "front", 0.3], ["Headlight_R", "front", 0.3],
+			["TailLight_L", "rear", 0.3], ["TailLight_R", "rear", 0.3], ["StowageBasket", "rear", 0.35],
+			["Antenna_1", "rear", 0.5], ["Antenna_2", "rear", 0.6], ["SmokeLauncher_L", "left", 0.6],
+			["SmokeLauncher_R", "right", 0.6], ["MG_Loader", "front", 0.75]],
 		"shapes": [[Vector3(2.1, 0.6, 4.4), Vector3(0, 0.03, 0)], [Vector3(1.6, 0.42, 2.4), Vector3(0, 0.57, 0.15)]],
 	},
 ]

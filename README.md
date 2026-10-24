@@ -2,10 +2,10 @@
 
 Late-90s arcade rally in the spirit of Sega Rally / Colin McRae: chunky
 640x360 render, nearest-filtered procedural textures, low-poly car and
-scenery, arcade HUD. Everything (track, car, textures, sky, engine sound) is
-generated in code. The one exception is the KPz Pardel tank, modelled in
-Blender (`art/tank/leopard_tank.blend`, exported to `models/leopard.glb`) and
-painted in game with the same procedural textures.
+scenery, arcade HUD. Everything (track, cars, textures, sky, engine sound) is
+generated in code, except three vehicles modelled in Blender: the Martello HF,
+the Pleiad 555 and the KPz Pardel tank (sources in `art/`, exported to
+`models/*.glb`). Their textures are still painted in code at startup.
 
 ## Open and play
 
@@ -53,24 +53,30 @@ race from the menu (a restart keeps the same weather).
 
 | Car | Style | Handling |
 |---|---|---|
-| Martello HF | Boxy hatch, Martini-style stripes | All-rounder |
-| Pleiad 555 | Blue saloon, gold wheels, bonnet scoop | Most grip, a bit less power |
+| Martello HF | Boxy Delta-style hatch with flared arches, Martini-style stripes | All-rounder |
+| Pleiad 555 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
 | Kaze GT4 | Red fastback coupe | Most power, heaviest |
 | Falke RS | White, big whale-tail wing | Stable, slightly grippier |
 | Cuneo Stradale | Short wedge, green nose | Lightest, sharpest turn-in, least grip |
 | Kart 125 | Go-kart with the driver out in the open | Tiny and twitchy: quickest turn-in, about 110 km/h flat out |
 | Veloce F1 | Late-90s single-seater, high nose, big wings | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac |
-| Tank T-98 | Camo tank with turret, tracks and road wheels | Just for fun: slow (about 110 km/h), grippy, pivots on the spot, shrugs off most damage |
-| KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Like the T-98 but a touch quicker and tougher; skirts, lights and the turret basket get knocked off |
+| KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
 kart, F1 and tank are the odd ones out. The menu bars compare acceleration,
 top speed, grip and turn-in across the whole garage.
 Chassis forces (springs, brakes, steering assists) scale with each vehicle's
-mass so a 300 kg kart and a 1700 kg tank both ride and turn sensibly; engine
+mass so a 300 kg kart and a 1800 kg tank both ride and turn sensibly; engine
 power doesn't, so weight still counts.
-Each car is a side profile plus livery in `scripts/cars.gd`; `CarModel`
+Most cars are a side profile plus livery in `scripts/cars.gd`; `CarModel`
 lofts it into a dentable low-poly body. Copy an entry to add a car.
+
+The modelled cars come from `art/cars/build_cars.py`: run it in Blender's
+Scripting tab (with `build_all("<path to this folder>")`) to rebuild their
+.blend files and re-export `models/martello.glb` and `models/pleiad.glb`.
+Every painted face is projected into one 256x256 livery atlas, which
+`TexGen.livery()` paints with stripes, names, numbers, lights and plates
+using the spec's `atlas` positions. The tank lives in `art/tank/`.
 
 ## Stages
 

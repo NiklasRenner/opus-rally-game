@@ -1374,6 +1374,8 @@ func _build_wrecks() -> void:
 	var rust := [Color(0.42, 0.24, 0.13), Color(0.30, 0.20, 0.14), Color(0.48, 0.36, 0.24), Color(0.22, 0.20, 0.18)]
 	var placed := 0
 	var tries := 0
+	# wrecks are lofted saloons repainted in rust; the modelled cars carry their livery in a texture
+	var shells := Cars.LIST.filter(func(c: Dictionary) -> bool: return not c.has("mesh") and c.get("type", "car") == "car")
 	while placed < 26 and tries < 300:
 		tries += 1
 		var i := _rng.randi_range(10, n - 10)
@@ -1384,7 +1386,7 @@ func _build_wrecks() -> void:
 		var p := points[i] + _side(i) * s * off
 		if _road_dist(p.x, p.z) < off - 1.0 or _in_water(p.x, p.z, 3.0):
 			continue
-		var spec: Dictionary = Cars.LIST[_rng.randi_range(0, 4)].duplicate(true)
+		var spec: Dictionary = (shells[_rng.randi() % shells.size()] as Dictionary).duplicate(true)
 		spec["livery"] = {"kind": "split", "base": rust[_rng.randi() % 4], "a": rust[_rng.randi() % 4], "b": rust[_rng.randi() % 4]}
 		spec["roof"] = rust[_rng.randi() % 4]
 		spec["pod"] = 0
