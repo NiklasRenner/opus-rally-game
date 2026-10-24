@@ -1327,11 +1327,11 @@ func _build_wrecks() -> void:
 	add_child(body)
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(1.8, 1.2, 4.0)
-	var rust := [Color(0.42, 0.24, 0.13), Color(0.30, 0.20, 0.14), Color(0.48, 0.36, 0.24), Color(0.22, 0.20, 0.18)]
+	var rust := [Color(0.62, 0.36, 0.2), Color(0.45, 0.3, 0.2), Color(0.7, 0.52, 0.34), Color(0.36, 0.32, 0.28)]
 	var placed := 0
 	var tries := 0
-	# wrecks are lofted saloons repainted in rust; the modelled cars carry their livery in a texture
-	var shells := Cars.LIST.filter(func(c: Dictionary) -> bool: return not c.has("mesh") and c.get("type", "car") == "car")
+	# wrecks are the rally cars, faded under rust and dented
+	var shells := Cars.LIST.filter(func(c: Dictionary) -> bool: return c.get("type", "car") == "car")
 	while placed < 26 and tries < 300:
 		tries += 1
 		var i := _rng.randi_range(10, n - 10)
@@ -1342,17 +1342,11 @@ func _build_wrecks() -> void:
 		var p := points[i] + _side(i) * s * off
 		if _road_dist(p.x, p.z) < off - 1.0 or _in_water(p.x, p.z, 3.0):
 			continue
-		var spec: Dictionary = (shells[_rng.randi() % shells.size()] as Dictionary).duplicate(true)
-		spec["livery"] = {"kind": "split", "base": rust[_rng.randi() % 4], "a": rust[_rng.randi() % 4], "b": rust[_rng.randi() % 4]}
-		spec["roof"] = rust[_rng.randi() % 4]
-		spec["pod"] = 0
-		spec.erase("banner")
-		spec.erase("sponsor")
 		var m := CarModel.new()
-		m.spec = spec
+		m.spec = shells[_rng.randi() % shells.size()]
 		add_child(m)
 		m.build()
-		_burn_out(m)
+		_burn_out(m, rust[_rng.randi() % rust.size()])
 		var flipped := _rng.randf() < 0.25
 		var flat := tangents[i]
 		flat.y = 0.0
@@ -1361,6 +1355,9 @@ func _build_wrecks() -> void:
 			bas = bas * Basis(Vector3.FORWARD, PI)
 		var y := terrain_height(p.x, p.z)
 		m.transform = Transform3D(bas, Vector3(p.x, y + (0.95 if flipped else 0.55), p.z))
+		for k in 3:  # crumpled where it went off
+			var hit := Vector3(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-0.2, 0.5), _rng.randf_range(-2.0, 2.0))
+			m.dent(m.to_global(hit), (m.global_position - m.to_global(hit)).normalized(), 0.35, 0.9)
 		var cs := CollisionShape3D.new()
 		cs.shape = shape
 		cs.transform = Transform3D(bas, Vector3(p.x, y + 0.6, p.z))
@@ -1368,13 +1365,20 @@ func _build_wrecks() -> void:
 		placed += 1
 
 
-## Dim the lights and strip the stickers off a wreck.
-func _burn_out(node: Node) -> void:
-	for c in node.get_children():
-		if c is MeshInstance3D:
-			var mo := (c as MeshInstance3D).material_override
-			if mo is StandardMaterial3D and (mo as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
-				(c as MeshInstance3D).material_override = TexGen.flat_material(Color(0.12, 0.11, 0.1))
-			elif mo is StandardMaterial3D and (mo as StandardMaterial3D).albedo_texture != null:
-				(c as MeshInstance3D).material_override = TexGen.flat_material(Color(0.25, 0.2, 0.16))
-		_burn_out(c)
+## Fade a wreck under rust: every surface keeps its texture but turns rusty
+## and matte, and the lamps go dark.
+func _burn_out(node: Node, rust: Color) -> void:
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var gi := mi as MeshInstance3D
+		if gi.mesh == null:
+			continue
+		for i in gi.mesh.get_surface_count():
+			var m := gi.get_active_material(i) as StandardMaterial3D
+			if m == null:
+				continue
+			var r := m.duplicate() as StandardMaterial3D
+			r.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+			r.albedo_color = m.albedo_color * (rust if m.albedo_texture else Color(0.25, 0.22, 0.2))
+			r.roughness = 1.0
+			r.metallic = 0.0
+			gi.set_surface_override_material(i, r)

@@ -493,67 +493,6 @@ static func _make_pixel_text(text: String, fg: Color, bg: Color, border: Color) 
 	return ImageTexture.create_from_image(img)
 
 
-## Radiator grille: dark slats in a chrome surround.
-static func grille() -> ImageTexture:
-	return _cached("grille", _make_grille)
-
-
-static func _make_grille() -> ImageTexture:
-	var img := Image.create(16, 6, false, Image.FORMAT_RGB8)
-	for y in 6:
-		for x in 16:
-			var c := Color(0.05, 0.05, 0.06)
-			if y == 0 or y == 5 or x == 0 or x == 15:
-				c = Color(0.75, 0.76, 0.78)
-			elif y % 2 == 0:
-				c = Color(0.22, 0.22, 0.24)
-			elif x == 8:
-				c = Color(0.55, 0.56, 0.58)  # badge
-			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
-
-
-## Square headlight: bright lens with a reflector ring and an indicator at the edge.
-static func headlight() -> ImageTexture:
-	return _cached("headlight", _make_headlight)
-
-
-static func _make_headlight() -> ImageTexture:
-	var img := Image.create(10, 5, false, Image.FORMAT_RGB8)
-	for y in 5:
-		for x in 10:
-			var c := Color(1.0, 0.98, 0.86)
-			if x >= 8:
-				c = Color(1.0, 0.62, 0.15)  # indicator
-			elif y == 0 or y == 4 or x == 0 or x == 7:
-				c = Color(0.6, 0.62, 0.66)
-			elif (x == 2 or x == 5) and y == 2:
-				c = Color(0.85, 0.85, 0.75)
-			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
-
-
-## Tail light cluster: brake, indicator and reversing segments.
-static func taillight() -> ImageTexture:
-	return _cached("taillight", _make_taillight)
-
-
-static func _make_taillight() -> ImageTexture:
-	var img := Image.create(10, 4, false, Image.FORMAT_RGB8)
-	for y in 4:
-		for x in 10:
-			var c := Color(0.85, 0.06, 0.04)
-			if x < 2:
-				c = Color(1.0, 0.55, 0.1)
-			elif x >= 8:
-				c = Color(0.92, 0.92, 0.92)
-			elif y == 0:
-				c = Color(1.0, 0.3, 0.25)
-			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
-
-
-
 # --------------------------------------------------------------------------- wasteland
 
 ## Road surfaces after the bombs: cracked, pot-holed tarmac with faded

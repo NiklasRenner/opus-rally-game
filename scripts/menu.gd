@@ -85,7 +85,6 @@ func _show_car() -> void:
 	model.spec = Cars.LIST[_car_i]
 	_turntable.add_child(model)
 	model.build()
-	model.add_display_wheels()
 
 
 func _refresh() -> void:

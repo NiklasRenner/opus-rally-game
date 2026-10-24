@@ -30,7 +30,6 @@ func setup(data: Dictionary) -> void:
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.cull_mode = BaseMaterial3D.CULL_BACK
 	_apply_ghost_material(model, mat)
-	model.add_display_wheels(mat)
 	var tag := Label3D.new()
 	tag.text = "GHOST"
 	tag.font_size = 48

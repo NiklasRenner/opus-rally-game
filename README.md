@@ -2,11 +2,10 @@
 
 Late-90s arcade rally in the spirit of Sega Rally / Colin McRae: chunky
 640x360 render, nearest-filtered procedural textures, low-poly car and
-scenery, arcade HUD. Everything (track, cars, textures, sky, engine sound) is
-generated in code, except four vehicles modelled in Blender: the Martello HF,
-the Pleiad 555, the Veloce F1 and the KPz Pardel tank (sources in `art/`,
-exported to `models/*.glb`). The three cars wear pixel-art skins from
-`models/`; the tank is painted in code at startup.
+scenery, arcade HUD. The tracks, textures, sky and engine sound are generated
+in code; the vehicles are modelled in Blender (sources in `art/`, exported to
+`models/*.glb`). The cars wear pixel-art skins from `models/`; the tank is
+painted in code at startup.
 
 ## Open and play
 
@@ -57,28 +56,27 @@ race from the menu (a restart keeps the same weather).
 |---|---|---|
 | Martello HF | Boxy Delta-style hatch with flared arches, Martini-style stripes | All-rounder |
 | Pleiad 555 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
-| Kaze GT4 | Red fastback coupe | Most power, heaviest |
-| Falke RS | White, big whale-tail wing | Stable, slightly grippier |
-| Cuneo Stradale | Short wedge, green nose | Lightest, sharpest turn-in, least grip |
-| Kart 125 | Go-kart with the driver out in the open | Tiny and twitchy: quickest turn-in, about 110 km/h flat out |
+| Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
 | Veloce F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
 | KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
-kart, F1 and tank are the odd ones out. The menu bars compare acceleration,
+F1 and tank are the odd ones out. The menu bars compare acceleration,
 top speed, grip and turn-in across the whole garage.
 Chassis forces (springs, brakes, steering assists) scale with each vehicle's
-mass so a 300 kg kart and a 1800 kg tank both ride and turn sensibly; engine
+mass so an 800 kg F1 car and an 1800 kg tank both ride and turn sensibly; engine
 power doesn't, so weight still counts.
-Most cars are a side profile plus livery in `scripts/cars.gd`; `CarModel`
-lofts it into a dentable low-poly body. Copy an entry to add a car.
+Each car's handling, skin and breakable parts are listed in
+`scripts/cars.gd`; `CarModel` loads the model and makes its panels dentable.
+Records and ghosts set in cars that have since left the garage still show
+their old names.
 
-The modelled cars come from `art/cars/build_cars.py`: run it in Blender's
-Scripting tab (with `build_all("<path to this folder>")`) to rebuild their
-.blend files and re-export `models/martello.glb`, `models/pleiad.glb` and
-`models/veloce.glb` (the F1 car).
+The cars come from `art/cars/build_cars.py`: run it in Blender's Scripting
+tab (with `build_all("<path to this folder>")`) to rebuild their .blend files
+and re-export `models/martello.glb`, `models/pleiad.glb`, `models/balear.glb`
+and `models/veloce.glb` (the F1 car).
 
-All three wear a skin painted in separate panel pieces (each side, top, front,
+They all wear a skin painted in separate panel pieces (each side, top, front,
 back, windscreen) in `art/cars/<car>_pieces/`, combined into
 `models/<car>_skin.png`. `python art/cars/paint_skin.py <car>` recombines the
 pieces (needs Pillow), so you can retouch any piece in a pixel editor such as
