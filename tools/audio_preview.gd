@@ -46,6 +46,8 @@ func _drive(spec: Dictionary, vmax: float) -> PackedVector2Array:
 	var sy := EngineSynth.new()
 	sy.setup(spec)
 	var gearing: float = spec["stats"].get("gearing", 1.0)
+	var ratios := Cars.gears(spec)
+	var shift_time: float = spec["stats"].get("shift", 1.0)
 	var buf := PackedVector2Array()
 	var v := 0.0
 	var gear := 1
@@ -60,7 +62,7 @@ func _drive(spec: Dictionary, vmax: float) -> PackedVector2Array:
 			thr = 1.0
 		elif t > 12.5:
 			thr = 0.4
-		var road: float = v / RallyCar.WHEEL_RADIUS * RallyCar.GEAR_RATIOS[gear - 1] * RallyCar.FINAL_DRIVE * gearing * 60.0 / TAU
+		var road: float = v / RallyCar.WHEEL_RADIUS * ratios[gear - 1] * RallyCar.FINAL_DRIVE * gearing * 60.0 / TAU
 		var moving := t > 3.0
 		var spinning := t > 3.0 and t < 3.8
 		if moving:
@@ -68,13 +70,13 @@ func _drive(spec: Dictionary, vmax: float) -> PackedVector2Array:
 			v = clampf(v + acc * STEP, 0.0, vmax)
 		shift_t = maxf(shift_t - STEP, 0.0)
 		if shift_t <= 0.0:
-			if road > 7200.0 and gear < 5 and thr > 0.1:
+			if road > 7200.0 and gear < ratios.size() and thr > 0.1:
 				gear += 1
-				shift_t = 0.2
+				shift_t = 0.2 * shift_time
 				sy.shift(true)
-			elif gear > 1 and ((road < 3300.0 and road * RallyCar.GEAR_RATIOS[gear - 2] / RallyCar.GEAR_RATIOS[gear - 1] < 6600.0) or road < 1800.0):
+			elif gear > 1 and ((road < 3300.0 and road * ratios[gear - 2] / ratios[gear - 1] < 6600.0) or road < 1800.0):
 				gear -= 1
-				shift_t = 0.15
+				shift_t = 0.15 * shift_time
 				sy.shift(false)
 		var target: float = road
 		if spinning:

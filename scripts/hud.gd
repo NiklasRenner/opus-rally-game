@@ -212,7 +212,7 @@ func _draw_lap_plate(p: Rect2) -> void:
 ## Gear on a dark red plate under a GEAR tab. The manual box adds a row of
 ## shift lights that run up the rev range and flash at the limiter.
 func _draw_gear_plate(g: Rect2) -> void:
-	var limiter := car.rpm > 7400.0 and car.gear >= 1 and car.gear < RallyCar.GEAR_RATIOS.size()
+	var limiter := car.rpm > 7400.0 and car.gear >= 1 and car.gear < car.ratios.size()
 	var rim := YELLOW.lerp(Color.WHITE, _gear_pop)
 	if car.manual_gears and limiter and _blink(70.0):
 		rim = RED

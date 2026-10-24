@@ -217,7 +217,7 @@ func _draw_car(right: Rect2, car: Dictionary) -> void:
 		var bar := Rect2(x + 54, y - 8, 80, 8)
 		draw_rect(bar.grow(1), RetroUI.INK)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * frac, bar.size.y)), RetroUI.YELLOW)
-	RetroUI.text(self, Vector2(right.position.x + 16, right.end.y - 8), "%d kg   top %d km/h      %d/%d  LEFT / RIGHT" % [stats["mass"], RallyCar.top_speed(car),
+	RetroUI.text(self, Vector2(right.position.x + 16, right.end.y - 8), "%d kg   %d-speed   top %d km/h    %d/%d  LEFT / RIGHT" % [stats["mass"], Cars.gears(car).size(), RallyCar.top_speed(car),
 		_car_i + 1, Cars.LIST.size()],
 		10, Color(0.85, 0.9, 1.0), 2)
 

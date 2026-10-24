@@ -15,7 +15,6 @@ const DAMPER := 2600.0
 const BRAKE_FORCE := 15000.0
 const HANDBRAKE_FORCE := 5000.0
 const FINAL_DRIVE := 4.4
-const GEAR_RATIOS := [3.3, 2.2, 1.65, 1.3, 1.06]  # gears 1..5
 const REVERSE_RATIO := 3.4
 const IDLE_RPM := 1000.0
 const REDLINE := 8000.0
@@ -65,7 +64,8 @@ var steer := 0.0
 var handbrake := false
 var steer_angle := 0.0
 
-var gear := 1  # -1 reverse, 1..5
+var gear := 1  # -1 reverse, 1..top gear
+var ratios: Array = Cars.GEARS  # forward gear ratios, from the spec
 var rpm := IDLE_RPM
 var shift_timer := 0.0
 var _reverse_timer := 0.0
@@ -99,6 +99,7 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	mass = spec["stats"]["mass"]
+	ratios = Cars.gears(spec)
 	_m = mass / Cars.REF_MASS
 	_rest = SUSP_REST * stat("travel")
 	collision_layer = 2
@@ -160,7 +161,7 @@ static func top_speed(spec: Dictionary) -> float:
 	var v := 1.0
 	while v < 120.0:
 		var pull := 0.0
-		for ratio in GEAR_RATIOS:
+		for ratio in Cars.gears(spec):
 			var rpm: float = v / WHEEL_RADIUS * ratio * FINAL_DRIVE * gearing * 60.0 / TAU
 			if rpm < REDLINE:
 				pull = maxf(pull, torque_at(rpm) * ratio * FINAL_DRIVE * gearing / WHEEL_RADIUS * st["power"])
@@ -316,7 +317,7 @@ func _physics_process(delta: float) -> void:
 
 	var power_mult: float = 1.0 - damage["front"] * 0.45 - (damage["left"] + damage["right"] + damage["rear"]) * 0.08
 	power_mult = maxf(power_mult, 0.25) * (spec["stats"]["power"] as float)
-	var ratio: float = -REVERSE_RATIO if gear == -1 else GEAR_RATIOS[gear - 1]
+	var ratio: float = -REVERSE_RATIO if gear == -1 else ratios[gear - 1]
 	var engine_force := torque_at(rpm) * ratio * FINAL_DRIVE * stat("gearing") / WHEEL_RADIUS * drive_input * power_mult
 	if shift_timer > 0.0 or rpm >= REDLINE:
 		engine_force *= 0.15
@@ -435,13 +436,13 @@ func _update_gearbox(delta: float, drive_input: float) -> void:
 		return
 	# shift on road speed, not on wheelspin, so the box doesn't hunt
 	var road_rpm := _road_rpm(gear)
-	if road_rpm > 7200.0 and gear < GEAR_RATIOS.size() and drive_input > 0.1:
+	if road_rpm > 7200.0 and gear < ratios.size() and drive_input > 0.1:
 		gear += 1
-		shift_timer = 0.2
+		shift_timer = 0.2 * stat("shift")
 	elif gear > 1:
 		if (road_rpm < 3300.0 and _road_rpm(gear - 1) < 6600.0) or road_rpm < 1800.0:
 			gear -= 1
-			shift_timer = 0.15
+			shift_timer = 0.15 * stat("shift")
 
 
 ## Manual shift. Down from first while (nearly) stopped selects reverse; a
@@ -453,7 +454,7 @@ func _shift(dir: int) -> void:
 			shift_timer = 0.15
 		return
 	var g := gear + dir
-	if g > GEAR_RATIOS.size():
+	if g > ratios.size():
 		return
 	if g < 1:
 		if absf(forward_speed) < 1.5:
@@ -462,11 +463,11 @@ func _shift(dir: int) -> void:
 	if dir < 0 and _road_rpm(g) > REDLINE + 300.0:
 		return
 	gear = g
-	shift_timer = 0.2 if dir > 0 else 0.15
+	shift_timer = (0.2 if dir > 0 else 0.15) * stat("shift")
 
 
 func _road_rpm(g: int) -> float:
-	var ratio: float = REVERSE_RATIO if g == -1 else GEAR_RATIOS[g - 1]
+	var ratio: float = REVERSE_RATIO if g == -1 else ratios[g - 1]
 	return absf(forward_speed) / WHEEL_RADIUS * ratio * FINAL_DRIVE * stat("gearing") * 60.0 / TAU
 
 
