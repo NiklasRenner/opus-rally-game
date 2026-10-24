@@ -389,7 +389,7 @@ def paint_pleiad(sk):
         sk.side_box(side, 0.5, 0.06, 0.52, 0.8, WHITE)
         sk.side_box(side, 0.5, 0.06, 0.74, 0.8, GOLD_YELLOW)
         sk.text("5", sk.side_pt(side, 0.28, 0.625), 0.18 * sk.s, BLACK, bold=True)
-        sk.text("PLEIAD", sk.side_pt(side, 0.28, 0.42), 0.07 * sk.s, WHITE, bold=True)
+        sk.text("SAKSEN", sk.side_pt(side, 0.28, 0.42), 0.07 * sk.s, WHITE, bold=True)
         # small stickers behind the front wheel, tyre maker on the sill
         for i, col in enumerate((GOLD_YELLOW, WHITE, RED)):
             yy = 0.86 - i * 0.12
@@ -410,7 +410,7 @@ def paint_pleiad(sk):
         sk.crescent(outer, inner, GOLD_YELLOW)
     top_crescent(1.55, 1)
     sk.text("777", sk.px("top", (0.0, 1.6, 0)), 0.18 * sk.s, GOLD_YELLOW, rotate=90, bold=True)
-    sk.text("PLEIAD", sk.px("top", (0.0, 1.3, 0)), 0.08 * sk.s, WHITE, rotate=90, bold=True)
+    sk.text("SAKSEN", sk.px("top", (0.0, 1.3, 0)), 0.08 * sk.s, WHITE, rotate=90, bold=True)
     top_crescent(-1.85, -1)
     sk.text("777", sk.px("top", (0.0, -1.85, 0)), 0.12 * sk.s, GOLD_YELLOW, rotate=-90, bold=True)
     c = sk.px("top", (0.0, -0.35, 0))
@@ -454,11 +454,11 @@ def paint_pleiad(sk):
         sk.text("PIX", sk.px("rear", (s_ * 0.76, 0, 0.46)), 7, RED)
     sk.end_box(False, -0.3, 0.3, 0.66, 0.85, BLACK)
     sk.end_box(False, -0.24, 0.24, 0.69, 0.8, YELLOW)
-    sk.text("PL 555", sk.px("rear", (0, 0, 0.745)), 7, BLACK, bold=True)
-    sk.text("PLEIAD", sk.px("rear", (0, 0, 0.92)), 7, GOLD_YELLOW, bold=True)
+    sk.text("SA 777", sk.px("rear", (0, 0, 0.745)), 7, BLACK, bold=True)
+    sk.text("SAKSEN", sk.px("rear", (0, 0, 0.92)), 7, GOLD_YELLOW, bold=True)
     sk.end_box(False, -0.95, 0.95, 0.0, 0.34, rgb(0.08, 0.08, 0.09))
 
-    sun_strip(sk, "PLEIAD", navy, GOLD_YELLOW)
+    sun_strip(sk, "SAKSEN", navy, GOLD_YELLOW)
     finish(sk)
 
 
@@ -671,7 +671,7 @@ def paint_veloce(sk):
         # engine cover: the red charging bolt by the airbox, small red logos
         bolt(sk.side_pt(side, -0.9, 0.7), 0.2 * sk.s, red)
         sk.text("PAYPIX", sk.side_pt(side, -1.55, 0.36), 7, red)
-        sk.text("VELOCE", sk.side_pt(side, 0.85, 0.36), 7, grey)
+        sk.text("PEAK", sk.side_pt(side, 0.85, 0.36), 7, grey)
         # silver halo, red rear wing endplate details
         sk.side_box(side, 0.36, -0.46, 0.66, 0.84, silver)
         x0, y0 = sk.side_pt(side, -2.08, 0.72)
@@ -685,7 +685,7 @@ def paint_veloce(sk):
     sk.top_box(-0.12, 0.12, 2.1, 2.25, WHITE)
     for sx in (-1, 1):
         sk.top_box(sx * 0.12, sx * 1.0, 2.15, 2.6, red)
-        sk.text("VELOCE", sk.px("top", (sx * 0.55, 2.41, 0)), 7, rgb(0.9, 0.9, 0.9), rotate=90, bold=True)
+        sk.text("PEAK", sk.px("top", (sx * 0.55, 2.41, 0)), 7, rgb(0.9, 0.9, 0.9), rotate=90, bold=True)
         sk.top_box(sx * 0.23, sx * 0.33, 0.25, -0.45, silver)
     sk.text("1", sk.px("top", (0.0, 1.85, 0)), 7, red, rotate=90, bold=True)
     sk.top_box(-0.05, 0.05, 1.45, 1.3, WHITE)
@@ -710,7 +710,7 @@ def paint_bellatrix(sk):
     """Two-tone hypercar: bright blue nose, bonnet, front wings and the front
     of the doors, dark gunmetal behind the chrome C, over the roof and the
     engine cover. Dark mesh tail panel with the wordmark under the light bar,
-    a darker spine down the bonnet. Made-up marque BELLATRIX."""
+    a darker spine down the bonnet. Made-up marque BONGATTI."""
     blue = rgb(0.12, 0.42, 0.88)
     deep = rgb(0.07, 0.27, 0.66)
     gun = rgb(0.22, 0.23, 0.26)
@@ -757,7 +757,7 @@ def paint_bellatrix(sk):
         # side intake behind the C, small wordmark on the sill
         sk.paint(lambda d, side=side: d.polygon([sk.side_pt(side, -0.98, 0.72), sk.side_pt(side, -1.02, 0.42),
                                                   sk.side_pt(side, -0.9, 0.36), sk.side_pt(side, -0.93, 0.7)], fill=mesh))
-        sk.text("BELLATRIX", sk.side_pt(side, 0.25, 0.25), 7, silver)
+        sk.text("BONGATTI", sk.side_pt(side, 0.25, 0.25), 7, silver)
 
     # top: blue bonnet with a darker spine, gunmetal roof and engine cover,
     # a dark band of glass over the engine
@@ -780,7 +780,7 @@ def paint_bellatrix(sk):
     for i in range(22):
         x = -0.76 + i * 0.072
         sk.end_box(False, x, x + 0.012, 0.35, 0.67, rgb(0.14, 0.14, 0.16))
-    sk.text("BELLATRIX", sk.px("rear", (0, 0, 0.73)), 7, silver, bold=True)
+    sk.text("BONGATTI", sk.px("rear", (0, 0, 0.73)), 7, silver, bold=True)
     sk.end_box(False, -1.0, 1.0, 0.0, 0.3, mesh)
 
     finish(sk, wheels=(1.4, -1.32))
