@@ -171,6 +171,7 @@ func _build_wheels() -> void:
 	var puff := TexGen.puff()
 	var wl := Cars.wheels(spec)
 	var pos := Cars.wheel_positions(spec)
+	var modelled := model.take_wheels()
 	for i in 4:
 		var w := Wheel.new()
 		w.pos = pos[i]
@@ -183,7 +184,9 @@ func _build_wheels() -> void:
 		# small tyres sit lower than the physics wheel so they still touch the road
 		w.spinner.position.y = w.radius - WHEEL_RADIUS
 		w.pivot.add_child(w.spinner)
-		if not model.is_tank():
+		if not modelled.is_empty():
+			w.spinner.add_child(modelled[i])
+		elif not model.is_tank():
 			w.spinner.add_child(CarModel.make_wheel(w.radius, wl["wf"] if w.front else wl["wr"], spec["rims"]))
 		w.fx = _make_particles(puff, 40, 0.9)
 		add_child(w.fx)

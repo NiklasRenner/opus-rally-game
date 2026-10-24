@@ -31,8 +31,10 @@ var _head: Node3D
 var _steering: Node3D
 # tank only: animated bits
 var _turret: Node3D
+var _gun: Node3D  # mesh tanks: mantlet, kept level by the stabiliser
 var _track_mat: StandardMaterial3D
 var _road_wheels: Array[Node3D] = []
+var _wheel_r: Array[float] = []
 
 static var _wind := 0.0
 
@@ -44,13 +46,16 @@ func build() -> void:
 	_body_mat.metallic_specular = 0.75
 	_head = null
 	_steering = null
+	_gun = null
+	_road_wheels.clear()
+	_wheel_r.clear()
+	if spec.has("mesh"):
+		_build_mesh()
+		return
 	if kind() == "kart":
 		_build_kart()
 		return
 	_build_shell()
-	if is_tank():
-		_build_tank()
-		return
 	if kind() == "f1":
 		_build_f1()
 		return
@@ -553,8 +558,8 @@ static func make_wheel(radius: float, width: float, rim_color: Color, override: 
 
 ## Wheels for cars that don't drive (the ghost, the menu turntable).
 func add_display_wheels(override: Material = null) -> void:
-	if is_tank():
-		return  # tracks and road wheels are part of the model
+	if spec.has("mesh"):
+		return  # wheels, tracks and road wheels are part of the model
 	var wl := Cars.wheels(spec)
 	var pos := Cars.wheel_positions(spec)
 	for i in 4:
@@ -566,15 +571,20 @@ func add_display_wheels(override: Material = null) -> void:
 
 # --------------------------------------------------------------------------- damage
 
-func _add_deformable(parent: Node3D, verts: PackedVector3Array, colors: PackedColorArray, pos: Vector3) -> MeshInstance3D:
+## A dentable triangle soup. Textured soups pass their uvs and material; the
+## vertex colours then tint the texture (white, scuffed darker by dents).
+func _add_deformable(parent: Node3D, verts: PackedVector3Array, colors: PackedColorArray, pos: Vector3,
+		uvs := PackedVector2Array(), mat: Material = null) -> MeshInstance3D:
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
+	if not uvs.is_empty():
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
 	var mi := MeshInstance3D.new()
 	mi.mesh = ArrayMesh.new()
 	mi.position = pos
 	parent.add_child(mi)
 	var d := {"mi": mi, "arrays": arrays, "base": verts.duplicate(), "verts": verts, "colors": colors,
-		"detached": false}
+		"detached": false, "mat": mat if mat else _body_mat}
 	_deformables.append(d)
 	_rebuild(d)
 	return mi
@@ -633,7 +643,7 @@ func _rebuild(d: Dictionary) -> void:
 	var mesh: ArrayMesh = mi.mesh
 	mesh.clear_surfaces()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, _body_mat)
+	mesh.surface_set_material(0, d["mat"])
 
 
 ## Push vertices near `point` (global) along `dir` (global, pointing into the car).
@@ -707,6 +717,7 @@ func _detach(part_name: String, car_velocity: Vector3) -> void:
 	var bs := BoxShape3D.new()
 	bs.size = p["size"]
 	cs.shape = bs
+	cs.position = p.get("offset", Vector3.ZERO)
 	rb.add_child(cs)
 	# drop the part into the world (car's parent), not into the car
 	get_parent().get_parent().add_child(rb)
@@ -901,168 +912,183 @@ func _build_f1() -> void:
 			_rod(self, hub - Vector3(0, 0.06, 0), Vector3(inner, hy - 0.04, z + 0.15), 0.03, dark)
 
 
-# --------------------------------------------------------------------------- tank
+# --------------------------------------------------------------------------- modelled in Blender
 
-const TRACK_X := 0.82  # centre of each track, under the hull sides
-const TRACK_W := 0.46
-## Side profile of a track loop (z, y), wound round the idler and sprocket.
-const TRACK_LOOP := [Vector2(-1.6, -0.71), Vector2(1.6, -0.71), Vector2(1.98, -0.46), Vector2(1.86, -0.24),
-	Vector2(-1.86, -0.24), Vector2(-2.06, -0.44)]
-const LINK := 0.22  # track link length in metres (one texture repeat)
+const MESH_Y := -0.72  # ground level in car space; the Blender models sit on their origin
+const LINK := 0.22  # tank track link length in metres (one texture repeat)
+## Rolling radius of a tank's running gear, by node name prefix.
+const SPIN_R := {"RoadWheel_": 0.24, "Sprocket_": 0.25, "Idler_": 0.21, "ReturnRoller_": 0.065}
+## Rally cars: what dents and what falls off unless the spec says otherwise.
+const CAR_DENTS := ["Body", "Bumper_F", "Bumper_R"]
+const CAR_PARTS := [["Bumper_F", "front", 0.3], ["Bumper_R", "rear", 0.35], ["Spoiler", "rear", 0.55],
+	["LightPod", "front", 0.2], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]]
+const WHEEL_NODES := ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]  # same order as Cars.wheel_positions
+
+## Set once the car has taken the model's wheels onto its suspension, so a
+## rebuilt (repaired) model drops its own copies.
+var _wheels_taken := false
 
 
-## Hull is the lofted shell; this adds tracks, road wheels, turret and gun.
-func _build_tank() -> void:
-	var base: Color = _livery("base")
-	var dark := TexGen.flat_material(Color(0.08, 0.08, 0.08), 0.9)
-	_track_mat = TexGen.material(TexGen.track_links(), 0.95)
-	var wheel_mat := TexGen.flat_material(base.darkened(0.15), 0.7)
-	var hub_mat := TexGen.flat_material(Color(0.12, 0.12, 0.1), 0.6)
-	_road_wheels.clear()
+## A vehicle modelled in Blender (art/): imported, painted with procedural
+## textures (by material name, the part before any "."), its panels made
+## dentable and its bolt-ons registered as parts that can be knocked off.
+func _build_mesh() -> void:
+	var root: Node3D = (load(spec["mesh"]) as PackedScene).instantiate()
+	root.position.y = MESH_Y
+	add_child(root)
+	var mats := _tank_materials() if is_tank() else _car_materials()
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = (mi as MeshInstance3D).mesh
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			var key := m.resource_name.get_slice(".", 0) if m else ""
+			if mats.has(key):
+				(mi as MeshInstance3D).set_surface_override_material(s, mats[key])
+	for n in spec.get("dents", CAR_DENTS):
+		var node := root.find_child(n, true, false)
+		if node:
+			_make_dentable(node)
+	for p in spec.get("parts", CAR_PARTS):
+		var node := root.find_child(p[0], true, false)
+		if node:
+			_add_mesh_part(node, p[1], p[2])
+	if _wheels_taken:
+		for n in WHEEL_NODES:
+			var w := root.find_child(n, true, false)
+			if w:
+				w.free()
+	if not is_tank():
+		return
+	_turret = root.find_child("Turret", true, false)
+	_gun = root.find_child("GunMantlet", true, false)
+	for node in root.find_children("*", "Node3D", true, false):
+		for prefix in SPIN_R:
+			if String(node.name).begins_with(prefix):
+				_road_wheels.append(node)
+				_wheel_r.append(SPIN_R[prefix])
+	_build_mesh_tank_decals(root)
+
+
+func _car_materials() -> Dictionary:
+	# the painted skin covers body and glass alike
+	var skin: Texture2D = load(spec["skin"])
+	var glass := _tex_mat(skin, 0.08, Color.WHITE)
+	glass.metallic_specular = 0.9
+	var chrome := TexGen.flat_material(Color(0.75, 0.75, 0.78), 0.2)
+	chrome.metallic = 0.8
+	return {
+		"Livery": _tex_mat(skin, 0.3, Color.WHITE),
+		"Glass": glass,
+		"Trim": TexGen.flat_material(Color(0.07, 0.07, 0.08), 0.7),
+		"Chrome": chrome,
+		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
+		"Flap": TexGen.flat_material(spec["flaps"], 0.9),
+		"Tyre": TexGen.material(TexGen.tread(), 0.95),
+		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5)), 0.4),
+	}
+
+
+func _tank_materials() -> Dictionary:
+	_track_mat = _tex_mat(TexGen.track_links(), 0.95, Color.WHITE)
+	return {
+		"Paint_Green": _tex_mat(TexGen.camo(), 0.85, Color.WHITE),
+		"Paint_DarkGreen": _tex_mat(TexGen.camo(), 0.9, Color(0.6, 0.6, 0.6)),
+		"DarkMetal": TexGen.flat_material(Color(0.07, 0.07, 0.07), 0.6),
+		"Rubber": TexGen.flat_material(Color(0.05, 0.05, 0.05), 0.95),
+		"Track": _track_mat,
+		"Glass": TexGen.flat_material(Color(0.08, 0.16, 0.2), 0.1),
+		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
+		"TailLight": TexGen.flat_material(Color(0.8, 0.08, 0.05), 0.3, true),
+		"Canvas": TexGen.flat_material(Color(0.3, 0.27, 0.18), 1.0),
+	}
+
+
+## The model's own wheels (FL, FR, RL, RR), taken out to ride on the car's
+## suspension. Empty for models without wheels.
+func take_wheels() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if not spec.has("mesh"):
+		return out
+	for n in WHEEL_NODES:
+		var w: Node3D = find_child(n, true, false)
+		if w == null:
+			return []
+		out.append(w)
+	for w in out:
+		w.get_parent().remove_child(w)
+		w.position = Vector3.ZERO
+	_wheels_taken = true
+	return out
+
+
+## Crosses on the skirts and the back, tactical number on the turret bins.
+func _build_mesh_tank_decals(root: Node3D) -> void:
 	for s in [-1.0, 1.0]:
-		var mi := MeshInstance3D.new()
-		mi.mesh = _track_mesh(s * TRACK_X, dark)
-		add_child(mi)
-		# road wheels on the outside of the track, plus drive sprocket and idler
-		var xs: float = s * (TRACK_X + TRACK_W * 0.5 + 0.04)
-		var spots := [[-1.95, -0.44, 0.17], [1.86, -0.44, 0.19]]
-		for k in 5:
-			spots.append([lerpf(-1.35, 1.35, k / 4.0), -0.5, 0.21])
-		for sp in spots:
-			var wheel := Node3D.new()
-			wheel.position = Vector3(xs, sp[1], sp[0])
-			add_child(wheel)
-			for part in [[sp[2], 0.1, wheel_mat], [(sp[2] as float) * 0.45, 0.13, hub_mat]]:
-				var w := MeshInstance3D.new()
-				var cm := CylinderMesh.new()
-				cm.top_radius = part[0]
-				cm.bottom_radius = part[0]
-				cm.height = part[1]
-				cm.radial_segments = 8
-				cm.rings = 1
-				w.mesh = cm
-				w.material_override = part[2]
-				w.rotation.z = PI * 0.5
-				wheel.add_child(w)
-			_road_wheels.append(wheel)
-
-	# turret: tapered box that dents like the hull, on a ring that can swivel
-	_turret = Node3D.new()
-	_turret.name = "Turret"
-	_turret.position = Vector3(0, 0.5, 0.15)
-	add_child(_turret)
-	var verts := _box_soup(Vector3(1.3, 0.44, 1.7), Vector3i(3, 1, 4))
-	for i in verts.size():
-		var v := verts[i]
-		if v.y > 0.0:
-			v.x *= 0.78
-			v.z = v.z * 0.8 + 0.08
-		if v.z < -0.5:
-			v.x *= 0.85  # pointed front
-		verts[i] = v
-	var colors := PackedColorArray()
-	var flat: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.1]  # heights that read as "no glass"
-	for i in range(0, verts.size(), 3):
-		var c := (verts[i] + verts[i + 1] + verts[i + 2]) / 3.0
-		var col := _paint(5, c + _turret.position, Vector3.UP, flat)
-		colors.append_array([col, col, col])
-	_add_deformable(_turret, verts, colors, Vector3.ZERO)
-	_box(_turret, Vector3(0.5, 0.34, 0.24), Vector3(0, 0.0, -0.78), TexGen.flat_material(base.darkened(0.2), 0.7))
-	var cupola := MeshInstance3D.new()
-	var cy := CylinderMesh.new()
-	cy.top_radius = 0.22
-	cy.bottom_radius = 0.26
-	cy.height = 0.16
-	cy.radial_segments = 8
-	cupola.mesh = cy
-	cupola.material_override = TexGen.flat_material(base, 0.7)
-	cupola.position = Vector3(0.28, 0.3, 0.35)
-	_turret.add_child(cupola)
-	_add_part("gun", "front", 0.6, Vector3(0, 0.02, -1.85), Vector3(0.14, 0.14, 2.1), base.darkened(0.25),
-		Vector3i(1, 1, 6), _turret)
-	_box(_turret.get_node("gun"), Vector3(0.22, 0.22, 0.3), Vector3(0, 0, -1.0), TexGen.flat_material(base.darkened(0.35)))
-	for s in [-1.0, 1.0]:
-		var num := Label3D.new()
-		num.text = spec["number"]
-		num.font_size = 72
-		num.outline_size = 10
-		num.modulate = Color(0.95, 0.95, 0.9)
-		num.outline_modulate = Color(0.1, 0.1, 0.08)
-		num.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		num.rotation.y = PI * 0.5 * s
-		num.position = Vector3(s * 0.67, -0.08, 0.2)
-		_turret.add_child(num)
-
-	# bolt-ons that can be knocked off
-	_add_part("stowage", "rear", 0.35, Vector3(0, 0.2, 2.0), Vector3(1.3, 0.3, 0.28), Color(0.3, 0.26, 0.18),
-		Vector3i(3, 1, 1))
-	for s in [-1.0, 1.0]:
-		_add_part("fender_l" if s < 0 else "fender_r", "left" if s < 0 else "right", 0.45,
-			Vector3(s * 0.88, -0.18, -1.95), Vector3(0.5, 0.05, 0.5), base, Vector3i(1, 1, 1))
-		_lamp(self, 0.07, Vector3(s * 0.62, 0.12, -1.86), Color(1.0, 0.95, 0.75))
-	var ex := MeshInstance3D.new()
-	var em := CylinderMesh.new()
-	em.top_radius = 0.08
-	em.bottom_radius = 0.08
-	em.height = 0.3
-	em.radial_segments = 6
-	ex.mesh = em
-	ex.material_override = dark
-	ex.rotation.x = PI * 0.5
-	ex.position = Vector3(-0.6, 0.12, 2.2)
-	add_child(ex)
+		var bas := FACE_RIGHT if s > 0.0 else FACE_LEFT
+		var skirt: Node3D = root.find_child("SideSkirt_R" if s > 0.0 else "SideSkirt_L", true, false)
+		_cross(Vector2(0.3, 0.3), Vector3(s * 0.035, -0.19, 0.0), bas, skirt)
+		var num := _decal(TexGen.pixel_text(spec["number"], Color(0.92, 0.92, 0.86), Color(0.12, 0.15, 0.09)),
+			Vector2(0.42, -1), Vector3(s * 0.817, 0.22, 0.78), bas, false, _turret)
+		num.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_cross(Vector2(0.18, 0.18), Vector3(0, 0.16, 2.235), FACE_BACK, self)
 
 
-## One track: the loop profile extruded across the track width. Links run
-## along u, so scrolling the material's UV offset moves them round the loop.
-func _track_mesh(cx: float, side_mat: Material) -> ArrayMesh:
-	var x0 := cx - TRACK_W * 0.5
-	var x1 := cx + TRACK_W * 0.5
-	var mesh := ArrayMesh.new()
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var n := TRACK_LOOP.size()
-	var centre := Vector2.ZERO
-	for p in TRACK_LOOP:
-		centre += p / n
-	var u := 0.0
-	for i in n:
-		var a: Vector2 = TRACK_LOOP[i]
-		var b: Vector2 = TRACK_LOOP[(i + 1) % n]
-		var u1 := u + a.distance_to(b) / LINK
-		var mid := (a + b) * 0.5 - centre
-		var out := Vector3(0, mid.y, mid.x).normalized()
-		_tri_uv(st, [Vector3(x0, a.y, a.x), Vector3(x1, a.y, a.x), Vector3(x1, b.y, b.x)],
-			[Vector2(u, 0), Vector2(u, 1), Vector2(u1, 1)], out)
-		_tri_uv(st, [Vector3(x0, a.y, a.x), Vector3(x1, b.y, b.x), Vector3(x0, b.y, b.x)],
-			[Vector2(u, 0), Vector2(u1, 1), Vector2(u1, 0)], out)
-		u = u1
-	st.set_material(_track_mat)
-	st.commit(mesh)
-	st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for x in [x0, x1]:
-		var nrm := Vector3(signf(x - cx), 0, 0)
-		var c3 := Vector3(x, centre.y, centre.x)
-		for i in n:
-			var a: Vector2 = TRACK_LOOP[i]
-			var b: Vector2 = TRACK_LOOP[(i + 1) % n]
-			_tri_uv(st, [c3, Vector3(x, a.y, a.x), Vector3(x, b.y, b.x)], [Vector2.ZERO, Vector2.ZERO, Vector2.ZERO], nrm)
-	st.set_material(side_mat)
-	st.commit(mesh)
-	return mesh
+func _cross(size: Vector2, pos: Vector3, bas: Basis, parent: Node3D) -> void:
+	var mi := _decal(TexGen.tank_cross(), size, pos, bas, false, parent)
+	(mi.material_override as StandardMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 
 
-## Adds a triangle wound so its front face points along `n`.
-func _tri_uv(st: SurfaceTool, v: Array, uv: Array, n: Vector3) -> void:
-	var order := [0, 1, 2]
-	var cr := (v[1] - v[0] as Vector3).cross(v[2] - v[0])
-	if cr.dot(n) * winding() < 0.0:
-		order = [0, 2, 1]
-	for k in order:
-		st.set_normal(n)
-		st.set_uv(uv[k])
-		st.add_vertex(v[k])
+## Nearest-filtered texture that takes the dent scuffs (vertex colour) as a tint.
+func _tex_mat(tex: Texture2D, roughness: float, tint: Color) -> StandardMaterial3D:
+	var m := TexGen.material(tex, roughness, tint)
+	m.vertex_color_use_as_albedo = true
+	return m
+
+
+## Swap an imported mesh for one dentable soup per surface, keeping its children.
+func _make_dentable(mi: MeshInstance3D) -> void:
+	var mesh := mi.mesh
+	for s in mesh.get_surface_count():
+		var arr := mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX] if arr[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		if idx.is_empty():
+			idx.resize(v.size())
+			for i in v.size():
+				idx[i] = i
+		var verts := PackedVector3Array()
+		var uvs := PackedVector2Array()
+		for i in idx:
+			verts.append(v[i])
+			uvs.append(uv[i])
+		var colors := PackedColorArray()
+		colors.resize(verts.size())
+		colors.fill(Color.WHITE)
+		var mat := mi.get_surface_override_material(s)
+		_add_deformable(mi, verts, colors, Vector3.ZERO, uvs, mat if mat else mesh.surface_get_material(s))
+	mi.mesh = null
+
+
+## Register an imported node as a bolt-on, with a collision box round its meshes.
+func _add_mesh_part(node: Node3D, zone: String, threshold: float) -> void:
+	var box := AABB()
+	var first := true
+	var list: Array = [node]
+	list.append_array(node.find_children("*", "MeshInstance3D", true, false))
+	for mi in list:
+		if not mi is MeshInstance3D or (mi as MeshInstance3D).mesh == null:
+			continue
+		var xf := Transform3D.IDENTITY
+		var n: Node3D = mi
+		while n != node:
+			xf = n.transform * xf
+			n = n.get_parent()
+		var b: AABB = xf * (mi as MeshInstance3D).mesh.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	_parts[String(node.name)] = {"node": node, "zone": zone, "threshold": threshold,
+		"size": box.size.max(Vector3(0.05, 0.05, 0.05)), "offset": box.get_center(), "detached": false}
 
 
 ## Per-frame animation: the driver looks into the corner and turns the wheel
@@ -1075,7 +1101,13 @@ func animate(delta: float, forward_speed: float, steer: float) -> void:
 		_steering.rotation.z = -steer * 1.4
 	if not is_tank() or _turret == null:
 		return
-	_track_mat.uv1_offset.x = fmod(_track_mat.uv1_offset.x - forward_speed * delta / LINK, 1.0)
-	for w in _road_wheels:
-		w.rotation.x -= forward_speed * delta / 0.21
+	_track_mat.uv1_offset.x = fmod(_track_mat.uv1_offset.x + forward_speed * delta / LINK, 1.0)
+	for i in _road_wheels.size():
+		_road_wheels[i].rotation.x -= forward_speed * delta / _wheel_r[i]
 	_turret.rotation.y = lerpf(_turret.rotation.y, -steer * 0.35, clampf(delta * 3.0, 0.0, 1.0))
+	if _gun:
+		# stabiliser: hold the barrel level while the hull pitches, within the
+		# gun's elevation limits, with a little lag so bumps still show
+		var hull_pitch := asin(clampf(-global_basis.z.normalized().y, -1.0, 1.0))
+		var aim := clampf(-hull_pitch, -0.12, 0.3)
+		_gun.rotation.x = lerpf(_gun.rotation.x, aim, clampf(delta * 5.0, 0.0, 1.0))
