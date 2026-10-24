@@ -2,6 +2,9 @@ extends Node3D
 ## The race scene. Builds the chosen map, car, camera and HUD in code and runs
 ## the race: countdown, laps, ghost recording and playback, finish, pause.
 
+# Hidden checkpoints are off until they have something to show them on the
+# road; meanwhile a lap only needs the car to have been half way round.
+const CHECKPOINTS := false
 const CHECKPOINT_SPACING := 200.0  # metres of road between hidden checkpoints
 const CHECKPOINT_MARGIN := TrackBuilder.VERGE + 4.0  # beyond the road edge, room to cut an apex
 const FINISH_MARGIN := 1.0  # beyond the road edge: the car has to go under the gantry
@@ -32,6 +35,7 @@ var _racing := false
 var _progress_index := 0
 var _gates := PackedInt32Array()  # road sample of each checkpoint in order, the finish line (0) last
 var _next_gate := 0
+var _halfway := false  # been half way round this lap, the rule while checkpoints are off
 var _last_pos := Vector3.ZERO
 var _message_timer := 0.0
 var _split_timer := 0.0
@@ -118,9 +122,10 @@ func _ready() -> void:
 	layer.add_child(overlay)
 	_progress_index = track.count() - 4
 	_last_pos = track.get_spawn_transform(_progress_index).origin
-	var gate_count := maxi(4, roundi(track.total_length / CHECKPOINT_SPACING))
-	for k in range(1, gate_count):
-		_gates.append(k * track.count() / gate_count)
+	if CHECKPOINTS:
+		var gate_count := maxi(4, roundi(track.total_length / CHECKPOINT_SPACING))
+		for k in range(1, gate_count):
+			_gates.append(k * track.count() / gate_count)
 	_gates.append(0)
 
 	look = RetroLook.new()
@@ -269,14 +274,18 @@ func _physics_process(delta: float) -> void:
 
 	var n := track.count()
 	var pos := car.global_position
+	var idx := track.nearest_index(pos, _progress_index)
+	if idx > n * 0.45 and idx < n * 0.55:
+		_halfway = true
 	# laps count only through every checkpoint in order and then the finish gate
-	if _through_gate(_gates[_next_gate], _last_pos, pos):
+	var gate := _gates[_next_gate]
+	if (CHECKPOINTS or _halfway) and _through_gate(gate, _last_pos, pos):
 		_next_gate += 1
 		if _next_gate == _gates.size():
 			_next_gate = 0
+			_halfway = false
 			_complete_lap()
 	_last_pos = pos
-	var idx := track.nearest_index(pos, _progress_index)
 	_progress_index = idx
 	progress_fraction = float(idx) / n
 
@@ -310,6 +319,8 @@ func _through_gate(i: int, a: Vector3, b: Vector3) -> bool:
 ## while it is still between the last checkpoint passed and the next one (or
 ## behind them).
 func _gate_missed(idx: int) -> int:
+	if _gates.size() < 2:
+		return -1
 	var n := track.count()
 	var nxt := _gates[_next_gate]
 	var prev := _gates[_next_gate - 1] if _next_gate > 0 else _gates[_gates.size() - 1]
