@@ -181,7 +181,7 @@ const RETIRED := {"kaze": "KAZE GT4", "falke": "FALKE RS", "cuneo": "CUNEO STRAD
 const CLASSES := {
 	"S": {"name": "FORMULA", "col": Color(0.95, 0.15, 0.1)},
 	"A": {"name": "RALLY", "col": Color(1.0, 0.84, 0.1)},
-	"X": {"name": "ARMOUR", "col": Color(0.45, 0.75, 0.3)},
+	"X": {"name": "EXTREME", "col": Color(0.45, 0.75, 0.3)},
 }
 const DEFAULT_CLASS := "A"
 ## Classes of retired cars, for sorting their old records into the right table.
