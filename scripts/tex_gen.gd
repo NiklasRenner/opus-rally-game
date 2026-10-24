@@ -91,7 +91,9 @@ static func road(kind: String) -> ImageTexture:
 		"mud":
 			_noise_fill(img, Color(0.36, 0.25, 0.15), 0.05, rng)
 			_speckle(img, [Color(0.46, 0.34, 0.20), Color(0.26, 0.18, 0.10)], 0.2, rng)
-			# churned wheel tracks and a few shiny puddles
+			# churned wheel tracks and a few puddles: dark water sunk into the
+			# mud, blending in over a pixel or two, with a dull sky sheen on
+			# the far side
 			for y in 64:
 				for x in range(13, 22) + range(42, 51):
 					img.set_pixel(x, y, img.get_pixel(x, y).darkened(0.22))
@@ -101,8 +103,11 @@ static func road(kind: String) -> ImageTexture:
 				for y in 64:
 					for x in 64:
 						var d := Vector2(x - c.x, wrapf(y - c.y, -32, 32))
-						if (d * Vector2(1.0, 0.6)).length() < r:
-							img.set_pixel(x, y, Color(0.42, 0.40, 0.36) if (x + y) % 5 else Color(0.62, 0.62, 0.58))
+						var e := (d * Vector2(1.0, 0.6)).length() / r
+						if e < 1.25:
+							var water := Color(0.22, 0.20, 0.17).lerp(Color(0.42, 0.43, 0.44), clampf(-d.y / (r * 1.6), 0.0, 1.0) * 0.9)
+							var k := clampf((1.25 - e) / 0.45, 0.0, 1.0)
+							img.set_pixel(x, y, img.get_pixel(x, y).lerp(water, k * 0.85))
 			for y in 64:
 				for x in [0, 1, 2, 61, 62, 63]:
 					img.set_pixel(x, y, Color(0.22, 0.36, 0.12).lerp(img.get_pixel(x, y), rng.randf() * 0.5))
