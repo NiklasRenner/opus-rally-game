@@ -60,14 +60,6 @@ func track(wheel: int, kind: String, pos: Vector3, normal: Vector3, strength: fl
 	_last[wheel]["pos"] = pos
 
 
-func clear() -> void:
-	for kind in _layers:
-		var layer: Dictionary = _layers[kind]
-		(layer["mm"] as MultiMesh).visible_instance_count = 0
-		layer["next"] = 0
-	_last.clear()
-
-
 ## One unit-long segment along local Z. Ruts and mud get a dark groove with
 ## lighter raised ridges either side so they read as dug into the road.
 func _strip_mesh(kind: String, width: float) -> ArrayMesh:

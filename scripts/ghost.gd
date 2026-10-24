@@ -48,8 +48,6 @@ func _apply_ghost_material(node: Node, mat: Material) -> void:
 		if c is MeshInstance3D:
 			(c as MeshInstance3D).material_override = mat
 			(c as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		elif c is Label3D:
-			c.queue_free()  # door numbers would show through
 		_apply_ghost_material(c, mat)
 
 

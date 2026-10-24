@@ -31,7 +31,6 @@ const YAW_ASSIST := 5.0
 const DRIFT_CAP := 0.8  # body slip angle (rad) where spin protection kicks in
 
 
-
 class Wheel:
 	var pos: Vector3
 	var radius := WHEEL_RADIUS  # visual tyre radius (physics always uses WHEEL_RADIUS)
@@ -86,7 +85,7 @@ var _accel_long := 0.0
 var _load_shift := 0.0  # + = weight on the front (braking / lifting)
 var body_slip := 0.0  # angle between heading and travel, for HUD / tests
 var _upside_down_time := 0.0
-var _track_skid := 0.0  # tank: how much the tracks are skidding sideways to pivot
+var track_skid := 0.0  # tank: how much the tracks are skidding sideways to pivot
 var _m := 1.0  # mass / reference mass: scales chassis forces so every vehicle rides alike
 
 var _pending_place: Variant = null  # Transform3D applied inside _integrate_forces
@@ -160,9 +159,7 @@ static func top_speed(spec: Dictionary) -> float:
 		for ratio in GEAR_RATIOS:
 			var rpm: float = v / WHEEL_RADIUS * ratio * FINAL_DRIVE * gearing * 60.0 / TAU
 			if rpm < REDLINE:
-				var x := clampf((rpm - IDLE_RPM) / (REDLINE - IDLE_RPM), 0.0, 1.0)
-				var torque := PEAK_TORQUE * (0.62 + 0.38 * sin(x * PI * 0.9 + 0.25))
-				pull = maxf(pull, torque * ratio * FINAL_DRIVE * gearing / WHEEL_RADIUS * st["power"])
+				pull = maxf(pull, torque_at(rpm) * ratio * FINAL_DRIVE * gearing / WHEEL_RADIUS * st["power"])
 		var resist: float = AERO_DRAG * st.get("drag", 1.0) * v * v + 0.1 * mass * v \
 			+ 0.012 * (mass * 9.81 + down * v * v) * (1.0 + v / 20.0)
 		if pull < resist:
@@ -237,7 +234,6 @@ func _build_fx() -> void:
 	_smoke = _make_particles(TexGen.puff(), 30, 1.6)
 	_smoke.color = Color(0.2, 0.2, 0.22, 0.8)
 	_smoke.position = Vector3(0, 0.45, -1.4)
-	_smoke.local_coords = false
 	add_child(_smoke)
 	_sparks = CPUParticles3D.new()
 	_sparks.amount = 24
@@ -312,7 +308,7 @@ func _physics_process(delta: float) -> void:
 	var power_mult: float = 1.0 - damage["front"] * 0.45 - (damage["left"] + damage["right"] + damage["rear"]) * 0.08
 	power_mult = maxf(power_mult, 0.25) * (spec["stats"]["power"] as float)
 	var ratio: float = -REVERSE_RATIO if gear == -1 else GEAR_RATIOS[gear - 1]
-	var engine_force := _torque(rpm) * ratio * FINAL_DRIVE * stat("gearing") / WHEEL_RADIUS * drive_input * power_mult
+	var engine_force := torque_at(rpm) * ratio * FINAL_DRIVE * stat("gearing") / WHEEL_RADIUS * drive_input * power_mult
 	if shift_timer > 0.0 or rpm >= REDLINE:
 		engine_force *= 0.15
 	if gear == -1:
@@ -326,7 +322,7 @@ func _physics_process(delta: float) -> void:
 	steer_angle = -steer * max_steer + pull
 
 	var pivot_fade := 1.0 - clampf(absf(forward_speed) / 9.0, 0.0, 1.0)
-	_track_skid = absf(steer) * pivot_fade if stat("pivot", 0.0) > 0.0 else 0.0
+	track_skid = absf(steer) * pivot_fade if stat("pivot", 0.0) > 0.0 else 0.0
 	var sliding := 0
 	var grounded := 0
 	var surf_votes := {}
@@ -415,7 +411,8 @@ func _skid_steer(b3: Basis) -> void:
 	apply_torque(up * (target - yaw) * YAW_INERTIA * _m * 10.0 * stat("pivot", 0.0) * blend)
 
 
-func _torque(r: float) -> float:
+## Engine torque curve (Nm) at an rpm.
+static func torque_at(r: float) -> float:
 	var x := clampf((r - IDLE_RPM) / (REDLINE - IDLE_RPM), 0.0, 1.0)
 	return PEAK_TORQUE * (0.62 + 0.38 * sin(x * PI * 0.9 + 0.25))
 
@@ -522,7 +519,7 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 
 	# weight transfer changes how much grip each axle has
 	var axle_grip := 1.0 + (_load_shift if w.front else -_load_shift)
-	var lat_grip := axle_grip * (1.0 - 0.8 * _track_skid)
+	var lat_grip := axle_grip * (1.0 - 0.8 * track_skid)
 	if handbrake and not w.front:
 		lat_grip *= 0.2
 

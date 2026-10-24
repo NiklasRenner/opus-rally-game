@@ -27,11 +27,6 @@ const SHIRTS := [Color(0.9, 0.15, 0.1), Color(0.1, 0.3, 0.85), Color(1.0, 0.85, 
 const SKINS := [Color(0.95, 0.78, 0.62), Color(0.82, 0.62, 0.45), Color(0.55, 0.38, 0.25), Color(0.98, 0.84, 0.72)]
 const PANTS := [Color(0.2, 0.22, 0.3), Color(0.15, 0.15, 0.15), Color(0.35, 0.3, 0.22), Color(0.3, 0.38, 0.6)]
 
-## Glyphs the decal font lacks.
-const EXTRA_GLYPHS := {
-	"/": "001001010100100", ":": "000010000010000", "'": "010010000000000", "\"": "101101000000000",
-}
-
 const FLAG_SHADER := "shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D tex : source_color, filter_nearest;
@@ -119,13 +114,8 @@ func _n() -> int:
 	return track.count()
 
 
-## Road frame at sample k (wrapped): origin on the centreline, -z along the
-## road, +x to the right.
 func _frame(k: int) -> Transform3D:
-	var i := wrapi(k, 0, _n())
-	var flat := track.tangents[i]
-	flat.y = 0.0
-	return Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), track.points[i])
+	return track.frame(k)
 
 
 func _hw(k: int) -> float:
@@ -201,28 +191,13 @@ func _tiled(tex: Texture2D, roughness: float, uv: Vector3, tint := Color.WHITE) 
 
 # --------------------------------------------------------------------------- pixel art
 
-static func _glyph(c: String) -> String:
-	if EXTRA_GLYPHS.has(c):
-		return EXTRA_GLYPHS[c]
-	return TexGen.FONT.get(c.to_upper(), TexGen.FONT[" "])
-
-
-static func _draw_text(img: Image, text: String, x0: int, y0: int, col: Color) -> void:
-	for i in text.length():
-		var g := _glyph(text[i])
-		for row in 5:
-			for c in 3:
-				if g[row * 3 + c] == "1":
-					img.set_pixel(x0 + i * 4 + c, y0 + row, col)
-
-
 ## Banner/board face: text centred on a coloured panel with edge stripes, sized
 ## to `aspect` so the pixels stay square. Optional chequered ends, and holes
 ## torn in it for the wasteland.
 static func _panel(text: String, aspect: float, fg: Color, bg: Color, edge: Color, h := 11, chequer := false,
 		torn := 0) -> ImageTexture:
 	var key := "panel|%s|%.2f|%s|%s|%s|%d|%s|%d" % [text, aspect, fg.to_html(), bg.to_html(), edge.to_html(), h, chequer, torn]
-	return TexGen._cached(key, _make_panel.bind(text, aspect, fg, bg, edge, h, chequer, torn))
+	return TexGen.cached(key, _make_panel.bind(text, aspect, fg, bg, edge, h, chequer, torn))
 
 
 static func _make_panel(text: String, aspect: float, fg: Color, bg: Color, edge: Color, h: int, chequer: bool,
@@ -239,7 +214,7 @@ static func _make_panel(text: String, aspect: float, fg: Color, bg: Color, edge:
 				var c := Color(0.95, 0.95, 0.95) if (x / 2 + (y - 1) / 2) % 2 == 0 else Color(0.05, 0.05, 0.05)
 				img.set_pixel(x, y, c)
 				img.set_pixel(w - 1 - x, y, c)
-	_draw_text(img, text, (w - (text.length() * 4 - 1)) / 2, (h - 5) / 2, fg)
+	TexGen.draw_text(img, text, (w - (text.length() * 4 - 1)) / 2, (h - 5) / 2, fg)
 	if torn > 0:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = torn
@@ -264,7 +239,7 @@ static func _make_panel(text: String, aspect: float, fg: Color, bg: Color, edge:
 ## Small flag designs (10 x 6), "torn" ones frayed at the fly end.
 static func _flag_tex(kind: int, a: Color, b: Color, c: Color, torn := false) -> ImageTexture:
 	var key := "flag|%d|%s|%s|%s|%s" % [kind, a.to_html(), b.to_html(), c.to_html(), torn]
-	return TexGen._cached(key, _make_flag.bind(kind, a, b, c, torn))
+	return TexGen.cached(key, _make_flag.bind(kind, a, b, c, torn))
 
 
 static func _make_flag(kind: int, a: Color, b: Color, c: Color, torn: bool) -> ImageTexture:
@@ -298,8 +273,8 @@ static func paint_led(img: Image, text: String) -> void:
 	var y0 := (img.get_height() - 5) / 2
 	for i in text.length():
 		if text[i] >= "0" and text[i] <= "9":
-			_draw_text(img, "8", x0 + i * 4, y0, Color(0.22, 0.1, 0.03))
-		_draw_text(img, text[i], x0 + i * 4, y0, Color(1.0, 0.62, 0.1))
+			TexGen.draw_text(img, "8", x0 + i * 4, y0, Color(0.22, 0.1, 0.03))
+		TexGen.draw_text(img, text[i], x0 + i * 4, y0, Color(1.0, 0.62, 0.1))
 
 
 # --------------------------------------------------------------------------- line and gantry
@@ -412,7 +387,7 @@ func _gantry() -> void:
 
 ## A pixel truss panel: frame and X bracing, see-through between.
 static func _truss_tex() -> ImageTexture:
-	return TexGen._cached("truss", _make_truss)
+	return TexGen.cached("truss", _make_truss)
 
 
 static func _make_truss() -> ImageTexture:
@@ -460,7 +435,7 @@ func _gantry_feet(g: Node3D, tx: float) -> void:
 					drum.height = 0.9
 					drum.radial_segments = 8
 					var mi := _mesh(drum, TexGen.material(TexGen.barrel(), 0.8), Transform3D(Basis.IDENTITY, at + Vector3(0, 0.45, 0)), g)
-					track._glow_lid(mi)
+					track.glow_lid(mi)
 					_solid(g.transform * Transform3D(Basis.IDENTITY, at + Vector3(0, 0.45, 0)), Vector3(0.6, 0.9, 0.6))
 				"jungle":
 					if z < 0.0:
@@ -495,9 +470,7 @@ func _flag(base: Vector3, s: float, tex: Texture2D, pole_h: float) -> void:
 	pm.orientation = PlaneMesh.FACE_Z
 	pm.size = Vector2(1.5, 0.9)
 	pm.subdivide_width = 5
-	var flat := track.tangents[0]
-	flat.y = 0.0
-	var bas := Basis.looking_at(flat.normalized(), Vector3.UP)
+	var bas := _frame(0).basis
 	if s < 0.0:
 		bas = bas.rotated(Vector3.UP, PI)
 	_mesh(pm, mat, Transform3D(bas, base + Vector3(0, pole_h - 0.5, 0) + bas.x * 0.75))
@@ -731,10 +704,7 @@ func _box(xf: Transform3D, at: Vector3, size: Vector3, col: Color, uv2: Vector2)
 
 
 func _crowd_tri(v: Array, n: Vector3, col: Color, uv2: Vector2) -> void:
-	var order := [0, 1, 2]
-	var cr := (v[1] - v[0] as Vector3).cross(v[2] - v[0])
-	if cr.dot(n) * CarModel.winding() < 0.0:
-		order = [0, 2, 1]
+	var order := [0, 2, 1] if Geo.flipped(v[0], v[1], v[2], n) else [0, 1, 2]
 	for k in order:
 		_crowd.set_normal(n)
 		_crowd.set_color(col)

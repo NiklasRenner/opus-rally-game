@@ -15,10 +15,10 @@ var _map_colors := PackedColorArray()
 var _map_center := Vector2.ZERO
 var _map_scale := 1.0
 
-const YELLOW := Color(1.0, 0.84, 0.1)
-const RED := Color(0.95, 0.15, 0.1)
-const GREEN := Color(0.3, 0.95, 0.2)
-const INK := Color(0.02, 0.02, 0.08)
+const YELLOW := RetroUI.YELLOW
+const RED := RetroUI.RED
+const GREEN := RetroUI.GREEN
+const INK := RetroUI.INK
 
 
 func _ready() -> void:
@@ -45,16 +45,16 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 
-func _text(pos: Vector2, s: String, size: int, col: Color, outline := 4, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
-	draw_string_outline(_font, pos, s, align, width, size, outline, INK)
-	draw_string(_font, pos, s, align, width, size, col)
+## Outlined text. Unlike RetroUI.text, outline 0 still draws a hairline edge
+## (the lap and gear digits rely on it).
+func _text(pos: Vector2, s: String, size: int, col: Color, outline := 4) -> void:
+	draw_string_outline(_font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, outline, INK)
+	draw_string(_font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
 
 
+## Fake italic via a skewed transform, like the chunky arcade digits.
 func _italic(pos: Vector2, s: String, size: int, col: Color, outline := 5) -> void:
-	# fake italic via a skewed transform, like the chunky arcade digits
-	draw_set_transform_matrix(Transform2D(Vector2(1, 0), Vector2(-0.22, 1), pos))
-	_text(Vector2.ZERO, s, size, col, outline)
-	draw_set_transform_matrix(Transform2D.IDENTITY)
+	RetroUI.italic(self, pos, s, size, col, outline)
 
 
 static func fmt_time(t: float) -> String:
@@ -112,7 +112,6 @@ func _draw() -> void:
 	var sd := Surfaces.get_surface(car.surface)
 	_text(Vector2(436, 345), sd["label"], 14, sd["hud"], 3)
 	_text(Vector2(436, 240), "CAM  " + cam.mode_name(), 10, Color(0.8, 0.85, 1.0), 3)
-
 
 
 func _draw_tach(c: Vector2) -> void:

@@ -184,7 +184,7 @@ func _convert_node(node: Node) -> void:
 		return
 	var gi := node as GeometryInstance3D
 	if gi.material_override:
-		_swap(gi, "override", 0, gi.material_override)
+		_swap(gi, gi, "override", 0, gi.material_override)
 		return
 	var mesh: Mesh = null
 	if gi is MeshInstance3D:
@@ -198,13 +198,16 @@ func _convert_node(node: Node) -> void:
 			var mi := gi as MeshInstance3D
 			var m := mi.get_surface_override_material(s)
 			if m:
-				_swap(mi, "surface", s, m)
+				_swap(gi, mi, "surface", s, m)
 				continue
-		_swap_mesh(gi, mesh, s)
+		# a material that lives on the mesh resource itself
+		_swap(gi, mesh, "mesh", s, mesh.surface_get_material(s))
 
 
-func _swap(obj: Object, slot: String, idx: int, mat: Material) -> void:
-	var on_car := car != null and is_instance_valid(car) and car.is_ancestor_of(obj as Node)
+## Put the shader copy of `mat` in `obj`'s slot (material override, surface
+## override or the mesh's own surface) and remember the original.
+func _swap(gi: GeometryInstance3D, obj: Object, slot: String, idx: int, mat: Material) -> void:
+	var on_car := car != null and is_instance_valid(car) and car.is_ancestor_of(gi)
 	var copy := _copy(mat, on_car)
 	if copy == null:
 		return
@@ -216,17 +219,6 @@ func _swap(obj: Object, slot: String, idx: int, mat: Material) -> void:
 		"mesh":
 			(obj as Mesh).surface_set_material(idx, copy)
 	_swaps.append([obj, slot, idx, mat])
-
-
-## A material that lives on the mesh resource itself.
-func _swap_mesh(gi: GeometryInstance3D, mesh: Mesh, s: int) -> void:
-	var mat := mesh.surface_get_material(s)
-	var on_car := car != null and is_instance_valid(car) and car.is_ancestor_of(gi)
-	var copy := _copy(mat, on_car)
-	if copy == null:
-		return
-	mesh.surface_set_material(s, copy)
-	_swaps.append([mesh, "mesh", s, mat])
 
 
 func _restore() -> void:
