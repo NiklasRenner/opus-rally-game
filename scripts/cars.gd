@@ -184,11 +184,12 @@ const LIST := [
 		"helmet": Color(0.1, 0.1, 0.12),
 		"helmet_pos": Vector3(0, -0.02, 0.05),
 		"dents": ["Body", "Sidepod_L", "Sidepod_R"],
-		"parts": [["FrontWing", "front", 0.3], ["RearWing", "rear", 0.5], ["Sidepod_L", "left", 0.45],
-			["Sidepod_R", "right", 0.45], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]],
+		# carbon fibre: wings snap off at a touch, sidepods soon after
+		"parts": [["FrontWing", "front", 0.12], ["RearWing", "rear", 0.2], ["Sidepod_L", "left", 0.3],
+			["Sidepod_R", "right", 0.3], ["Mirror_L", "left", 0.1], ["Mirror_R", "right", 0.1]],
 		"wheels": {"x": 0.84, "zf": -1.72, "zr": 1.42, "rf": 0.32, "rr": 0.35, "wf": 0.3, "wr": 0.42},
 		"stats": {"power": 2.0, "grip": 1.1, "steer": 0.95, "mass": 800.0,
-			"gearing": 0.78, "drag": 0.7, "downforce": 3.5, "inertia": 0.85, "pitch": 1.45},
+			"gearing": 0.78, "drag": 0.7, "downforce": 3.5, "inertia": 0.85, "pitch": 1.45, "armour": 1.8},
 		"shapes": [[Vector3(2.0, 0.26, 4.7), Vector3(0, -0.30, -0.15)], [Vector3(0.7, 0.4, 1.2), Vector3(0, 0.0, 0.4)]],
 	},
 	{
