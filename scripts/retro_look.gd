@@ -102,6 +102,7 @@ var sky_colors: Array = [Color(0.3, 0.5, 0.9), Color(0.6, 0.78, 0.98), Color(0.4
 
 var _root: Node
 var _copies := {}  # [StandardMaterial3D, on the car] -> ShaderMaterial
+var _scrolling: Array = []  # [original, copy] for materials whose uv1_offset is animated (meta "scrolls")
 var _swaps: Array = []  # [object, slot, index, original material]
 var _modern := {}  # environment and sun settings to put back
 
@@ -130,6 +131,14 @@ func _exit_tree() -> void:
 	# meshes are cached across races (trees), so never leave them swapped
 	_restore()
 	RenderingServer.directional_soft_shadow_filter_set_quality(_modern.get("shadow_quality", 2))
+
+
+## Copies only take a snapshot of their material, so keep scrolling textures
+## (the tank's tracks) moving.
+func _process(_delta: float) -> void:
+	for pair in _scrolling:
+		if is_instance_valid(pair[0]):
+			(pair[1] as ShaderMaterial).set_shader_parameter("uv1_offset", (pair[0] as BaseMaterial3D).uv1_offset)
 
 
 func _on_node_added(node: Node) -> void:
@@ -277,6 +286,8 @@ func _copy(mat: Material, on_car: bool) -> ShaderMaterial:
 	sm.set_shader_parameter("softness", BAND_SOFTNESS)
 	sm.render_priority = m.render_priority
 	_copies[key] = sm
+	if m.has_meta("scrolls"):
+		_scrolling.append([m, sm])
 	return sm
 
 

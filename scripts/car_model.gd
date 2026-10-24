@@ -255,6 +255,7 @@ func _helmet(pos: Vector3, col: Color, r: float) -> void:
 
 const MESH_Y := -0.72  # ground level in car space; the Blender models sit on their origin
 const LINK := 0.22  # tank track link length in metres (one texture repeat)
+const ROLL_MAX := 5.0  # m/s: fastest the tracks and road wheels are drawn turning
 ## Rolling radius of a tank's running gear, by node name prefix.
 const SPIN_R := {"RoadWheel_": 0.24, "Sprocket_": 0.25, "Idler_": 0.21, "ReturnRoller_": 0.065}
 ## Rally cars: what dents and what falls off unless the spec says otherwise.
@@ -332,12 +333,15 @@ func _car_materials() -> Dictionary:
 
 func _tank_materials() -> Dictionary:
 	_track_mat = _tex_mat(TexGen.track_links(), 0.95, Color.WHITE)
+	_track_mat.set_meta("scrolls", true)  # animate() moves its uv1_offset
 	return {
 		"Paint_Green": _tex_mat(TexGen.camo(), 0.85, Color.WHITE),
 		"Paint_DarkGreen": _tex_mat(TexGen.camo(), 0.9, Color(0.6, 0.6, 0.6)),
 		"DarkMetal": TexGen.flat_material(Color(0.07, 0.07, 0.07), 0.6),
 		"Rubber": TexGen.flat_material(Color(0.05, 0.05, 0.05), 0.95),
 		"Track": _track_mat,
+		# road wheel faces: lightening holes so the wheels are seen to turn
+		"Wheel": TexGen.material(TexGen.rim(Color(0.2, 0.25, 0.14), 6), 0.85),
 		"Glass": TexGen.flat_material(Color(0.08, 0.16, 0.2), 0.1),
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"TailLight": TexGen.flat_material(Color(0.8, 0.08, 0.05), 0.3, true),
@@ -441,9 +445,13 @@ func animate(delta: float, forward_speed: float, steer: float) -> void:
 		_head.rotation.y = lerpf(_head.rotation.y, -steer * 0.45, clampf(delta * 6.0, 0.0, 1.0))
 	if not is_tank() or _turret == null:
 		return
-	_track_mat.uv1_offset.x = fmod(_track_mat.uv1_offset.x + forward_speed * delta / LINK, 1.0)
+	# links and wheel holes repeat every few centimetres, so above walking pace
+	# the true speed strobes into a crawl or even runs backwards on screen;
+	# like the arcade games, roll them at a capped speed that always reads
+	var roll := clampf(forward_speed, -ROLL_MAX, ROLL_MAX)
+	_track_mat.uv1_offset.x = fmod(_track_mat.uv1_offset.x + roll * delta / LINK, 1.0)
 	for i in _road_wheels.size():
-		_road_wheels[i].rotation.x -= forward_speed * delta / _wheel_r[i]
+		_road_wheels[i].rotation.x -= roll * delta / _wheel_r[i]
 	_turret.rotation.y = lerpf(_turret.rotation.y, -steer * 0.35, clampf(delta * 3.0, 0.0, 1.0))
 	if _gun:
 		# stabiliser: hold the barrel level while the hull pitches, within the
