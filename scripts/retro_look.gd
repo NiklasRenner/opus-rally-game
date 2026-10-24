@@ -30,6 +30,12 @@ uniform float alpha_scissor = 0.5;
 uniform float bands = 3.0;
 uniform float softness = 0.2;
 uniform float wrap = 0.25;
+// glossy things (glass, paint, wet roads) reflect a three-band fake sky
+// instead of the real one, like the environment maps of the time
+uniform float mirror = 0.0;
+uniform vec3 sky_hi : source_color = vec3(0.5, 0.6, 0.8);
+uniform vec3 sky_lo : source_color = vec3(0.7, 0.8, 0.9);
+uniform vec3 ground_col : source_color = vec3(0.3, 0.3, 0.3);
 
 void vertex() {
 	UV = UV * uv1_scale.xy + uv1_offset.xy;
@@ -47,8 +53,14 @@ void fragment() {
 	%s
 	ROUGHNESS = roughness_v;
 	METALLIC = 0.0;
-	SPECULAR = spec;
+	SPECULAR = mirror > 0.0 ? 0.0 : spec;
 	EMISSION = emission;
+	if (mirror > 0.0) {
+		vec3 r = (INV_VIEW_MATRIX * vec4(reflect(-VIEW, NORMAL), 0.0)).xyz;
+		vec3 env = r.y > 0.3 ? sky_hi : (r.y > -0.05 ? sky_lo : ground_col);
+		ALBEDO *= 1.0 - mirror * 0.5;
+		EMISSION += env * mirror;
+	}
 }
 
 // Round to the nearest of a few steps, with a short ramp between them.
@@ -61,9 +73,12 @@ void light() {
 	// wrapped a little so faces just past side-on still catch the lowest step
 	float lit = stepped(clamp((dot(NORMAL, LIGHT) + wrap) / (1.0 + wrap), 0.0, 1.0) * ATTENUATION);
 	DIFFUSE_LIGHT += LIGHT_COLOR * lit / PI;
-	// the sun's sheen on surfaces seen edge-on (road ahead), smooth not stepped
-	float edge = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-	SPECULAR_LIGHT += LIGHT_COLOR * spec * 0.22 * edge * lit;
+	// the sun's sheen on rough ground seen edge-on (the road ahead), smooth not
+	// stepped; glossy things get their fake sky instead
+	if (LIGHT_IS_DIRECTIONAL && mirror == 0.0) {
+		float edge = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
+		SPECULAR_LIGHT += LIGHT_COLOR * spec * 0.22 * edge * lit;
+	}
 	// one hard-edged highlight for the glossy stuff (car paint)
 	if (gloss > 0.0) {
 		float h = max(dot(NORMAL, normalize(LIGHT + VIEW)), 0.0);
@@ -90,6 +105,7 @@ static var _shaders := {}
 var env: Environment
 var sun: DirectionalLight3D
 var enabled := false
+var sky_colors: Array = [Color(0.3, 0.5, 0.9), Color(0.6, 0.78, 0.98), Color(0.4, 0.5, 0.45)]  # top, horizon, ground
 
 var _root: Node
 var _post: CanvasLayer
@@ -270,6 +286,12 @@ func _copy(mat: Material) -> ShaderMaterial:
 	sm.set_shader_parameter("roughness_v", m.roughness)
 	sm.set_shader_parameter("spec", m.metallic_specular)
 	sm.set_shader_parameter("gloss", clampf((0.6 - m.roughness) * m.metallic_specular, 0.0, 0.5))
+	var mirror := clampf((0.45 - m.roughness) * m.metallic_specular * 1.2, 0.0, 0.35)
+	sm.set_shader_parameter("mirror", mirror)
+	if mirror > 0.0:
+		sm.set_shader_parameter("sky_hi", sky_colors[0])
+		sm.set_shader_parameter("sky_lo", sky_colors[1])
+		sm.set_shader_parameter("ground_col", sky_colors[2])
 	if m.emission_enabled:
 		sm.set_shader_parameter("emission", m.emission * m.emission_energy_multiplier)
 	sm.set_shader_parameter("alpha_scissor", m.alpha_scissor_threshold)
