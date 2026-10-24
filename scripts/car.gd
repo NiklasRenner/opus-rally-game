@@ -52,6 +52,7 @@ class Wheel:
 
 var spec: Dictionary = Cars.LIST[0]  # set before adding to the tree
 var control_enabled := false
+var manual_gears := false  # Up / Down shift; the automatic box takes over once control ends
 var rain := false  # wet weather: less grip, spray off every tyre
 var marks: SkidMarks  # set by the race scene; tyre marks are left here
 var model: CarModel
@@ -266,6 +267,11 @@ func _read_input(delta: float) -> void:
 		b = Input.get_action_strength("brake")
 		s = Input.get_axis("steer_left", "steer_right")
 		hb = Input.is_action_pressed("handbrake")
+		if manual_gears:
+			if Input.is_action_just_pressed("shift_up"):
+				_shift(1)
+			elif Input.is_action_just_pressed("shift_down"):
+				_shift(-1)
 	throttle = move_toward(throttle, t, delta * 6.0)
 	brake = move_toward(brake, b, delta * 8.0)
 	# keyboard steering ramps in, centres faster
@@ -419,7 +425,7 @@ static func torque_at(r: float) -> float:
 
 func _update_gearbox(delta: float, drive_input: float) -> void:
 	shift_timer = maxf(shift_timer - delta, 0.0)
-	if gear < 1 or shift_timer > 0.0:
+	if gear < 1 or shift_timer > 0.0 or (manual_gears and control_enabled):
 		return
 	# shift on road speed, not on wheelspin, so the box doesn't hunt
 	var road_rpm := _road_rpm(gear)
@@ -430,6 +436,27 @@ func _update_gearbox(delta: float, drive_input: float) -> void:
 		if (road_rpm < 3300.0 and _road_rpm(gear - 1) < 6600.0) or road_rpm < 1800.0:
 			gear -= 1
 			shift_timer = 0.15
+
+
+## Manual shift. Down from first while (nearly) stopped selects reverse; a
+## downshift that would over-rev the engine is refused.
+func _shift(dir: int) -> void:
+	if gear == -1:
+		if dir > 0:
+			gear = 1
+			shift_timer = 0.15
+		return
+	var g := gear + dir
+	if g > GEAR_RATIOS.size():
+		return
+	if g < 1:
+		if absf(forward_speed) < 1.5:
+			gear = -1
+		return
+	if dir < 0 and _road_rpm(g) > REDLINE + 300.0:
+		return
+	gear = g
+	shift_timer = 0.2 if dir > 0 else 0.15
 
 
 func _road_rpm(g: int) -> float:
@@ -719,12 +746,6 @@ func set_headlights(on: bool) -> void:
 
 func total_damage() -> float:
 	return (damage["front"] + damage["rear"] + damage["left"] + damage["right"]) / 4.0
-
-
-func repair() -> void:
-	for k in damage:
-		damage[k] = 0.0
-	model.reset_damage()
 
 
 func place(xf: Transform3D) -> void:

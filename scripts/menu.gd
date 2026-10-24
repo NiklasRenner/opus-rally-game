@@ -1,12 +1,12 @@
 extends Control
-## Main menu: pick a stage, car, lap count, ghost and weather, and see the
+## Main menu: pick a stage, car, lap count, ghost, weather and gearbox, and see the
 ## stage's records.
 ## The car row swaps the stage preview for a turntable of the chosen car.
 ## Arrow keys / d-pad to move and change, Enter / A to confirm.
 
-const ROWS := ["STAGE", "CAR", "LAPS", "GHOST", "WEATHER", "START RACE", "QUIT"]
-const OPTION_ROWS := 5
-const ROW_H := 23
+const ROWS := ["STAGE", "CAR", "LAPS", "GHOST", "WEATHER", "GEARBOX", "START RACE", "QUIT"]
+const OPTION_ROWS := 6
+const ROW_H := 21
 
 var _sel := 0
 var _map_i := 0
@@ -139,6 +139,8 @@ func _change(dir: int) -> void:
 		"WEATHER":
 			var w: Array = Conditions.WEATHERS
 			Game.weather = w[wrapi(w.find(Game.weather) + dir, 0, w.size())]
+		"GEARBOX":
+			Game.set_manual_gears(not Game.manual_gears)
 	_refresh()
 
 
@@ -168,7 +170,8 @@ func _draw() -> void:
 	RetroUI.panel(self, left)
 	var car: Dictionary = Cars.LIST[_car_i]
 	var values := ["< %s >" % map["name"], "< %s >" % car["name"], "< %d >" % Game.laps,
-		"< %s >" % ("ON" if Game.ghost_enabled else "OFF"), "< %s >" % Game.weather, "", ""]
+		"< %s >" % ("ON" if Game.ghost_enabled else "OFF"), "< %s >" % Game.weather,
+		"< %s >" % ("MANUAL" if Game.manual_gears else "AUTO"), "", ""]
 	for i in ROWS.size():
 		var y := left.position.y + 26 + i * ROW_H + (8 if i >= OPTION_ROWS else 0)
 		if i == _sel:
@@ -179,7 +182,10 @@ func _draw() -> void:
 			RetroUI.text(self, Vector2(left.position.x + 90, y), values[i], 14, col, 3)
 		else:
 			RetroUI.italic(self, Vector2(left.position.x + 18, y), ROWS[i], 18, col, 5)
-	RetroUI.text(self, Vector2(left.position.x + 16, left.end.y - 12), "%s  %.1f km" % [map["blurb"], prev["length"] / 1000.0], 10, Color(0.85, 0.9, 1.0), 2)
+	var hint := "%s  %.1f km" % [map["blurb"], prev["length"] / 1000.0]
+	if ROWS[_sel] == "GEARBOX":
+		hint = "UP / DOWN arrows or RB / LB shift gears" if Game.manual_gears else "the box shifts for you"
+	RetroUI.text(self, Vector2(left.position.x + 16, left.end.y - 12), hint, 10, Color(0.85, 0.9, 1.0), 2)
 
 	var right := Rect2(306, 88, 314, 212)
 	RetroUI.panel(self, right)

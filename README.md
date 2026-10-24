@@ -17,13 +17,14 @@ painted in code at startup.
 
 | Action | Keyboard | Gamepad |
 |---|---|---|
-| Throttle | W / Up | RT or A |
-| Brake / reverse (hold when stopped) | S / Down | LT or X |
+| Throttle | W / Up (W only with the manual box) | RT or A |
+| Brake / reverse (hold when stopped) | S / Down (S only with the manual box) | LT or X |
 | Steer | A D / Left Right | Left stick, d-pad |
 | Handbrake | Space | B |
 | Change camera (Chase, Far chase, Hood, Bumper, TV) | C | Y |
 | Reset onto road | R | Back |
-| Repair car | T | |
+| Shift up / down (manual gearbox) | Up / Down | RB / LB |
+| Restart stage | T | |
 | Arcade / modern look | F2 | |
 | Pause / back | Esc | Start |
 
@@ -32,8 +33,10 @@ The same list is in the game: Esc > CONTROLS.
 ## Menu, records and ghosts
 
 The game starts on the main menu. Pick a **stage**, a **car**, the number of
-**laps** (1, 3 or 5), whether to race your **ghost** and the **weather**
-(random, clear or rain), then START RACE. Random is rolled again for every
+**laps** (1, 3 or 5), whether to race your **ghost**, the **weather**
+(random, clear or rain) and the **gearbox** (automatic, or manual with the
+Up / Down arrows), then START RACE. The gearbox can also be switched from the
+pause menu. Random is rolled again for every
 race from the menu (a restart keeps the same weather).
 
 - **Highscores:** the top 5 race times for each stage and lap count, plus the

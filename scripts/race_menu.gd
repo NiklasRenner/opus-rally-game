@@ -6,17 +6,7 @@ extends Control
 enum Mode { NONE, PAUSE, CONTROLS, INITIALS, RESULTS }
 
 const LETTERS := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 "
-const CONTROLS := [
-	["THROTTLE", "W / UP", "RT / A"],
-	["BRAKE, REVERSE", "S / DOWN", "LT / X"],
-	["STEER", "A D / ARROWS", "LEFT STICK"],
-	["HANDBRAKE", "SPACE", "B"],
-	["CAMERA", "C", "Y"],
-	["RESET TO ROAD", "R", "BACK"],
-	["REPAIR", "T", ""],
-	["ARCADE / MODERN LOOK", "F2", ""],
-	["PAUSE", "ESC", "START"],
-]
+const GEARBOX := "GEARBOX"
 
 var race: Node  # main.gd
 var mode := Mode.NONE
@@ -43,7 +33,7 @@ func open_pause() -> void:
 		_back_to_pause()
 		return
 	mode = Mode.PAUSE
-	_options = ["RESUME", "RESTART", "CONTROLS", "MAIN MENU"]
+	_options = ["RESUME", "RESTART", GEARBOX, "CONTROLS", "MAIN MENU"]
 	_sel = 0
 	get_tree().paused = true
 
@@ -92,6 +82,8 @@ func _input(event: InputEvent) -> void:
 				_sel = wrapi(_sel + 1, 0, _options.size())
 			elif event.is_action_pressed("ui_accept"):
 				_choose(_options[_sel])
+			elif _options[_sel] == GEARBOX and (event.is_action_pressed("ui_left") or event.is_action_pressed("ui_right")):
+				_toggle_gearbox()
 			elif event.is_action_pressed("ui_cancel") and mode == Mode.PAUSE:
 				_resume()
 			else:
@@ -146,10 +138,38 @@ func _choose(option: String) -> void:
 			_resume()
 		"RESTART", "RACE AGAIN":
 			race.restart()
+		GEARBOX:
+			_toggle_gearbox()
 		"CONTROLS":
 			mode = Mode.CONTROLS
 		"MAIN MENU":
 			race.to_menu()
+
+
+func _toggle_gearbox() -> void:
+	Game.set_manual_gears(not Game.manual_gears)
+	race.car.manual_gears = Game.manual_gears
+
+
+## Key list for the controls page; the arrows change job with the gearbox.
+func _controls() -> Array:
+	var manual: bool = Game.manual_gears
+	var rows := [
+		["THROTTLE", "W" if manual else "W / UP", "RT / A"],
+		["BRAKE, REVERSE", "S" if manual else "S / DOWN", "LT / X"],
+		["STEER", "A D / ARROWS", "LEFT STICK"],
+		["HANDBRAKE", "SPACE", "B"],
+	]
+	if manual:
+		rows.append(["SHIFT UP / DOWN", "UP / DOWN", "RB / LB"])
+	rows.append_array([
+		["CAMERA", "C", "Y"],
+		["RESET TO ROAD", "R", "BACK"],
+		["RESTART STAGE", "T", ""],
+		["ARCADE / MODERN LOOK", "F2", ""],
+		["PAUSE", "ESC", "START"],
+	])
+	return rows
 
 
 func _back_to_pause() -> void:
@@ -169,7 +189,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, vs), Color(0, 0, 0.05, 0.35))
 	match mode:
 		Mode.PAUSE:
-			var r := Rect2(vs.x * 0.5 - 110, 100, 220, 160)
+			var r := Rect2(vs.x * 0.5 - 110, 92, 220, 186)
 			RetroUI.panel(self, r)
 			RetroUI.italic(self, Vector2(r.position.x + 20, r.position.y + 36), "PAUSE", 30, RetroUI.YELLOW)
 			_draw_options(Vector2(r.position.x + 20, r.position.y + 62))
@@ -194,18 +214,19 @@ func _draw() -> void:
 
 
 func _draw_controls(vs: Vector2) -> void:
-	var r := Rect2(vs.x * 0.5 - 200, 50, 400, 250)
+	var r := Rect2(vs.x * 0.5 - 200, 40, 400, 270)
 	RetroUI.panel(self, r)
 	RetroUI.italic(self, r.position + Vector2(18, 34), "CONTROLS", 26, RetroUI.YELLOW)
 	RetroUI.text(self, r.position + Vector2(200, 58), "KEYBOARD", 11, RetroUI.CYAN, 3)
 	RetroUI.text(self, r.position + Vector2(300, 58), "PAD", 11, RetroUI.CYAN, 3)
-	for i in CONTROLS.size():
-		var row: Array = CONTROLS[i]
+	var rows := _controls()
+	for i in rows.size():
+		var row: Array = rows[i]
 		var y := r.position.y + 78 + i * 18
 		RetroUI.text(self, Vector2(r.position.x + 20, y), row[0], 13, Color.WHITE, 3)
 		RetroUI.text(self, Vector2(r.position.x + 200, y), row[1], 13, RetroUI.YELLOW, 3)
 		RetroUI.text(self, Vector2(r.position.x + 300, y), row[2], 13, RetroUI.YELLOW, 3)
-	RetroUI.text(self, r.position + Vector2(20, 240), "ENTER / ESC  back", 10, Color(0.8, 0.85, 1.0), 2)
+	RetroUI.text(self, r.position + Vector2(20, 260), "ENTER / ESC  back", 10, Color(0.8, 0.85, 1.0), 2)
 
 
 func _draw_options(at: Vector2) -> void:
@@ -213,7 +234,10 @@ func _draw_options(at: Vector2) -> void:
 		var y := at.y + i * 24
 		if i == _sel:
 			RetroUI.cursor(self, Rect2(at.x - 6, y - 16, 192, 22))
-		RetroUI.text(self, Vector2(at.x, y), _options[i], 16, Color.WHITE if i != _sel else RetroUI.YELLOW)
+		var label := _options[i]
+		if label == GEARBOX:
+			label = "GEARBOX  < %s >" % ("MANUAL" if Game.manual_gears else "AUTO")
+		RetroUI.text(self, Vector2(at.x, y), label, 16, Color.WHITE if i != _sel else RetroUI.YELLOW)
 
 
 func _draw_results(vs: Vector2) -> void:
