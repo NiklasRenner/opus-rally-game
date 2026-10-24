@@ -318,6 +318,14 @@ class Body:
                 out.append(v)
         return out
 
+    def in_screen(self, y):
+        """Cars with full_screen glaze the whole windscreen down to its base,
+        not only where the cabin has risen clear of the bonnet."""
+        if not self.c.get("full_screen"):
+            return False
+        (y0, _), (y1, _) = self.c["screen"]
+        return y1 < y < y0 + 0.01
+
     def pillars(self):
         return self.c.get("pillars", [self.c["b_pillar"]])
 
@@ -345,7 +353,7 @@ class Body:
                 elif 5 <= e <= n - 7:  # roof: screens where it slopes
                     p = [Vector(verts[i]) for i in (a, b, c)]
                     nr = (p[1] - p[0]).cross(p[2] - p[0]).normalized()
-                    if abs(nr.y) > 0.3 and cab > 0.3:
+                    if abs(nr.y) > 0.3 and (cab > 0.3 or self.in_screen(yc)):
                         key = "Glass"
                 faces.append((a, b, c, d))
                 keys.append(key)
@@ -546,10 +554,10 @@ def hyper_parts(B, c, root, M):
         # a thin dark strip laid along the curve of the bonnet and wing
         for xa, xb in zip(xs, xs[1:]):
             g.hull([(s * x, y, body_top(body, y, x) + dz) for x in (xa, xb) for y in (y0, y1)
-                    for dz in (-0.015, 0.012)], "Trim")
+                    for dz in (-0.015, 0.006)], "Trim")
             x = (xa + xb) / 2
             y = (y0 + y1) / 2
-            g.cyl((s * x, y, body_top(body, y, x) + 0.014), "Z", 0.03, 0.01, "Lamp", segs=8)
+            g.cyl((s * x, y, body_top(body, y, x) + 0.007), "Z", 0.03, 0.006, "Lamp", segs=8)
     # raised spine down the middle of the bonnet, from the grille to the screen
     sy = c["screen"][0][0]
     g.hull([(sx * x, y, body_top(body, y, 0.0) + dz) for sx in (-1, 1) for x in (0.03,)
@@ -566,26 +574,34 @@ def hyper_parts(B, c, root, M):
     g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
         (hwf + 0.01, fy - 0.45, 0.14), (hwf + 0.01, fy - 0.45, bt[0]), (hwf * 0.9, fy + 0.04, 0.16),
         (hwf * 0.88, fy + 0.02, bt[0] - 0.02), (hwf * 0.97, fy - 0.14, bt[0]), (hwf * 0.95, fy - 0.03, 0.13),
-        (0.2, fy + 0.04 + tip, 0.15), (0.2, fy + 0.03 + tip, bt[0] - 0.01)]], "Livery")
+        (0.2, fy + 0.04 + tip, 0.15), (0.2, fy - 0.02, body_top(body, fy - 0.02, 0.2) - 0.01)]], "Livery")
 
     def face(x):  # front of the fascia at x: a shallow V to the pointed middle
         return fy + 0.04 + tip * min(max((hwf * 0.9 - abs(x)) / (hwf * 0.9 - 0.2), 0.0), 1.0)
-    gy = fy + 0.07 + tip  # the grille stands proud of the nose
-    # horseshoe: chrome rim round a dark mesh, rounded top, flat-ish base
+    # horseshoe: chrome rim round a dark mesh, rounded top, flat-ish base.
+    # It leans back along the slope of the nose so its top runs into the
+    # bonnet spine instead of standing up above it.
+    gy = fy + 0.05 + tip
+    z0, top_y = 0.17, fy - 0.02
+    z1 = body_top(body, top_y, 0.0) - 0.005
+
+    def lean(x, z, dy=0.0):
+        t = (z - z0) / (z1 - z0)
+        return (x, lerp(gy, top_y, t) + dy, z)
     shoe = []
     for i in range(15):
         a = math.pi * (-0.05 + 1.1 * i / 14)
-        shoe.append((0.17 * math.cos(a), 0.36 + 0.15 * math.sin(a)))
-    shoe = [(0.13, 0.2), (0.155, 0.27)] + shoe + [(-0.155, 0.27), (-0.13, 0.2)]
-    g.hull([(x, y, z) for x, z in shoe for y in (gy - 0.04, gy)], "Trim")
-    for (x0, z0), (x1, z1) in zip(shoe, shoe[1:]):
-        rod(g, (x0, gy + 0.005, z0), (x1, gy + 0.005, z1), 0.03, "Chrome")
-    rod(g, (shoe[-1][0], gy + 0.005, shoe[-1][1]), (shoe[0][0], gy + 0.005, shoe[0][1]), 0.03, "Chrome")
-    g.cyl((0, gy + 0.012, 0.43), "Y", 0.032, 0.01, "Tail", segs=10)  # little red oval badge
+        shoe.append((0.16 * math.cos(a), lerp(z0, z1, 0.62) + (z1 - lerp(z0, z1, 0.62)) * math.sin(a)))
+    shoe = [(0.12, z0), (0.15, lerp(z0, z1, 0.3))] + shoe + [(-0.15, lerp(z0, z1, 0.3)), (-0.12, z0)]
+    g.hull([lean(x, z, dy) for x, z in shoe for dy in (-0.05, 0.0)], "Trim")
+    ring = shoe + shoe[:1]
+    for (xa, za), (xb, zb) in zip(ring, ring[1:]):
+        rod(g, lean(xa, za, 0.005), lean(xb, zb, 0.005), 0.03, "Chrome")
+    g.cyl(lean(0.0, lerp(z0, z1, 0.62), 0.01), "Y", 0.028, 0.01, "Tail", segs=10)  # little red oval badge
     # deep lower intakes either side of the grille, each with a silver lip
     # under it, and the splitter following the V of the nose
     for sx in (-1, 1):
-        g.hull([(sx * x, face(x) + dy, z) for (x, z) in ((0.22, 0.16), (0.22, 0.33), (0.76, 0.16), (0.7, 0.32))
+        g.hull([(sx * x, face(x) + dy, z) for (x, z) in ((0.22, 0.16), (0.22, 0.34), (0.76, 0.16), (0.72, 0.37))
                 for dy in (-0.06, 0.012)], "Trim")
         rod(g, (sx * 0.22, face(0.22) + 0.02, 0.15), (sx * 0.77, face(0.77) + 0.02, 0.15), 0.025, "Chrome")
         rod(g, (sx * 0.05, face(0.2) + 0.03, 0.12), (sx * hwf * 0.92, face(hwf * 0.92) + 0.02, 0.12), 0.03, "Chrome")
@@ -1019,16 +1035,16 @@ CARS = [
          screen=((0.8, 2.02), (0.5, 2.44))),
     dict(name="Bellatrix", file="bellatrix", kind="hyper", paint=(0.12, 0.42, 0.85), flaps=(0.1, 0.1, 0.1),
          rims=(0.22, 0.23, 0.25), half_len=2.3,
-         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8, fenders=0.07, nose_tip=0.1,
+         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8, fenders=0.07, nose_tip=0.1, full_screen=True,
          # low, wide mid-engined coupe: short rounded nose, long raked screen,
          # a roof that runs straight into the engine cover, cut-off tail
-         profile=[(2.28, 0.42, 0.38), (2.2, 0.56, 0.52), (2.0, 0.64, 0.6), (1.6, 0.7, 0.66), (1.25, 0.74, 0.7),
+         profile=[(2.28, 0.38, 0.34), (2.2, 0.5, 0.46), (2.0, 0.6, 0.56), (1.6, 0.68, 0.64), (1.25, 0.73, 0.69),
                   (1.0, 0.78, 0.74), (0.5, 1.03, 0.79), (0.05, 1.17, 0.84), (-0.35, 1.19, 0.86),
                   (-0.8, 1.13, 0.87), (-1.3, 1.04, 0.89), (-1.8, 0.98, 0.9), (-2.1, 0.95, 0.9), (-2.24, 0.9, 0.86)],
          glass_y=(0.8, -0.8), pillars=[9.0], b_pillar=9.0, mirror_y=0.72,
          c_line=(-0.45, (-0.9, 0.32)),  # chrome C: where its top run ends, its back and its bottom run
          wheel_y=(1.4, -1.32), wheel_x=0.87, wheel_r=0.36, wheel_w=(0.3, 0.36),
-         bumper_top=(0.42, 0.6), tail_z=0.8, wing_y=-1.98,
+         bumper_top=(0.38, 0.6), tail_z=0.8, wing_y=-1.98,
          body_extras=[hyper_extras], screen=((1.0, 0.78), (0.05, 1.17))),
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
