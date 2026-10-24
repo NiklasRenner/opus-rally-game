@@ -32,6 +32,7 @@ var _road_h := PackedFloat32Array()
 var _heights := PackedFloat32Array()
 var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
 var _crater_list: Array = []  # [x, z, radius, depth] on the Moon
+var _road_i := PackedInt32Array()  # per terrain cell: the nearest road sample
 var _rng := RandomNumberGenerator.new()
 
 
@@ -219,7 +220,7 @@ func _sample_spline() -> void:
 		var acc := 0.0
 		for o in range(-6, 7):
 			acc += WIDTH[surfaces[wrapi(i + o, 0, count_pts)]]
-		widths.append(acc / 13.0)
+		widths.append(acc / 13.0 * (map.get("width", 1.0) as float))
 
 
 func _side(i: int) -> Vector3:
@@ -329,9 +330,12 @@ func _build_terrain() -> void:
 	_dist.fill(1e9)
 	_road_h.resize(gn * gn)
 	_road_h.fill(0.0)
+	_road_i.resize(gn * gn)
+	_road_i.fill(0)
 	var origin := _grid_origin()
 	var r := 12
-	for p in points:
+	for pi in points.size():
+		var p := points[pi]
 		var cx := int(round((p.x - origin.x) / CELL))
 		var cz := int(round((p.z - origin.y) / CELL))
 		for z in range(maxi(cz - r, 0), mini(cz + r, gn - 1) + 1):
@@ -341,6 +345,7 @@ func _build_terrain() -> void:
 				if d < _dist[k]:
 					_dist[k] = d
 					_road_h[k] = p.y
+					_road_i[k] = pi
 	# cells far from the road get the height of the nearest stamped cell's road (diffuse a bit)
 	var noise := FastNoiseLite.new()
 	noise.seed = 42
@@ -368,6 +373,9 @@ func _build_terrain() -> void:
 				_heights[k] = lerpf(base - 0.3, base * 0.8, smoothstep(30.0, 90.0, _dist[k])) + rim * 30.0
 			elif _theme() == "moon":
 				_heights[k] += _craters(wx, wz) * smoothstep(VERGE + 3.0, 24.0, _dist[k])
+				if _dist[k] < 1e8 and _flat_ground(float(_road_i[k]) / points.size()):
+					# level pads for the base buildings and the start, no hills or craters
+					_heights[k] = lerpf(base - 0.3, _heights[k], smoothstep(50.0, 75.0, _dist[k]))
 			var sink := _water_depth(wx, wz)
 			if sink > 0.0:
 				_heights[k] = lerpf(_heights[k], _water_level() - 5.0, sink)
@@ -390,6 +398,17 @@ func _build_terrain() -> void:
 	mat.vertex_color_use_as_albedo = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_add_static(st.commit_to_arrays(), mat, _offroad(), "Terrain")
+
+
+## Is the ground beside this part of the lap (a fraction) kept level? The
+## start, and on the Moon the stretches lined with the base.
+func _flat_ground(frac: float) -> bool:
+	if frac < 0.03 or frac > 0.97:
+		return true
+	for r in map.get("base", []):
+		if frac > (r[0] as float) - 0.015 and frac < (r[1] as float) + 0.015:
+			return true
+	return false
 
 
 ## Height change from the Moon's craters at a point: a bowl sunk below the
@@ -895,7 +914,12 @@ func _build_spectators() -> void:
 			var pos := points[k] + _side(k) * inside * off
 			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 else points[k].y - 0.45
 			var face := points[k] + Vector3(0, pos.y - points[k].y, 0)
-			crowd.person(Transform3D(Basis.looking_at(face - pos, Vector3.UP), pos), _rng.randi() % 3 == 0)
+			var hop := _rng.randi() % 3 == 0
+			# inside a tight corner another part of the road can pass close by
+			var near := nearest_index(pos, k)
+			if distance_to_road(pos, near) < widths[near] * 0.5 + VERGE + 1.5:
+				continue
+			crowd.person(Transform3D(Basis.looking_at(face - pos, Vector3.UP), pos), hop)
 	var mi := crowd.make()
 	if mi:
 		add_child(mi)
