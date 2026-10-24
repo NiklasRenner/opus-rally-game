@@ -12,15 +12,16 @@ const RECORDS_VERSION := 2
 
 var map_id: String = Maps.LIST[0]["id"]
 var car_id: String = Cars.LIST[0]["id"]
-var laps := 3
+var laps := 1
 var ghost_enabled := true
 var last_initials := "AAA"
-var weather := "RANDOM"  # menu choice, see Conditions.WEATHERS
+var weather := "CLEAR"  # menu choice, see Conditions.WEATHERS
 # what the current race actually got (rolled when a race starts from the menu,
 # kept for restarts)
 var race_rain := false
 var retro_look := true  # banded light, hard shadows, depth fog (F2, RetroLook)
-var manual_gears := false  # shift with Up / Down (or the bumpers) instead of the automatic box
+var manual_gears := false  # shift with Up / Down (or the bumpers) instead of the automatic box;
+# not saved, so every launch starts on the automatic like laps and weather
 
 var _records := {}
 
@@ -51,8 +52,6 @@ func _setup_input() -> void:
 func set_manual_gears(on: bool) -> void:
 	manual_gears = on
 	_apply_gearbox_keys()
-	_records["manual_gears"] = on
-	_save_records()
 
 
 func _apply_gearbox_keys() -> void:
@@ -164,7 +163,7 @@ func _load_records() -> void:
 		if data is Dictionary:
 			_records = data
 			last_initials = _records.get("last_initials", "AAA")
-			manual_gears = _records.get("manual_gears", false)
+			_records.erase("manual_gears")  # older builds saved the gearbox
 	# also run on every start, as a build from before the classes may have
 	# saved under the old keys since
 	if _migrate_to_classes() or int(_records.get("version", 1)) < RECORDS_VERSION:
