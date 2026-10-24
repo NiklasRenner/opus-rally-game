@@ -19,6 +19,7 @@ const TABLE := 2048
 ## cyl, offsets (pulse timing error, fraction of a firing interval), amps (per
 ## cylinder), idle/red: rpm at game idle and at the limiter.
 ## on/off: [peak, sharpness] of the pulse on and off the throttle; knock: diesel clatter.
+## top: highest harmonic kept (Hz), so revs never alias into whistles.
 ## r1/r2: exhaust resonances [Hz, Q, gain]; intake: [Hz, Q, gain] of the
 ## pulse-gated noise (rasp); body: lowpass cutoff [off, on] and gain.
 ## jitter: per-pulse gain wobble [on, off]. turbo: whistle gain (0 = none),
@@ -28,39 +29,41 @@ const TABLE := 2048
 const PROFILES := {
 	# Delta-style 2.0 turbo four: raspy, chattering blow-off, lots of anti-lag
 	"martello": {"cyl": 4, "offsets": [0.0, 0.02, -0.01, 0.015], "amps": [1.0, 0.9, 1.07, 0.94],
-		"idle": 950.0, "red": 7800.0, "on": [0.13, 2.2], "off": [0.22, 1.6], "knock": 0.0,
-		"r1": [150.0, 3.5, 1.0], "r2": [540.0, 3.0, 0.55], "intake": [1900.0, 2.2, 0.55],
-		"body": [700.0, 2200.0, 0.55], "jitter": [0.05, 0.22], "gain": 1.0,
-		"turbo": 0.022, "whistle": [2400.0, 6200.0], "bov": 0.5, "flutter": 1.0,
-		"crackle": 1.0, "antilag": 1.0, "shift_pop": 0.9, "whine": 0.018},
+		"idle": 950.0, "red": 7800.0, "on": [0.13, 2.2], "off": [0.22, 1.6], "knock": 0.0, "top": 3200.0,
+		"r1": [150.0, 2.2, 1.0], "r2": [540.0, 2.0, 0.5], "intake": [1500.0, 1.6, 0.4],
+		"body": [600.0, 1800.0, 0.6], "jitter": [0.05, 0.22], "gain": 1.0,
+		"turbo": 0.006, "whistle": [1400.0, 3000.0], "bov": 0.4, "flutter": 1.0,
+		"crackle": 1.0, "antilag": 1.0, "shift_pop": 0.9, "whine": 0.005},
 	# 555-style flat four: unequal exhaust pulses give the boxer burble
 	"pleiad": {"cyl": 4, "offsets": [0.0, -0.13, 0.02, -0.11], "amps": [1.0, 0.82, 1.05, 0.86],
-		"idle": 900.0, "red": 7600.0, "on": [0.14, 2.0], "off": [0.24, 1.5], "knock": 0.0,
-		"r1": [118.0, 3.0, 1.1], "r2": [420.0, 2.6, 0.5], "intake": [1600.0, 2.0, 0.45],
-		"body": [600.0, 1900.0, 0.6], "jitter": [0.06, 0.26], "gain": 1.0,
-		"turbo": 0.02, "whistle": [2200.0, 5600.0], "bov": 0.45, "flutter": 0.35,
-		"crackle": 0.85, "antilag": 0.8, "shift_pop": 0.7, "whine": 0.016},
+		"idle": 900.0, "red": 7600.0, "on": [0.14, 2.0], "off": [0.24, 1.5], "knock": 0.0, "top": 3000.0,
+		"r1": [118.0, 2.2, 1.1], "r2": [420.0, 2.0, 0.5], "intake": [1300.0, 1.6, 0.35],
+		"body": [500.0, 1600.0, 0.65], "jitter": [0.06, 0.26], "gain": 1.0,
+		"turbo": 0.005, "whistle": [1300.0, 2800.0], "bov": 0.35, "flutter": 0.35,
+		"crackle": 0.85, "antilag": 0.8, "shift_pop": 0.7, "whine": 0.004},
 	# kit car: no turbo, revs higher, bright induction howl, the odd pop
 	"balear": {"cyl": 4, "offsets": [0.0, 0.01, 0.0, -0.01], "amps": [1.0, 0.96, 1.03, 0.97],
-		"idle": 1100.0, "red": 9000.0, "on": [0.11, 2.4], "off": [0.2, 1.7], "knock": 0.0,
-		"r1": [175.0, 3.2, 0.9], "r2": [680.0, 3.2, 0.6], "intake": [2300.0, 2.6, 0.7],
-		"body": [800.0, 2600.0, 0.5], "jitter": [0.04, 0.18], "gain": 0.95,
+		"idle": 1100.0, "red": 9000.0, "on": [0.11, 2.4], "off": [0.2, 1.7], "knock": 0.0, "top": 3600.0,
+		"r1": [175.0, 2.2, 0.9], "r2": [680.0, 2.2, 0.55], "intake": [1800.0, 1.8, 0.5],
+		"body": [700.0, 2200.0, 0.55], "jitter": [0.04, 0.18], "gain": 0.95,
 		"turbo": 0.0, "whistle": [0.0, 0.0], "bov": 0.0, "flutter": 0.0,
-		"crackle": 0.45, "antilag": 0.2, "shift_pop": 0.35, "whine": 0.024},
-	# screaming V10: smooth even pulses, high resonances, little hybrid whine
-	"f1": {"cyl": 10, "offsets": [0.0], "amps": [1.0, 0.97, 1.02, 0.99, 1.01], "idle": 4200.0, "red": 17800.0,
-		"on": [0.22, 2.0], "off": [0.3, 1.6], "knock": 0.0,
-		"r1": [880.0, 2.2, 0.8], "r2": [2000.0, 2.8, 0.5], "intake": [2800.0, 3.0, 0.35],
-		"body": [1200.0, 2600.0, 0.7], "jitter": [0.02, 0.1], "gain": 0.6,
+		"crackle": 0.45, "antilag": 0.2, "shift_pop": 0.35, "whine": 0.006},
+	# V10: uneven banks and lots of combustion rasp so it snarls rather than hums
+	"f1": {"cyl": 10, "offsets": [0.0, 0.04, -0.03, 0.02, -0.05, 0.03, -0.02, 0.05, -0.04, 0.01],
+		"amps": [1.0, 0.82, 1.1, 0.86, 1.04, 0.8, 1.08, 0.88, 1.02, 0.84], "idle": 4000.0, "red": 15500.0,
+		"on": [0.12, 2.6], "off": [0.22, 1.8], "knock": 0.0, "top": 4500.0,
+		"r1": [650.0, 1.8, 0.9], "r2": [1500.0, 1.8, 0.5], "intake": [2200.0, 1.5, 0.75],
+		"body": [1000.0, 2400.0, 0.75], "jitter": [0.07, 0.18], "gain": 1.0,
 		"turbo": 0.0, "whistle": [0.0, 0.0], "bov": 0.0, "flutter": 0.0,
-		"crackle": 0.2, "antilag": 0.1, "shift_pop": 0.25, "whine": 0.012},
-	# twin-turbo V12 diesel: low, knocky, a high turbo whistle and clanking tracks
+		"crackle": 0.25, "antilag": 0.1, "shift_pop": 0.3, "whine": 0.0},
+	# twin-turbo V12 diesel: deep and slow, the banks firing unevenly for a
+	# lumpy throb, heavy track rumble and a clank per track link
 	"tank": {"cyl": 12, "offsets": [0.0, 0.03, -0.02, 0.05, 0.0, -0.04, 0.02, 0.0, -0.03, 0.04, 0.01, -0.02],
-		"amps": [1.0, 0.85, 1.1, 0.92, 1.05, 0.8, 0.98, 1.08, 0.88, 1.0, 0.93, 1.12],
-		"idle": 650.0, "red": 2600.0, "on": [0.07, 3.0], "off": [0.12, 2.4], "knock": 0.3,
-		"r1": [78.0, 2.6, 1.2], "r2": [300.0, 2.4, 0.55], "intake": [1250.0, 2.6, 0.5],
-		"body": [380.0, 1100.0, 0.7], "jitter": [0.1, 0.25], "gain": 1.05,
-		"turbo": 0.016, "whistle": [3200.0, 7600.0], "bov": 0.0, "flutter": 0.0,
+		"amps": [1.0, 0.72, 1.1, 0.76, 1.04, 0.7, 1.08, 0.8, 0.98, 0.74, 1.12, 0.78],
+		"idle": 520.0, "red": 2200.0, "on": [0.08, 2.6], "off": [0.13, 2.0], "knock": 0.2, "top": 1600.0,
+		"r1": [55.0, 1.8, 1.6], "r2": [190.0, 2.0, 0.7], "intake": [800.0, 1.6, 0.35],
+		"body": [250.0, 650.0, 0.9], "jitter": [0.1, 0.25], "gain": 1.15,
+		"turbo": 0.004, "whistle": [1500.0, 2600.0], "bov": 0.0, "flutter": 0.0,
 		"crackle": 0.0, "antilag": 0.0, "shift_pop": 0.0, "whine": 0.0, "tracks": 1.0},
 }
 
@@ -96,8 +99,8 @@ const GAME_RED := 8000.0
 
 # --------------------------------------------------------------------------- state
 var _p: Dictionary
-var _t_on := PackedFloat32Array()
-var _t_off := PackedFloat32Array()
+var _lv_on: Array[PackedFloat32Array] = []  # band-limited copies, LEVELS of them
+var _lv_off: Array[PackedFloat32Array] = []
 var _cyl := 4
 var _seed := 12345
 
@@ -165,9 +168,9 @@ func setup(spec: Dictionary) -> void:
 		_p["red"] *= pitch
 	_heavy = type == "tank"
 	_cyl = _p["cyl"]
-	_t_on = _table(_p["on"][0], _p["on"][1], 1.0)
-	_t_off = _table(_p["off"][0], _p["off"][1], 2.2)
-	_s.resize(40)
+	_lv_on = _band_limit(_table(_p["on"][0], _p["on"][1], 1.0))
+	_lv_off = _band_limit(_table(_p["off"][0], _p["off"][1], 2.2))
+	_s.resize(48)
 	_s.fill(0.0)
 	_seed = hash(id) & 0x7fffffff
 
@@ -204,6 +207,84 @@ func _table(peak: float, sharp: float, spread: float) -> PackedFloat32Array:
 		t[i] /= top
 	t[TABLE] = t[0]
 	return t
+
+
+## Copies of a cycle table keeping fewer and fewer harmonics (512, 362,
+## 256 ... 4, half an octave apart, tapered at the top), so render() can pick
+## one that stays under the profile's `top` at any rpm. Playing the raw table
+## fast would fold its upper harmonics back down as whistles that fall as
+## the revs rise.
+const LEVELS := 15
+
+
+func _band_limit(t: PackedFloat32Array) -> Array[PackedFloat32Array]:
+	var re := PackedFloat64Array()
+	var im := PackedFloat64Array()
+	re.resize(TABLE)
+	im.resize(TABLE)
+	for i in TABLE:
+		re[i] = t[i]
+		im[i] = 0.0
+	_fft(re, im, false)
+	var out: Array[PackedFloat32Array] = []
+	for lv in LEVELS:
+		var top := 512.0 * pow(2.0, -lv * 0.5)
+		var r2 := PackedFloat64Array()
+		var i2 := PackedFloat64Array()
+		r2.resize(TABLE)
+		i2.resize(TABLE)
+		r2.fill(0.0)
+		i2.fill(0.0)
+		for h in range(1, int(top) + 1):
+			var x := (h - 0.6 * top) / (0.4 * top)
+			var w := 1.0 if x <= 0.0 else 0.5 + 0.5 * cos(PI * minf(x, 1.0))
+			r2[h] = re[h] * w
+			i2[h] = im[h] * w
+			r2[TABLE - h] = re[TABLE - h] * w
+			i2[TABLE - h] = im[TABLE - h] * w
+		_fft(r2, i2, true)
+		var lt := PackedFloat32Array()
+		lt.resize(TABLE + 1)
+		for i in TABLE:
+			lt[i] = r2[i] / TABLE
+		lt[TABLE] = lt[0]
+		out.append(lt)
+	return out
+
+
+static func _fft(re: PackedFloat64Array, im: PackedFloat64Array, inverse: bool) -> void:
+	var n := re.size()
+	var j := 0
+	for i in range(1, n):
+		var bit := n >> 1
+		while (j & bit) != 0:
+			j ^= bit
+			bit >>= 1
+		j |= bit
+		if i < j:
+			var tr := re[i]
+			re[i] = re[j]
+			re[j] = tr
+			var ti := im[i]
+			im[i] = im[j]
+			im[j] = ti
+	var size := 2
+	while size <= n:
+		var ang := (TAU if inverse else -TAU) / size
+		var half := size >> 1
+		for k in half:
+			var wr := cos(ang * k)
+			var wi := sin(ang * k)
+			for st in range(0, n, size):
+				var a := st + k
+				var b := a + half
+				var xr := re[b] * wr - im[b] * wi
+				var xi := re[b] * wi + im[b] * wr
+				re[b] = re[a] - xr
+				im[b] = im[a] - xi
+				re[a] += xr
+				im[a] += xi
+		size <<= 1
 
 
 static func _svf(fc: float) -> float:
@@ -333,7 +414,7 @@ func render(n: int) -> PackedVector2Array:
 	var kl_amp := tracks * clampf(speed / 3.0, 0.0, 1.0) * (0.12 + 0.1 * clampf(speed / 15.0, 0.0, 1.0))
 	var kl_inc := speed / 0.17 / RATE
 	var kl_decay := exp(-1.0 / (0.006 * RATE))
-	var f6 := _svf(1500.0); var q6 := 1.0 / 7.0
+	var f6 := _svf(700.0); var q6 := 1.0 / 4.0
 	var sq_tr := tracks * track_skid * 0.08
 
 	# ---- tyres: crossfade channel gains toward the surface's
@@ -358,7 +439,7 @@ func render(n: int) -> PackedVector2Array:
 	var fr := _pole(g["roll_f"])
 	var sq_amp: float = g["squeal"]
 	var sq_wob := 1.0 + 0.04 * sin(_time * 2.1) + randf_range(-0.02, 0.02)
-	var f8 := _svf(g["squeal_f"] * sq_wob); var q8 := 1.0 / 14.0
+	var f8 := _svf(g["squeal_f"] * sq_wob); var q8 := 1.0 / 8.0
 	var gr_p: float = g["grain"] * speed / RATE  # crunch hits per sample
 	var gr_amp := 0.5 if gr_p > 0.0 else 0.0
 	var f9 := _svf(g["grain_f"]); var q9 := 1.0 / 2.0
@@ -388,12 +469,14 @@ func render(n: int) -> PackedVector2Array:
 	var cr2: float = _crunch_f[1]
 	var qc := 1.0 / (14.0 if _heavy else 6.0)
 	var tk_decay := exp(-1.0 / (0.35 * RATE))
-	var f13 := _svf(3400.0); var q13 := 1.0 / 12.0
+	var f13 := _svf(2600.0); var q13 := 1.0 / 8.0
 	var t_decay := exp(-1.0 / (0.012 * RATE))
 
 	# ---- copy state into locals for the hot loop
-	var t_on := _t_on
-	var t_off := _t_off
+	var hmax: float = p["top"] / maxf(vrpm / 120.0, 1.0)
+	var lv := clampi(int(ceil(2.0 * log(512.0 / hmax) / log(2.0))), 0, LEVELS - 1)
+	var t_on: PackedFloat32Array = _lv_on[lv]
+	var t_off: PackedFloat32Array = _lv_off[lv]
 	var cyl := float(_cyl)
 	var s := _s
 	var ph := _ph
@@ -429,6 +512,10 @@ func render(n: int) -> PackedVector2Array:
 	var l11 := s[27]; var b11 := s[28]; var lc1 := s[29]; var bc1 := s[30]; var lc2 := s[31]; var bc2 := s[32]
 	var l13 := s[33]; var b13 := s[34]; var ltr := s[35]; var btr := s[36]; var lsp := s[37]
 	var ld_off := 1.0 - ld
+	var fm := _pole(5200.0)
+	var m1 := s[38]
+	var m2 := s[39]
+	var rb := s[40]
 	var pop_on := crackle * 0.16
 
 	for i in n:
@@ -509,7 +596,8 @@ func render(n: int) -> PackedVector2Array:
 			h = nz * kenv - l6 - q6 * b6
 			b6 += f6 * h
 			l7 += 0.02 * (kenv - l7)
-			eng += (b6 * 0.3 + l7 * 6.0) * kl_amp
+			rb += 0.012 * (nz - rb)
+			eng += (b6 * 0.18 + l7 * 9.0 + rb * 2.5) * kl_amp
 		if sq_tr > 0.0005:
 			ltr += 0.32 * btr
 			h = nz - ltr - 0.06 * btr
@@ -524,7 +612,7 @@ func render(n: int) -> PackedVector2Array:
 			l8 += f8 * b8
 			h = nz - l8 - q8 * b8
 			b8 += f8 * h
-			tyre += b8 * sq_amp * 0.6
+			tyre += b8 * sq_amp * 0.9
 		if gr_p > 0.0:
 			rs = (rs * 1103515245 + 12345) & 0x7fffffff
 			if rs / 2147483647.0 < gr_p:
@@ -599,6 +687,9 @@ func render(n: int) -> PackedVector2Array:
 
 		# ------------------------------------------------ mix
 		var y := eng + tyre + bang
+		m1 += fm * (y - m1)
+		m2 += fm * (m1 - m2)
+		y = m2
 		dc_y = y - dc_x + 0.997 * dc_y
 		dc_x = y
 		y = clampf(dc_y, -3.0, 3.0)
@@ -632,7 +723,7 @@ func render(n: int) -> PackedVector2Array:
 	_dc_x = dc_x
 	_dc_y = dc_y
 	var st := [l1, b1, l2, b2, l3, b3, lb, lb2, l4, b4, l5, b5, l6, b6, l7, l8, b8, l9, b9, hs, rl1, rl2,
-		sw1, sw2, l10, b10, wd, l11, b11, lc1, bc1, lc2, bc2, l13, b13, ltr, btr, lsp]
+		sw1, sw2, l10, b10, wd, l11, b11, lc1, bc1, lc2, bc2, l13, b13, ltr, btr, lsp, m1, m2, rb]
 	for j in st.size():
 		s[j] = st[j]
 	_s = s

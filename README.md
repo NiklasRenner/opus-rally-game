@@ -167,8 +167,9 @@ to about 100 deg.
   all synthesised, no audio files. Each vehicle has its own engine: the
   Martello a raspy turbo four with anti-lag pops and a fluttering blow-off,
   the Pleiad a burbling flat four, the Balear a revvy non-turbo four, the
-  Veloce a V10 scream and the Pardel a knocking V12 diesel with clanking
-  tracks. Upshifts cut and bang, lifting off crackles, straight-cut gears
+  Veloce a snarling V10 and the Pardel a deep, lumpy V12 diesel with
+  rumbling, clanking tracks. The engine is band-limited to each profile's
+  `top` so high revs never alias into whistles. Upshifts cut and bang, lifting off crackles, straight-cut gears
   whine. Tyres sound different on every surface (squeal on tarmac, crunch on
   gravel, spray in the wet, swish on grass), plus wind, rain on the body,
   crashes and landings. The bonnet and bumper cameras hear more intake and
