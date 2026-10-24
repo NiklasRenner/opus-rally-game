@@ -37,7 +37,7 @@ class Wheel:
 	var front: bool
 	var pivot: Node3D
 	var spinner: Node3D
-	var fx: CPUParticles3D
+	var fx: TyreFx
 	var grounded := false
 	var dist := 0.0
 	var weight := 0.0
@@ -169,7 +169,6 @@ static func top_speed(spec: Dictionary) -> float:
 
 
 func _build_wheels() -> void:
-	var puff := TexGen.puff()
 	var wl := Cars.wheels(spec)
 	var pos := Cars.wheel_positions(spec)
 	var modelled := model.take_wheels()
@@ -187,7 +186,7 @@ func _build_wheels() -> void:
 		w.pivot.add_child(w.spinner)
 		if not modelled.is_empty():
 			w.spinner.add_child(modelled[i])
-		w.fx = _make_particles(puff, 40, 0.9)
+		w.fx = TyreFx.new()
 		add_child(w.fx)
 		wheels.append(w)
 
@@ -207,6 +206,7 @@ func _make_particles(tex: Texture2D, amount: int, lifetime: float) -> CPUParticl
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.vertex_color_use_as_albedo = true
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.billboard_keep_scale = true  # else idle particles show as black sprites
 	quad.material = mat
 	p.mesh = quad
 	p.direction = Vector3(0, 1, 0)
@@ -220,8 +220,8 @@ func _make_particles(tex: Texture2D, amount: int, lifetime: float) -> CPUParticl
 	p.scale_amount_max = 1.6
 	var curve := Curve.new()
 	curve.max_value = 3.0
-	curve.add_point(Vector2(0, 0.5))
-	curve.add_point(Vector2(1, 2.2))
+	curve.add_point(Vector2(0, 0.4))
+	curve.add_point(Vector2(1, 1.3))
 	p.scale_amount_curve = curve
 	var grad := Gradient.new()
 	grad.set_color(0, Color(1, 1, 1, 1))
@@ -577,8 +577,9 @@ func _place_wheel(w: Wheel, delta: float) -> void:
 	w.spinner.rotate_x(-w.spin * delta)
 
 
-## Tyre marks: rubber where tyres slide or spin on tarmac, ruts on gravel and
-## mud on soft ground (a faint track even when just driving through).
+## Tyre marks: rubber where tyres slide or spin on tarmac (a damp line when
+## it rains), ruts on gravel, mud and turf on soft ground (a faint track even
+## when just driving through) and short dark marks off the line.
 func _leave_marks() -> void:
 	if marks == null:
 		return
@@ -592,24 +593,43 @@ func _leave_marks() -> void:
 				strength = clampf(w.slip / 5.0, 0.35, 1.0)
 			if w.spinning or (handbrake and not w.front):
 				strength = 1.0
-			if kind == "rut" or kind == "mud":
+			if kind in ["rut", "mud", "turf"]:
 				strength = maxf(strength, 0.3)
+			strength = maxf(strength, _launch() * 0.7)
+		if rain and kind == "rubber":
+			kind = "wet"
 		if model.is_tank() and w.grounded and speed > 1.0:
 			strength = maxf(strength, 0.6)  # tracks chew everything up
 		marks.track(i, kind if strength > 0.0 else "", w.contact, w.normal, strength)
 
 
+## How hard the tyres are scrabbling to pull away: full throttle at low speed
+## (a cosmetic burnout for smoke and marks off the line). 0..1.
+func _launch() -> float:
+	if model.is_tank() or throttle < 0.7 or forward_speed < 0.2 or forward_speed > 9.0:
+		return 0.0
+	return (1.0 - forward_speed / 9.0) * throttle
+
+
 func _update_fx(delta: float) -> void:
+	var launch := _launch()
 	for w in wheels:
 		var sd := Surfaces.get_surface(w.surface)
-		var always: bool = sd["fx_always"]
-		var spray := rain and speed > 8.0 and not always
-		var on := w.grounded and ((always and speed > 6.0) or (w.sliding and speed > 3.0) or (w.slip > 3.0) or spray)
-		w.fx.emitting = on
-		if on:
-			w.fx.global_position = w.spinner.global_position - Vector3(0, w.radius * 0.7, 0)
-			var c: Color = sd["fx"]
-			w.fx.color = Color(0.82, 0.86, 0.92, 0.5) if spray else c
+		var amount := 0.0
+		var spray := false
+		if w.grounded:
+			if sd["fx_always"] and speed > 6.0:
+				amount = clampf(speed / 40.0, 0.15, 0.5)
+			if w.sliding and speed > 3.0:
+				amount = maxf(amount, clampf(w.slip / 6.0, 0.35, 1.0))
+			if w.spinning:
+				amount = 1.0
+			amount = maxf(amount, launch * (0.6 if w.front else 1.0))
+			spray = rain and speed > 8.0 and not sd["fx_always"]
+			if spray:
+				amount = maxf(amount, clampf(speed / 30.0, 0.3, 0.8))
+		w.fx.global_position = w.spinner.global_position - Vector3(0, w.radius * 0.7, 0)
+		w.fx.show_surface(w.surface, amount, spray)
 	_smoke.emitting = damage["front"] > 0.5
 	_smoke.color = Color(0.15, 0.15, 0.17, 0.4 + damage["front"] * 0.5)
 
