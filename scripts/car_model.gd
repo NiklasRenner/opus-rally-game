@@ -146,6 +146,7 @@ func _car_materials() -> Dictionary:
 		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5), spec.get("rim_ring", Color(0, 0, 0, 0))), 0.4),
 		"Tail": TexGen.flat_material(Color(1.0, 0.12, 0.08), 0.3, true),
 		"Frame": _frame_mat(),
+		"Steel": _steel_mat(),
 	}
 
 
@@ -154,6 +155,13 @@ func _car_materials() -> Dictionary:
 func _frame_mat() -> StandardMaterial3D:
 	var m := TexGen.flat_material(spec.get("frame", Color(0.8, 0.08, 0.06)), 0.45)
 	m.vertex_color_use_as_albedo = true
+	return m
+
+
+## Darker, duller than chrome: cast metal like the truck's diff housings.
+func _steel_mat() -> StandardMaterial3D:
+	var m := TexGen.flat_material(Color(0.2, 0.21, 0.23), 0.5)
+	m.metallic = 0.4
 	return m
 
 
