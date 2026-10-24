@@ -1,6 +1,6 @@
 extends Control
 ## Main menu: pick a stage, car, lap count, ghost, weather and gearbox, and see the
-## stage's records.
+## stage's records for the chosen car's class.
 ## The car row swaps the stage preview for a turntable of the chosen car.
 ## Arrow keys / d-pad to move and change, Enter / A to confirm.
 
@@ -180,6 +180,9 @@ func _draw() -> void:
 		if i < OPTION_ROWS:
 			RetroUI.text(self, Vector2(left.position.x + 16, y), ROWS[i], 14, RetroUI.CYAN, 3)
 			RetroUI.text(self, Vector2(left.position.x + 90, y), values[i], 14, col, 3)
+			if ROWS[i] == "CAR":
+				var w := ThemeDB.fallback_font.get_string_size(values[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+				RetroUI.class_badge(self, Vector2(left.position.x + 96 + w, y - 1), car.get("class", Cars.DEFAULT_CLASS), 11, false)
 		else:
 			RetroUI.italic(self, Vector2(left.position.x + 18, y), ROWS[i], 18, col, 5)
 	var hint := "%s  %.1f km" % [map["blurb"], prev["length"] / 1000.0]
@@ -200,6 +203,7 @@ func _draw_car(right: Rect2, car: Dictionary) -> void:
 	draw_texture(_showroom.get_texture(), right.position + Vector2(7, 46))
 	RetroUI.italic(self, right.position + Vector2(14, 28), car["name"], 20, RetroUI.YELLOW, 5)
 	RetroUI.text(self, right.position + Vector2(16, 44), car["blurb"], 11, Color.WHITE, 3)
+	RetroUI.class_badge(self, Vector2(right.end.x - 92, right.position.y + 26), car.get("class", Cars.DEFAULT_CLASS))
 	var stats: Dictionary = car["stats"]
 	# bars relative to the spread across the garage
 	var bars := [["ACCEL", RallyCar.accel(car), _range(RallyCar.accel)], ["TOP SPD", RallyCar.top_speed(car), _range(RallyCar.top_speed)],
@@ -252,7 +256,10 @@ func _draw_stage(right: Rect2, map: Dictionary, prev: Dictionary) -> void:
 	# --- records for this stage + lap count
 	var rx := right.position.x + 156
 	var ry := right.position.y + 24
-	RetroUI.text(self, Vector2(rx, ry), "TOP 5  %d LAP%s" % [Game.laps, "S" if Game.laps > 1 else ""], 12, RetroUI.YELLOW, 3)
+	var title := "TOP 5  %d LAP%s" % [Game.laps, "S" if Game.laps > 1 else ""]
+	RetroUI.text(self, Vector2(rx, ry), title, 12, RetroUI.YELLOW, 3)
+	var tw := ThemeDB.fallback_font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	RetroUI.class_badge(self, Vector2(rx + tw + 8, ry), Game.car_class(), 10)
 	var list := Game.scores()
 	for i in Game.MAX_SCORES:
 		var y := ry + 18 + i * 16

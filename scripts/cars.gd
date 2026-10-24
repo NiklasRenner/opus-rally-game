@@ -4,6 +4,7 @@ extends RefCounted
 ## a few small handling tweaks (kept close so records stay comparable).
 ##
 ## type    : "car" (default), "f1", "truck" or "tank"
+## class   : racing class (see CLASSES); records and ghosts are kept per class
 ## ground_y: ground level in car space for the model (default -0.72)
 ## frame   : tube frame colour (the truck)
 ## mesh    : the model in models/; nose: z of its nose in car space
@@ -27,6 +28,7 @@ extends RefCounted
 const LIST := [
 	{
 		"id": "martello",
+		"class": "A",
 		"name": "MARTELLO HF",
 		"blurb": "Boxy hatch, all-rounder",
 		"number": "4",
@@ -42,6 +44,7 @@ const LIST := [
 	},
 	{
 		"id": "pleiad",
+		"class": "A",
 		"name": "PLEIAD 555",
 		"blurb": "Grippy saloon, gold wheels",
 		"number": "5",
@@ -56,6 +59,7 @@ const LIST := [
 	},
 	{
 		"id": "balear",
+		"class": "A",
 		"name": "BALEAR KIT",
 		"blurb": "Little yellow kit car, quick to turn",
 		"number": "15",
@@ -70,6 +74,7 @@ const LIST := [
 	},
 	{
 		"id": "f1",
+		"class": "S",
 		"type": "f1",
 		"name": "VELOCE F1",
 		"blurb": "Hybrid single-seater, huge downforce",
@@ -122,6 +127,7 @@ const LIST := [
 	},
 	{
 		"id": "pardel",
+		"class": "X",
 		"type": "tank",
 		"name": "KPZ PARDEL",
 		"blurb": "Boxy German heavy. Wedge turret, stabilised gun",
@@ -168,6 +174,25 @@ static func wheel_positions(s: Dictionary) -> Array[Vector3]:
 ## Cars that have left the garage, so old records still show what they were set in.
 const RETIRED := {"kaze": "KAZE GT4", "falke": "FALKE RS", "cuneo": "CUNEO STRADALE", "kart": "KART 125",
 	"tank": "TANK T-98"}
+
+
+## Racing classes, fastest first. Each keeps its own highscores, best laps and
+## ghosts, so a rally car never chases an F1 time.
+const CLASSES := {
+	"S": {"name": "FORMULA", "col": Color(0.95, 0.15, 0.1)},
+	"A": {"name": "RALLY", "col": Color(1.0, 0.84, 0.1)},
+	"X": {"name": "ARMOUR", "col": Color(0.45, 0.75, 0.3)},
+}
+const DEFAULT_CLASS := "A"
+## Classes of retired cars, for sorting their old records into the right table.
+const RETIRED_CLASS := {"tank": "X"}
+
+
+## Class letter for a car id, including retired cars.
+static func class_of(id: String) -> String:
+	if RETIRED.has(id):
+		return RETIRED_CLASS.get(id, DEFAULT_CLASS)
+	return get_car(id).get("class", DEFAULT_CLASS)
 
 
 ## Display name for a car id, including retired cars.
