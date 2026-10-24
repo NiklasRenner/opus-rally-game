@@ -546,10 +546,10 @@ def hyper_parts(B, c, root, M):
         # a thin dark strip laid along the curve of the bonnet and wing
         for xa, xb in zip(xs, xs[1:]):
             g.hull([(s * x, y, body_top(body, y, x) + dz) for x in (xa, xb) for y in (y0, y1)
-                    for dz in (-0.015, 0.012)], "Trim")
+                    for dz in (-0.015, 0.006)], "Trim")
             x = (xa + xb) / 2
             y = (y0 + y1) / 2
-            g.cyl((s * x, y, body_top(body, y, x) + 0.014), "Z", 0.03, 0.01, "Lamp", segs=8)
+            g.cyl((s * x, y, body_top(body, y, x) + 0.007), "Z", 0.03, 0.006, "Lamp", segs=8)
     # raised spine down the middle of the bonnet, from the grille to the screen
     sy = c["screen"][0][0]
     g.hull([(sx * x, y, body_top(body, y, 0.0) + dz) for sx in (-1, 1) for x in (0.03,)
@@ -570,18 +570,18 @@ def hyper_parts(B, c, root, M):
 
     def face(x):  # front of the fascia at x: a shallow V to the pointed middle
         return fy + 0.04 + tip * min(max((hwf * 0.9 - abs(x)) / (hwf * 0.9 - 0.2), 0.0), 1.0)
-    gy = fy + 0.07 + tip  # the grille stands proud of the nose
+    gy = fy + 0.05 + tip  # the grille sits in the face of the nose, its top under the bonnet line
     # horseshoe: chrome rim round a dark mesh, rounded top, flat-ish base
     shoe = []
     for i in range(15):
         a = math.pi * (-0.05 + 1.1 * i / 14)
-        shoe.append((0.17 * math.cos(a), 0.36 + 0.15 * math.sin(a)))
-    shoe = [(0.13, 0.2), (0.155, 0.27)] + shoe + [(-0.155, 0.27), (-0.13, 0.2)]
+        shoe.append((0.15 * math.cos(a), 0.29 + 0.11 * math.sin(a)))
+    shoe = [(0.12, 0.17), (0.14, 0.23)] + shoe + [(-0.14, 0.23), (-0.12, 0.17)]
     g.hull([(x, y, z) for x, z in shoe for y in (gy - 0.04, gy)], "Trim")
     for (x0, z0), (x1, z1) in zip(shoe, shoe[1:]):
         rod(g, (x0, gy + 0.005, z0), (x1, gy + 0.005, z1), 0.03, "Chrome")
     rod(g, (shoe[-1][0], gy + 0.005, shoe[-1][1]), (shoe[0][0], gy + 0.005, shoe[0][1]), 0.03, "Chrome")
-    g.cyl((0, gy + 0.012, 0.43), "Y", 0.032, 0.01, "Tail", segs=10)  # little red oval badge
+    g.cyl((0, gy + 0.012, 0.35), "Y", 0.028, 0.01, "Tail", segs=10)  # little red oval badge
     # deep lower intakes either side of the grille, each with a silver lip
     # under it, and the splitter following the V of the nose
     for sx in (-1, 1):
