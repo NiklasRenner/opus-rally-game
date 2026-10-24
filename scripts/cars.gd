@@ -20,8 +20,10 @@ extends RefCounted
 ## wheels  : optional layout {x, zf, zr, rf, rr, wf, wr}: track half-width,
 ##           front/rear axle z, visual tyre radius and width per axle
 ## shapes  : optional collision boxes [size, centre]
+## gears   : forward gear ratios, first to top (default GEARS); spaced so top
+##           speed comes near the redline in top gear
 ## Extra stats: gearing (final drive multiplier, >1 = shorter gears / lower top
-## speed), drag, downforce, inertia (yaw inertia vs a saloon), pitch (engine note).
+## speed), shift (gear change time vs a rally box), drag, downforce, inertia (yaw inertia vs a saloon), pitch (engine note).
 ## Chassis forces (springs, brakes, yaw assists) scale with mass so light and
 ## heavy vehicles handle alike; engine power does not, so mass still counts.
 
@@ -40,6 +42,7 @@ const LIST := [
 		"spokes": 8,
 		"rims": Color(0.92, 0.92, 0.90),
 		"flaps": Color(0.08, 0.20, 0.62),
+		"gears": [3.3, 2.56, 2.05, 1.7, 1.45],
 		"stats": {"power": 1.0, "grip": 1.0, "steer": 1.0, "mass": 1200.0},
 	},
 	{
@@ -55,6 +58,7 @@ const LIST := [
 		"spokes": 8,
 		"rims": Color(0.85, 0.68, 0.22),
 		"flaps": Color(0.95, 0.95, 0.95),
+		"gears": [3.3, 2.5, 2.02, 1.72, 1.5, 1.32],
 		"stats": {"power": 0.97, "grip": 1.04, "steer": 0.98, "mass": 1230.0},
 	},
 	{
@@ -70,6 +74,7 @@ const LIST := [
 		"spokes": 6,
 		"rims": Color(0.95, 0.95, 0.93),
 		"flaps": Color(0.08, 0.20, 0.62),
+		"gears": [3.3, 2.5, 2.0, 1.7, 1.48, 1.32],
 		"stats": {"power": 0.98, "grip": 1.0, "steer": 1.05, "mass": 1120.0},
 	},
 	{
@@ -93,8 +98,11 @@ const LIST := [
 		"parts": [["FrontWing", "front", 0.12], ["RearWing", "rear", 0.2], ["Sidepod_L", "left", 0.3],
 			["Sidepod_R", "right", 0.3], ["Mirror_L", "left", 0.1], ["Mirror_R", "right", 0.1]],
 		"wheels": {"x": 0.84, "zf": -1.72, "zr": 1.42, "rf": 0.32, "rr": 0.35, "wf": 0.3, "wr": 0.42},
+		# eight-speed seamless-shift box, like the real thing
+		"gears": [3.3, 2.68, 2.22, 1.87, 1.6, 1.39, 1.22, 1.09],
 		"stats": {"power": 2.0, "grip": 1.1, "steer": 0.95, "mass": 800.0,
-			"gearing": 0.78, "drag": 0.7, "downforce": 3.5, "inertia": 0.85, "pitch": 1.45, "armour": 1.8},
+			"gearing": 0.78, "drag": 0.7, "downforce": 3.5, "inertia": 0.85, "pitch": 1.45, "armour": 1.8,
+			"shift": 0.4},
 		"shapes": [[Vector3(2.0, 0.26, 4.7), Vector3(0, -0.30, -0.15)], [Vector3(0.7, 0.4, 1.2), Vector3(0, 0.0, 0.4)]],
 	},
 	{
@@ -116,8 +124,10 @@ const LIST := [
 		"wheels": {"x": 0.87, "zf": -1.4, "zr": 1.32, "rf": 0.36, "rr": 0.36, "wf": 0.3, "wr": 0.36},
 		# heavy but brutally quick: a little behind the F1 off the line, faster flat
 		# out, less downforce so it slides more in fast corners
+		# seven-speed twin-clutch
+		"gears": [3.3, 2.74, 2.29, 1.92, 1.62, 1.38, 1.18],
 		"stats": {"power": 4.0, "grip": 1.08, "steer": 0.97, "mass": 1700.0,
-			"gearing": 0.7, "drag": 0.7, "downforce": 1.8, "inertia": 1.1, "pitch": 0.85},
+			"gearing": 0.7, "drag": 0.7, "downforce": 1.8, "inertia": 1.1, "pitch": 0.85, "shift": 0.5},
 		"shapes": [[Vector3(1.95, 0.57, 4.6), Vector3(0, -0.085, 0)], [Vector3(1.2, 0.26, 2.0), Vector3(0, 0.33, 0.2)]],
 	},
 	{
@@ -143,9 +153,11 @@ const LIST := [
 		"wheels": {"x": 1.05, "zf": -1.45, "zr": 1.45, "rf": 0.75, "rr": 0.75, "wf": 0.8, "wr": 0.8},
 		# travel, spring, damper: long soft suspension that keeps bouncing;
 		# bump_soak: how much rough ground still shakes it; roll_tame: lower lets it lean
+		# three-speed slushbox: short first to heave the weight, big gaps after
+		"gears": [3.5, 2.43, 1.79],
 		"stats": {"power": 1.35, "grip": 1.0, "steer": 0.85, "mass": 2000.0, "gearing": 0.85, "drag": 1.5,
 			"armour": 0.6, "travel": 2.0, "spring": 0.45, "damper": 0.35, "bump_soak": 0.35, "roll_tame": 0.3,
-			"pitch": 0.7},
+			"pitch": 0.7, "shift": 1.5},
 		"shapes": [[Vector3(1.7, 0.45, 4.6), Vector3(0, 0.2, 0)], [Vector3(1.85, 0.62, 4.2), Vector3(0, 0.66, 0)],
 			[Vector3(1.6, 0.44, 1.15), Vector3(0, 1.19, -0.22)], [Vector3(1.5, 0.6, 1.3), Vector3(0, 1.26, 1.22)]],
 	},
@@ -160,8 +172,10 @@ const LIST := [
 		"nose": -2.28,
 		# drag: extra air resistance (lower top speed), pivot: skid-steer turn on
 		# the spot, armour: damage taken, pitch: engine note
+		# four forward gears like the real tank's box, slow to change
+		"gears": [3.5, 2.62, 2.08, 1.73],
 		"stats": {"power": 0.95, "grip": 1.15, "steer": 0.9, "mass": 1800.0,
-			"drag": 1.8, "pivot": 1.0, "armour": 0.25, "pitch": 0.4},
+			"drag": 1.8, "pivot": 1.0, "armour": 0.25, "pitch": 0.4, "shift": 1.75},
 		"dents": ["Hull", "Turret", "SideSkirt_L", "SideSkirt_R", "SkirtArmor_L", "SkirtArmor_R"],
 		"parts": [["SideSkirt_L", "left", 0.45], ["SideSkirt_R", "right", 0.45], ["SkirtArmor_L", "left", 0.7],
 			["SkirtArmor_R", "right", 0.7], ["Headlight_L", "front", 0.3], ["Headlight_R", "front", 0.3],
@@ -173,10 +187,16 @@ const LIST := [
 ]
 
 
+const GEARS := [3.3, 2.2, 1.65, 1.3, 1.06]  # a spec without its own "gears"
 const WHEELS := {"x": 0.82, "zf": -1.32, "zr": 1.28, "rf": 0.34, "rr": 0.34, "wf": 0.26, "wr": 0.26}
 const REF_MASS := 1200.0
 const WHEEL_RADIUS := 0.34  # every wheel's physics radius; small tyres are drawn lower
 const ATTACH_Y := -0.05  # height of the suspension attach points
+
+
+## Forward gear ratios for a spec, first gear first.
+static func gears(spec: Dictionary) -> Array:
+	return spec.get("gears", GEARS)
 
 
 ## Wheel layout for a spec, filled in with the saloon defaults.
