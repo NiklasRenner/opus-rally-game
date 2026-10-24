@@ -77,6 +77,11 @@ var skid := 0.0  # 0..1 how much tyres are sliding (audio / hud)
 
 var damage := {"front": 0.0, "rear": 0.0, "left": 0.0, "right": 0.0}
 var _impact_cooldown := 0.0
+## Velocities over the last few physics steps. A hard hit is often resolved
+## over several steps (pushed out of the wall rather than by one big contact
+## impulse), so impacts are measured as the change across this window too.
+var _vel_history: Array[Vector3] = []
+const IMPACT_WINDOW := 6  # steps, 0.05 s at 120 Hz
 var _prev_forward_speed := 0.0
 var _accel_long := 0.0
 var _load_shift := 0.0  # + = weight on the front (braking / lifting)
@@ -636,6 +641,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
 		_pending_place = null
+		_vel_history.clear()
 		return
 	var total := Vector3.ZERO
 	var point := Vector3.ZERO
@@ -650,8 +656,29 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 			point = state.get_contact_local_position(i)
 			normal = state.get_contact_local_normal(i)
 	var dv := total.length() / mass
+	# speed lost over the window while touching something; up/down is left out
+	# so landings from jumps don't count, and the car's own grip and brakes
+	# can't change its speed this much this quickly
+	_vel_history.append(state.linear_velocity)
+	if _vel_history.size() > IMPACT_WINDOW:
+		_vel_history.pop_front()
+	if state.get_contact_count() > 0:
+		var change := state.linear_velocity - _vel_history[0]
+		change.y = 0.0
+		if change.length() > dv:
+			dv = change.length()
+			if best <= 0.0:
+				# no telling impulse: take the contact whose normal pushed us the way we went
+				var along := -INF
+				for i in state.get_contact_count():
+					var n := state.get_contact_local_normal(i)
+					if n.dot(change) > along:
+						along = n.dot(change)
+						point = state.get_contact_local_position(i)
+						normal = n
 	if dv > 2.2 and _impact_cooldown <= 0.0:
 		_impact_cooldown = 0.12
+		_vel_history.clear()
 		call_deferred("_apply_impact", dv, point, normal)
 
 
