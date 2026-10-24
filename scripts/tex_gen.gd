@@ -592,45 +592,49 @@ static func camo() -> ImageTexture:
 
 
 static func _make_camo() -> ImageTexture:
+	# Danish three-tone: big angular patches of mid olive, pale sage and near
+	# black with hard edges. Each pixel takes the colour of its nearest seed
+	# by a skewed Chebyshev distance (wrapped so the tile repeats), which cuts
+	# the patches into slanted blocks; then a dusty matte grain on top.
 	var rng := RandomNumberGenerator.new()
-	rng.seed = 2
-	var green := Color(0.21, 0.26, 0.15)
-	var brown := Color(0.31, 0.23, 0.15)
-	var black := Color(0.09, 0.09, 0.08)
+	rng.seed = 45
+	var tones := [Color(0.29, 0.32, 0.2), Color(0.47, 0.5, 0.4), Color(0.1, 0.12, 0.09)]
+	var seeds: Array[Vector2] = []
+	var tone: Array[int] = []
+	for i in 14:
+		seeds.append(Vector2(rng.randf_range(0, 64), rng.randf_range(0, 64)))
+		tone.append([0, 0, 1, 1, 2][rng.randi() % 5])
 	var img := Image.create(64, 64, false, Image.FORMAT_RGB8)
 	for y in 64:
 		for x in 64:
-			# whole periods across the tile so the pattern wraps
-			var a := TAU * x / 64.0
-			var b := TAU * y / 64.0
-			var k := sin(a * 2.0 + cos(b) * 1.3) + sin(b * 3.0 - a + 0.7) * 0.8 + sin(a + b * 2.0 + 2.1) * 0.6
-			var c := green
-			if k > 0.75:
-				c = brown
-			elif k < -0.85:
-				c = black
-			var v := rng.randf_range(-0.025, 0.025)
+			var best := INF
+			var k := 0
+			for i in seeds.size():
+				var d := Vector2(x, y) - seeds[i]
+				d.x = fposmod(d.x + 32.0, 64.0) - 32.0
+				d.y = fposmod(d.y + 32.0, 64.0) - 32.0
+				var dist := maxf(absf(d.x + d.y * 0.45), absf(d.y * 1.2))
+				if dist < best:
+					best = dist
+					k = tone[i]
+			var c: Color = tones[k]
+			var v := rng.randf_range(-0.02, 0.02)
 			img.set_pixel(x, y, Color(c.r + v, c.g + v, c.b + v))
-	_speckle(img, [Color(0.33, 0.30, 0.22)], 0.03, rng)  # dust
+	_speckle(img, [Color(0.52, 0.48, 0.38), Color(0.4, 0.38, 0.3)], 0.05, rng)  # dust
 	return _tex(img)
 
 
-## Balkenkreuz: black cross with a white outline on transparent pixels.
-static func tank_cross() -> ImageTexture:
-	return cached("cross", _make_tank_cross)
+## Dannebrog: red with a white Nordic cross set towards the hoist.
+static func danish_flag() -> ImageTexture:
+	return cached("dannebrog", _make_danish_flag)
 
 
-static func _make_tank_cross() -> ImageTexture:
-	var img := Image.create(11, 11, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
-	for y in 11:
-		for x in 11:
-			var dx := absi(x - 5)
-			var dy := absi(y - 5)
-			if mini(dx, dy) <= 1:
-				img.set_pixel(x, y, Color(0.05, 0.05, 0.05))  # arms
-			elif mini(dx, dy) <= 2 and maxi(dx, dy) >= 2:
-				img.set_pixel(x, y, Color(0.95, 0.95, 0.9))  # white edging
+static func _make_danish_flag() -> ImageTexture:
+	var img := Image.create(17, 13, false, Image.FORMAT_RGB8)
+	for y in 13:
+		for x in 17:
+			var white := (x >= 5 and x <= 6) or (y >= 6 and y <= 7)
+			img.set_pixel(x, y, Color(0.95, 0.95, 0.93) if white else Color(0.78, 0.06, 0.16))
 	return ImageTexture.create_from_image(img)
 
 

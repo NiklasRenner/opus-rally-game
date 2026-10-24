@@ -180,7 +180,7 @@ func _tank_materials() -> Dictionary:
 		"Rubber": TexGen.flat_material(Color(0.05, 0.05, 0.05), 0.95),
 		"Track": _track_mat,
 		# road wheel faces: lightening holes so the wheels are seen to turn
-		"Wheel": TexGen.material(TexGen.rim(Color(0.2, 0.25, 0.14), 6), 0.85),
+		"Wheel": TexGen.material(TexGen.rim(Color(0.55, 0.48, 0.34), 6), 0.9),  # dusty sand road wheels
 		"Glass": TexGen.flat_material(Color(0.08, 0.16, 0.2), 0.1),
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"TailLight": TexGen.flat_material(Color(0.8, 0.08, 0.05), 0.3, true),
@@ -234,20 +234,23 @@ func _helmet(pos: Vector3, col: Color, r: float) -> void:
 	_head.add_child(visor)
 
 
-## Crosses on the skirts and the back, tactical number on the turret bins.
+## Small Danish flags on the skirts and the back, tactical number on the
+## turret bins, white tactical code on the glacis.
 func _tank_decals(root: Node3D) -> void:
+	var flag := TexGen.danish_flag()
 	for s in [-1.0, 1.0]:
 		var bas := FACE_RIGHT if s > 0.0 else FACE_LEFT
 		var skirt: Node3D = root.find_child("SideSkirt_R" if s > 0.0 else "SideSkirt_L", true, false)
-		_cross(Vector2(0.3, 0.3), Vector3(s * 0.035, -0.19, 0.0), bas, skirt)
+		_decal(flag, Vector2(0.26, -1), Vector3(s * 0.035, -0.19, 0.0), bas, skirt)
 		_decal(TexGen.pixel_text(spec["number"], Color(0.92, 0.92, 0.86), Color(0.12, 0.15, 0.09)),
 			Vector2(0.42, -1), Vector3(s * 0.817, 0.22, 0.78), bas, _turret)
-	_cross(Vector2(0.18, 0.18), Vector3(0, 0.16, 2.235), FACE_BACK, self)
-
-
-func _cross(size: Vector2, pos: Vector3, bas: Basis, parent: Node3D) -> void:
-	var mi := _decal(TexGen.tank_cross(), size, pos, bas, parent)
-	(mi.material_override as StandardMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	_decal(flag, Vector2(0.17, -1), Vector3(0, 0.16, 2.235), FACE_BACK, self)
+	# glacis: lies back from the nose, read from in front
+	var up := Vector3(0, 0.275, 0.961)
+	var glacis := Basis(Vector3.LEFT, up, Vector3.LEFT.cross(up))
+	var code := _decal(TexGen.pixel_text("DK 34-" + String(spec["number"]), Color(0.92, 0.92, 0.88), Color(0, 0, 0, 0)),
+		Vector2(0.5, -1), Vector3(-0.5, 0.21, -1.99), glacis, self)
+	(code.material_override as StandardMaterial3D).transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 
 
 ## A textured sticker. A negative height keeps the texture's pixel aspect.
