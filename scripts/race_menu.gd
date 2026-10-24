@@ -247,13 +247,14 @@ func _draw_results(vs: Vector2) -> void:
 	var map: Dictionary = Maps.get_map(Game.map_id)
 	RetroUI.italic(self, r.position + Vector2(18, 34), "FINISH!", 30, RetroUI.YELLOW)
 	RetroUI.text(self, r.position + Vector2(170, 22), map["name"], 13, Color.WHITE, 3)
-	var laps_text := "%d LAP%s" % [Game.laps, "S" if Game.laps > 1 else ""]
+	var p2p := Game.is_point_to_point()
+	var laps_text := "A TO B" if p2p else "%d LAP%s" % [Game.laps, "S" if Game.laps > 1 else ""]
 	RetroUI.text(self, r.position + Vector2(170, 38), laps_text, 11, RetroUI.CYAN, 3)
 	var lw := ThemeDB.fallback_font.get_string_size(laps_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
 	RetroUI.class_badge(self, r.position + Vector2(180 + lw, 38), Game.car_class(), 11)
 	RetroUI.text(self, r.position + Vector2(18, 62), "TIME", 13, RetroUI.YELLOW, 3)
 	RetroUI.italic(self, r.position + Vector2(64, 64), Hud.fmt_time(_time), 22, Color.WHITE)
-	RetroUI.text(self, r.position + Vector2(200, 62), "BEST LAP", 13, RetroUI.GREEN, 3)
+	RetroUI.text(self, r.position + Vector2(200, 62), "BEST RUN" if p2p else "BEST LAP", 13, RetroUI.GREEN, 3)
 	RetroUI.text(self, r.position + Vector2(280, 62), Hud.fmt_time(Game.best_lap()), 13, Color.WHITE, 3)
 	if _new_ghost:
 		RetroUI.text(self, r.position + Vector2(18, 84), "NEW GHOST SAVED - RACE IT NEXT TIME", 11, RetroUI.CYAN, 3)

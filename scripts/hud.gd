@@ -14,6 +14,9 @@ var _map_points := PackedVector2Array()
 var _map_colors := PackedColorArray()
 var _map_center := Vector2.ZERO
 var _map_scale := 1.0
+var _map_loop := true
+var _map_start := 0  # start and finish line among _map_points (point-to-point)
+var _map_finish := 0
 # plates punch out briefly when the gear or lap changes
 var _shown_gear := 1
 var _gear_pop := 0.0
@@ -44,6 +47,9 @@ func setup_map() -> void:
 		var p := track.points[i]
 		_map_points.append(Vector2(p.x, p.z))
 		_map_colors.append(Surfaces.get_surface(track.surfaces[i])["hud"])
+	_map_loop = track.loop
+	_map_start = track.start_index / 2
+	_map_finish = track.finish_index / 2
 
 
 func _process(delta: float) -> void:
@@ -127,19 +133,30 @@ func _draw() -> void:
 	draw_rect(Rect2(179, 21, 282 * prog, 5), Color(0.55, 0.95, 0.15))
 
 	# --- times
-	_text(Vector2(14, 44), "TOTAL TIME", 13, YELLOW, 3)
+	var p2p: bool = race.point_to_point
+	_text(Vector2(14, 44), "STAGE TIME" if p2p else "TOTAL TIME", 13, YELLOW, 3)
 	_italic(Vector2(16, 70), fmt_time(race.race_time), 26, Color.WHITE)
-	_text(Vector2(14, 88), "LAP TIME", 13, RED, 3)
-	_draw_lap_plate(Rect2(17, 93, 24, 22))
-	_italic(Vector2(52, 112), fmt_time(race.lap_time), 22, Color.WHITE)
-	_text(Vector2(484, 44), "BEST LAP", 13, GREEN, 3)
+	if p2p:
+		# no laps: how far is left, and the checkpoints so far
+		_text(Vector2(14, 88), "TO GO", 13, RED, 3)
+		_italic(Vector2(18, 112), "%.2f km" % (race.distance_to_go / 1000.0), 22, Color.WHITE)
+	else:
+		_text(Vector2(14, 88), "LAP TIME", 13, RED, 3)
+		_draw_lap_plate(Rect2(17, 93, 24, 22))
+		_italic(Vector2(52, 112), fmt_time(race.lap_time), 22, Color.WHITE)
+	_text(Vector2(484, 44), "BEST RUN" if p2p else "BEST LAP", 13, GREEN, 3)
 	_italic(Vector2(486, 68), fmt_time(race.best_lap), 20, Color.WHITE)
-	_text(Vector2(484, 86), "LAST", 11, YELLOW, 3)
-	_text(Vector2(520, 86), fmt_time(race.last_lap), 11, Color.WHITE, 3)
+	if p2p:
+		_text(Vector2(484, 86), "SPLIT", 11, YELLOW, 3)
+		_text(Vector2(520, 86), "%d/%d" % [race.splits_passed, race.SPLITS], 11, Color.WHITE, 3)
+	else:
+		_text(Vector2(484, 86), "LAST", 11, YELLOW, 3)
+		_text(Vector2(520, 86), fmt_time(race.last_lap), 11, Color.WHITE, 3)
 	if race.ghost_time < INF:
 		_text(Vector2(484, 102), "GHOST", 11, Color(0.6, 0.9, 1.0), 3)
 		_text(Vector2(520, 102), fmt_time(race.ghost_time), 11, Color.WHITE, 3)
-	# split vs ghost at each lap line: green when ahead, red when behind
+	# split vs ghost at each lap line (each split point from start to finish):
+	# green when ahead, red when behind
 	var split: String = race.split_text
 	if split != "":
 		var ahead := split.begins_with("-")
@@ -241,9 +258,17 @@ func _draw_map(c: Vector2) -> void:
 	var pts := PackedVector2Array()
 	for p in _map_points:
 		pts.append(c + (p - _map_center) * _map_scale)
-	for i in pts.size():
+	for i in (pts.size() if _map_loop else pts.size() - 1):
 		var j := (i + 1) % pts.size()
 		draw_line(pts[i], pts[j], _map_colors[i], 3.0)
+	if not _map_loop:
+		# flags at the two ends: green start, chequered finish
+		draw_circle(pts[_map_start], 3.5, INK)
+		draw_circle(pts[_map_start], 2.5, GREEN)
+		var f := pts[_map_finish]
+		draw_rect(Rect2(f - Vector2(4, 4), Vector2(8, 8)), INK)
+		for q in 4:
+			draw_rect(Rect2(f - Vector2(3, 3) + Vector2(q % 2, q / 2) * 3.0, Vector2(3, 3)), Color.WHITE if (q % 2 + q / 2) % 2 == 0 else INK)
 	# ghost car: a cyan blip, so you can see how far ahead or behind it is
 	var g: Ghost = race.ghost
 	if g and g.visible:

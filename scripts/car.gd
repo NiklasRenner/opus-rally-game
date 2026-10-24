@@ -51,6 +51,7 @@ class Wheel:
 
 var spec: Dictionary = Cars.LIST[0]  # set before adding to the tree
 var control_enabled := false
+var stopping := false  # brake to a halt on its own (past a point-to-point finish)
 var manual_gears := false  # Up / Down shift; the automatic box takes over once control ends
 var rain := false  # wet weather: less grip, spray off every tyre
 var gravity := 9.81  # the stage's gravity (the Moon's is low); the assists scale with it
@@ -276,6 +277,10 @@ func _read_input(delta: float) -> void:
 				_shift(1)
 			elif Input.is_action_just_pressed("shift_down"):
 				_shift(-1)
+	elif stopping:
+		# brakes while rolling, then the handbrake (holding the brake would reverse)
+		b = 0.6 if forward_speed > 1.0 else 0.0
+		hb = forward_speed <= 1.0
 	throttle = move_toward(throttle, t, delta * 6.0)
 	brake = move_toward(brake, b, delta * 8.0)
 	# keyboard steering ramps in, centres faster

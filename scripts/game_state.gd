@@ -1,7 +1,9 @@
 extends Node
 ## Autoload "Game": menu selections plus everything saved to disk, namely
 ## highscores (top 5 race times per map, lap count and car class, best lap per
-## map and class) and the ghost of the best race for each of those.
+## map and class) and the ghost of the best race for each of those. A
+## point-to-point stage has no laps: its times are kept as 1 lap, and its
+## "best lap" is the best run.
 
 const RECORDS_PATH := "user://records.json"
 const GHOST_DIR := "user://ghosts"
@@ -99,7 +101,14 @@ func car_class() -> String:
 
 
 func race_key(id: String = map_id, lap_count: int = laps, cls: String = car_class()) -> String:
+	if is_point_to_point(id):
+		lap_count = 1  # one run from start to finish, whatever the laps setting
 	return "%s_%dlap_%s" % [id, lap_count, cls]
+
+
+## A stage run once from its start to a finish somewhere else, no laps?
+func is_point_to_point(id: String = map_id) -> bool:
+	return Maps.get_map(id).get("point_to_point", false)
 
 
 func lap_key(id: String = map_id, cls: String = car_class()) -> String:

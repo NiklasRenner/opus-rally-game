@@ -11,7 +11,9 @@ const ROW_H := 21
 var _sel := 0
 var _map_i := 0
 var _car_i := 0
-var _previews: Array = []  # per map: {"pts": PackedVector2Array, "cols": PackedColorArray, "length": float}
+# per map: {"pts": PackedVector2Array, "cols": PackedColorArray, "length": float, "loop": bool,
+# "start": int, "finish": int (indices into pts)}
+var _previews: Array = []
 var _sky: Texture2D
 var _ghost_info := {}
 var _t := 0.0
@@ -34,7 +36,8 @@ func _ready() -> void:
 		for i in range(0, tb.count(), 2):
 			pts.append(Vector2(tb.points[i].x, tb.points[i].z))
 			cols.append(Surfaces.get_surface(tb.surfaces[i])["hud"])
-		_previews.append({"pts": pts, "cols": cols, "length": tb.total_length})
+		_previews.append({"pts": pts, "cols": cols, "length": tb.stage_length, "loop": tb.loop,
+			"start": tb.start_index / 2, "finish": tb.finish_index / 2})
 		tb.free()
 	_refresh()
 
@@ -132,6 +135,8 @@ func _change(dir: int) -> void:
 		"CAR":
 			_car_i = wrapi(_car_i + dir, 0, Cars.LIST.size())
 		"LAPS":
+			if Game.is_point_to_point(Maps.LIST[_map_i]["id"]):
+				return  # run once from start to finish
 			var opts: Array = Game.LAP_OPTIONS
 			Game.laps = opts[wrapi(opts.find(Game.laps) + dir, 0, opts.size())]
 		"GHOST":
@@ -169,7 +174,8 @@ func _draw() -> void:
 	var left := Rect2(20, 88, 270, 212)
 	RetroUI.panel(self, left)
 	var car: Dictionary = Cars.LIST[_car_i]
-	var values := ["< %s >" % map["name"], "< %s >" % car["name"], "< %d >" % Game.laps,
+	var p2p: bool = map.get("point_to_point", false)
+	var values := ["< %s >" % map["name"], "< %s >" % car["name"], "A TO B" if p2p else "< %d >" % Game.laps,
 		"< %s >" % ("ON" if Game.ghost_enabled else "OFF"), "< %s >" % Game.weather,
 		"< %s >" % ("MANUAL" if Game.manual_gears else "AUTO"), "", ""]
 	for i in ROWS.size():
@@ -243,20 +249,28 @@ func _draw_stage(right: Rect2, map: Dictionary, prev: Dictionary) -> void:
 	var box := Rect2(right.position + Vector2(12, 14), Vector2(130, 130))
 	var sc := minf(box.size.x / (mx.x - mn.x), box.size.y / (mx.y - mn.y))
 	var off := box.get_center() - (mn + mx) * 0.5 * sc
-	for i in pts.size():
+	var segs: int = pts.size() if prev["loop"] else pts.size() - 1
+	for i in segs:
 		var j := (i + 1) % pts.size()
 		draw_line(off + pts[i] * sc, off + pts[j] * sc, RetroUI.INK, 5.0)
-	for i in pts.size():
+	for i in segs:
 		var j := (i + 1) % pts.size()
 		draw_line(off + pts[i] * sc, off + pts[j] * sc, cols[i], 3.0)
-	var dot := int(fmod(_t * 18.0, pts.size()))
-	draw_circle(off + pts[dot] * sc, 4.0, RetroUI.RED)
-	draw_circle(off + pts[0] * sc, 3.0, Color.WHITE)
+	var start: int = prev["start"]
+	var finish: int = prev["finish"]
+	var run: int = pts.size() if prev["loop"] else finish - start + 1
+	var dot := start + int(fmod(_t * 18.0, run))
+	draw_circle(off + pts[dot % pts.size()] * sc, 4.0, RetroUI.RED)
+	draw_circle(off + pts[start] * sc, 3.0, Color.WHITE)
+	if not prev["loop"]:
+		draw_rect(Rect2(off + pts[finish] * sc - Vector2(3, 3), Vector2(6, 6)), RetroUI.INK)
+		draw_rect(Rect2(off + pts[finish] * sc - Vector2(2, 2), Vector2(4, 4)), Color.WHITE)
 
 	# --- records for this stage + lap count
 	var rx := right.position.x + 156
 	var ry := right.position.y + 24
-	var title := "TOP 5  %d LAP%s" % [Game.laps, "S" if Game.laps > 1 else ""]
+	var p2p: bool = map.get("point_to_point", false)
+	var title := "TOP 5  A TO B" if p2p else "TOP 5  %d LAP%s" % [Game.laps, "S" if Game.laps > 1 else ""]
 	RetroUI.text(self, Vector2(rx, ry), title, 12, RetroUI.YELLOW, 3)
 	var tw := ThemeDB.fallback_font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
 	RetroUI.class_badge(self, Vector2(rx + tw + 8, ry), Game.car_class(), 10)
@@ -269,7 +283,7 @@ func _draw_stage(right: Rect2, map: Dictionary, prev: Dictionary) -> void:
 			RetroUI.text(self, Vector2(rx + 64, y), Hud.fmt_time(e["time"]), 12, Color.WHITE, 3)
 		else:
 			RetroUI.text(self, Vector2(rx, y), "%d ---" % (i + 1), 12, Color(0.6, 0.6, 0.7), 3)
-	RetroUI.text(self, Vector2(rx, ry + 112), "BEST LAP", 11, RetroUI.GREEN, 3)
+	RetroUI.text(self, Vector2(rx, ry + 112), "BEST RUN" if p2p else "BEST LAP", 11, RetroUI.GREEN, 3)
 	RetroUI.text(self, Vector2(rx + 64, ry + 112), Hud.fmt_time(Game.best_lap()), 11, Color.WHITE, 3)
 	RetroUI.text(self, Vector2(rx, ry + 130), "GHOST", 11, RetroUI.CYAN, 3)
 	if _ghost_info.is_empty():
