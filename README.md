@@ -39,7 +39,8 @@ The game starts on the main menu. Pick a **stage**, a **car**, the number of
 (random, clear or rain) and the **gearbox** (automatic, or manual with the
 Up / Down arrows), then START RACE. The gearbox can also be switched from the
 pause menu. Random is rolled again for every
-race from the menu (a restart keeps the same weather).
+race from the menu (a restart keeps the same weather). Each launch starts on
+1 lap, clear weather and the automatic gearbox; your picks hold until you quit.
 
 - **Highscores:** the top 5 race times for each stage and lap count, plus the
   best lap for each stage. Make the top 5 and you enter arcade-style initials:
@@ -103,13 +104,13 @@ its camouflage, crosses and number are painted in code (`TexGen.camo`,
 | Stage | Length | Character |
 |---|---|---|
 | Col de Pixel | 2.6 km | Mixed, about 1:45 a lap: tarmac village chicane, a gravel forest run with a tight hairpin and a crest jump, tarmac mountain hairpins climbing to 22 m, then gravel back down. Stone walls on the tarmac corners, hay bales on the gravel |
+| Downtown GP | 2.0 km | A walled street circuit through a modern city: wide square corners, a chicane and a cobbled square, office blocks and shops, catch fences, traffic lights and a grandstand at the start |
+| Jungle Temple | 2.1 km | Gravel and mud through dense rainforest (palms, vine-hung giants, ferns), over a plank bridge, through a river ford that slows you right down, past overgrown temples and a stepped pyramid |
+| Monaco Ruins | 3.2 km | The Monaco GP street circuit after a nuclear war: Sainte Devote, Casino Square, the Grand Hotel hairpin, a half-collapsed tunnel, the chicane, the flooded swimming pool section and La Rascasse, past bombed-out blocks, wrecks and a toxic harbour |
 | Pine Forest | 1.5 km | Gravel: fast and flowing through dense forest, two crests |
 | Old Town | 1.1 km | Tarmac: tight town corners lined with houses and walls |
 | Spa F1 | 3.1 km | Spa-Francorchamps: La Source, down to Eau Rouge and up Raidillon, the Kemmel straight, Les Combes, Bruxelles, a wet Pouhon, Stavelot, Blanchimont and the Bus Stop. Kerbs, armco and the Ardennes forest |
-| Jungle Temple | 2.1 km | Gravel and mud through dense rainforest (palms, vine-hung giants, ferns), over a plank bridge, through a river ford that slows you right down, past overgrown temples and a stepped pyramid |
-| Monaco Ruins | 3.2 km | The Monaco GP street circuit after a nuclear war: Sainte Devote, Casino Square, the Grand Hotel hairpin, a half-collapsed tunnel, the chicane, the flooded swimming pool section and La Rascasse, past bombed-out blocks, wrecks and a toxic harbour |
 | Luna Base | 2.8 km | The Moon: low gravity, so the crests launch you; packed regolith and loose dust in the crater floors, past a lunar base with domes, landers and dishes, under a black sky with the Earth in it. Never rains |
-| Downtown GP | 2.0 km | A walled street circuit through a modern city: wide square corners, a chicane and a cobbled square, office blocks and shops, catch fences, traffic lights and a grandstand at the start |
 
 Stages are defined in `scripts/maps.gd`: a list of route points, surface
 sections, elevation keyframes, jumps, a village range and forest density.
