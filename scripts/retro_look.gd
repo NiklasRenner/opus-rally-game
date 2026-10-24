@@ -161,7 +161,7 @@ func _set_environment(on: bool) -> void:
 		# depth fog: clear up close, closing in to a wall of colour far off;
 		# the thicker the stage's own fog, the nearer the wall
 		var density: float = _modern["fog_density"]
-		var end := clampf(1.5 / maxf(density, 0.0001), 340.0, 1300.0)
+		var end := clampf(2.2 / maxf(density, 0.0001), 380.0, 2400.0)
 		env.fog_mode = Environment.FOG_MODE_DEPTH
 		env.fog_depth_begin = 0.0
 		env.fog_depth_end = end
