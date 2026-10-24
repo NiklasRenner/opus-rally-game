@@ -24,15 +24,17 @@ PX_M = 75.0  # skin pixels per metre, unless the car says otherwise (px_m)
 def pieces(c):
     """Panel pieces of the skin: pixel rect and the projection onto it. Sides
     and top cover the car's length (2 x half_len), front and back 2 m of
-    width, everything 1.6 m of height, at px_m pixels per metre."""
+    width, and z_span of height from z_lo (1.6 m from the ground unless the
+    car sits higher), at px_m pixels per metre."""
     L, S = c.get("half_len", 2.25), c.get("px_m", PX_M)
-    lw, h, w = round(2 * L * S), round(1.6 * S), round(2 * S)
+    zt = c.get("z_lo", 0.0) + c.get("z_span", 1.6)
+    lw, h, w = round(2 * L * S), round(c.get("z_span", 1.6) * S), round(2 * S)
     out = {
-        "side_r": dict(rect=[0, 0, lw, h], origin=[0, -L, 1.6], u=[0, 1, 0], v=[0, 0, -1]),
-        "side_l": dict(rect=[0, h, lw, h], origin=[0, L, 1.6], u=[0, -1, 0], v=[0, 0, -1]),
+        "side_r": dict(rect=[0, 0, lw, h], origin=[0, -L, zt], u=[0, 1, 0], v=[0, 0, -1]),
+        "side_l": dict(rect=[0, h, lw, h], origin=[0, L, zt], u=[0, -1, 0], v=[0, 0, -1]),
         "top": dict(rect=[0, 2 * h, lw, w], origin=[-1.0, -L, 0], u=[0, 1, 0], v=[1, 0, 0]),
-        "front": dict(rect=[lw, 0, w, h], origin=[1.0, 0, 1.6], u=[-1, 0, 0], v=[0, 0, -1]),
-        "rear": dict(rect=[lw, h, w, h], origin=[-1.0, 0, 1.6], u=[1, 0, 0], v=[0, 0, -1]),
+        "front": dict(rect=[lw, 0, w, h], origin=[1.0, 0, zt], u=[-1, 0, 0], v=[0, 0, -1]),
+        "rear": dict(rect=[lw, h, w, h], origin=[-1.0, 0, zt], u=[1, 0, 0], v=[0, 0, -1]),
         "under": dict(rect=[496, 496, 16, 16], origin=[0, 0, 0], u=[0, 0, 0], v=[0, 0, 0]),
     }
     if "screen" in c:
@@ -193,10 +195,11 @@ class Builder:
                     s = 1.0 if n.x > 0 else -1.0
                     l[lay].uv = (0.5 + s * d.y / (2 * r), 0.5 + d.z / (2 * r))
                 continue
-            if key == "Tyre":  # tread runs round the tyre
+            if key == "Tyre":  # tread runs round the tyre, once across its width
+                width = max(abs((v.co - origin).x) for v in f.verts) * 2 or 1.0
                 for l in f.loops:
                     d = l.vert.co - origin
-                    l[lay].uv = (math.atan2(d.z, d.y) / math.tau * 8, d.x * 4)
+                    l[lay].uv = (math.atan2(d.z, d.y) / math.tau * 8, d.x / width + 0.5)
                 continue
             if self.pieces:
                 piece = piece_for(n, key)
@@ -374,11 +377,14 @@ def build_car(c):
         "Tyre": material("Tyre." + name, (0.05, 0.05, 0.05), 0.95),
         "Rim": material("Rim." + name, c["rims"], 0.4, 0.6),
         "Tail": material("Tail." + name, (0.9, 0.08, 0.05), 0.3, emit=True),
+        "Frame": material("Frame." + name, c.get("frame", (0.8, 0.08, 0.06)), 0.5),
     }
     B = Builder(coll, c)
     root = B.empty(name, (0, 0, 0))
     if c.get("kind") == "f1":
         f1_parts(B, c, root, M)
+    elif c.get("kind") == "truck":
+        truck_parts(B, c, root, M)
     else:
         saloon_parts(B, c, root, M)
     make_wheels(B, c, root, M)
@@ -470,12 +476,14 @@ def make_wheels(B, c, root, M):
         for s, side in ((-1, "L"), (1, "R")):
             g = G()
             x = s * c["wheel_x"]
-            segs = 14
+            knobby = c.get("knobby", False)
+            segs = 24 if knobby else 14
             verts, faces, keys = [], [], []
             for i in range(segs):
                 a = math.tau * i / segs
+                rr = r * (0.93 if knobby and i % 2 else 1.0)  # tread blocks stand proud
                 for dx in (-w / 2, w / 2):
-                    verts.append((x + dx, wy + r * math.cos(a), r + r * math.sin(a)))
+                    verts.append((x + dx, wy + rr * math.cos(a), r + rr * math.sin(a)))
             for i in range(segs):
                 j = (i + 1) % segs
                 faces.append((2 * i, 2 * j, 2 * j + 1, 2 * i + 1))
@@ -555,6 +563,80 @@ def ibiza_wing(g, body):
     for sx in (-1, 1):
         g.hull([(sx * x, y + dy, z + dz) for x in (0.66, 0.69) for (dy, dz) in [
             (0.04, -0.03), (0.04, 0.05), (-0.42, -0.1), (-0.42, 0.0), (-0.2, -0.12)]], "Livery")
+
+
+def truck_parts(B, c, root, M):
+    """Monster truck: a pickup body perched high on a red tube frame with a
+    roll cage over the bed, tube bumpers, a light bar on the roof, and two
+    solid axles (diff, coilovers) that the game swings with the wheels."""
+    body = Body(c)
+    g = G()
+    body.build(g)
+    hull = B.make("Body", g, (0, 0, 1.7), root, M)
+
+    t = 0.07
+    g = G()
+    # ladder frame, crossmembers, posts up to the body
+    for sx in (-1, 1):
+        g.hull([(sx * x, y, z) for x in (0.4, 0.5) for y in (2.25, -2.15) for z in (1.02, 1.18)], "Frame")
+        for y in (1.8, 1.1, -0.2, -1.1, -1.8):
+            rod(g, (sx * 0.45, y, 1.18), (sx * 0.6, y, 1.4), t, "Frame")
+    for y in (2.2, 1.45, 0.4, -0.6, -1.45, -2.1):
+        rod(g, (-0.45, y, 1.1), (0.45, y, 1.1), t, "Frame")
+    # tube bumpers
+    for y0, y1 in ((2.25, 2.45), (-2.15, -2.3)):
+        rod(g, (-0.9, y1, 1.2), (0.9, y1, 1.2), 0.09, "Frame")
+        rod(g, (-0.9, y1, 1.45), (0.9, y1, 1.45), 0.07, "Frame")
+        for sx in (-1, 1):
+            rod(g, (sx * 0.45, y0, 1.12), (sx * 0.9, y1, 1.2), t, "Frame")
+            rod(g, (sx * 0.9, y1, 1.2), (sx * 0.9, y1, 1.45), t, "Frame")
+    # roll cage over the bed
+    top = 2.6
+    for y in (-0.6, -1.85):
+        for sx in (-1, 1):
+            rod(g, (sx * 0.78, y, 1.98), (sx * 0.72, y, top), t, "Frame")
+        rod(g, (-0.72, y, top), (0.72, y, top), t, "Frame")
+    for sx in (-1, 1):
+        rod(g, (sx * 0.72, -0.6, top), (sx * 0.72, -1.85, top), t, "Frame")
+        rod(g, (sx * 0.72, -0.6, top), (sx * 0.78, -1.85, 1.98), t, "Frame")
+    B.make("Frame", g, (0, 0, 1.1), hull, M)
+
+    # light bar on the roof: red housing, five round lamps
+    g = G()
+    ry = 0.3
+    rz = body.heights(ry)[5]
+    g.box((0, ry, rz + 0.08), (1.25, 0.14, 0.14), "Frame")
+    for i in range(5):
+        x = (i - 2) * 0.24
+        g.cyl((x, ry + 0.075, rz + 0.08), "Y", 0.06, 0.02, "Lamp", segs=10)
+    for sx in (-1, 1):
+        g.box((sx * 0.5, ry, rz + 0.01), (0.05, 0.08, 0.05), "Trim")
+    B.make("LightBar", g, (0, ry, rz + 0.08), hull, M)
+
+    # mirrors on the doors
+    my = c["mirror_y"]
+    mh = body.heights(my)[4]
+    for s, n in ((-1, "L"), (1, "R")):
+        g = G()
+        x = body.half_width(my)
+        g.box((s * (x + 0.12), my, mh + 0.12), (0.06, 0.1, 0.2), "Trim")
+        rod(g, (s * x, my, mh + 0.05), (s * (x + 0.1), my, mh + 0.08), 0.03, "Trim")
+        B.make("Mirror_" + n, g, (s * (x + 0.1), my, mh + 0.1), hull, M)
+
+    # solid axles: tube, diff housing, two coilovers a side up to the frame
+    r = c["wheel_r"]
+    for wy, n in ((c["wheel_y"][0], "F"), (c["wheel_y"][1], "R")):
+        g = G()
+        rod(g, (-0.72, wy, r), (0.72, wy, r), 0.14, "Trim")
+        g.cyl((0.12, wy, r), "Y", 0.2, 0.3, "Chrome", segs=10)
+        g.cyl((0.12, wy - 0.16 * (1 if n == "F" else -1), r + 0.02), "Y", 0.08, 0.2, "Trim", segs=8)
+        for sx in (-1, 1):
+            for dy in (-0.16, 0.16):
+                lo = (sx * 0.55, wy + dy, r + 0.05)
+                hi = (sx * 0.5, wy + dy, 1.42)
+                g.cyl((lo[0], lo[1], (lo[2] + hi[2]) / 2), "Z", 0.075, 0.42, "Frame", segs=8)
+                rod(g, lo, hi, 0.035, "Chrome")
+        B.make("Axle_" + n, g, (0, wy, r), root, M)
 
 
 def rod(g, a, b, t, key):
@@ -689,6 +771,17 @@ CARS = [
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
          wing=ibiza_wing, screen=((1.0, 0.82), (0.3, 1.34))),
+    dict(name="Swamp", file="swamp", kind="truck", paint=(0.55, 0.85, 0.1), flaps=(0.1, 0.1, 0.1),
+         rims=(1.0, 0.5, 0.05), frame=(0.8, 0.08, 0.06), knobby=True,
+         hw=0.92, roof_hw=0.8, flare=0.0, bottom=1.38, nose_round=0.93, half_len=2.45, px_m=70.0,
+         z_lo=1.0, z_span=1.7,
+         # regular-cab pickup perched high above the axles: bonnet, cab, open bed
+         profile=[(2.1, 1.72, 1.68), (2.05, 1.95, 1.91), (0.95, 2.0, 1.96), (0.8, 2.02, 1.98), (0.5, 2.44, 2.0),
+                  (-0.32, 2.44, 2.02), (-0.42, 2.3, 2.02), (-0.5, 1.98, 1.94), (-2.0, 1.98, 1.94),
+                  (-2.08, 1.85, 1.8)],
+         glass_y=(0.8, -0.38), pillars=[9.0], b_pillar=9.0, mirror_y=0.72,
+         wheel_y=(1.45, -1.45), wheel_x=0.98, wheel_r=0.75, wheel_w=0.55,
+         screen=((0.8, 2.02), (0.5, 2.44))),
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
          wheel_y=(1.72, -1.42), wheel_x=0.84, wheel_r=(0.32, 0.35), wheel_w=(0.3, 0.42)),
