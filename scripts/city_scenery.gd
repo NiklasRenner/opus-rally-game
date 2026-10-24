@@ -177,7 +177,7 @@ func _traffic_light(xf: Transform3D, s: float, over: bool) -> void:
 ## on top, a sponsor board every so often. The start straight has hoardings.
 func _barriers() -> void:
 	var n := _n()
-	var step := 2
+	var step := 1
 	var boards := 0
 	for i in range(0, n, step):
 		if i < StartArea.REACH or i > n - StartArea.REACH - step:
@@ -189,11 +189,15 @@ func _barriers() -> void:
 			var a := track.points[i] + track._side(i) * s * off_i
 			var b := track.points[j] + track._side(j) * s * off_j
 			var mid := (a + b) * 0.5
+			# on the inside of a tight corner the offset line folds back over
+			# the road: leave those blocks out
+			if not _clear(mid, i, _hw(i) + 1.2):
+				continue
 			var flat := b - a
 			flat.y = 0.0
 			var xf := Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), mid + Vector3(0, 0.1, 0))
-			var size := Vector3(0.6, 1.4, flat.length() + 0.25)
-			var stripe := Color(0.95, 0.95, 0.93) if (i / step) % 2 == 0 else Color(0.80, 0.80, 0.78)
+			var size := Vector3(0.6, 1.4, flat.length() + 0.1)
+			var stripe := Color(0.95, 0.95, 0.93) if (i / 2) % 2 == 0 else Color(0.80, 0.80, 0.78)
 			_cuboid(_walls, xf, Vector3.ZERO, size, stripe, Vector2(2.0, 1.4))
 			var cs := CollisionShape3D.new()
 			var shape := BoxShape3D.new()
@@ -206,9 +210,9 @@ func _barriers() -> void:
 			track._quad_uv(_fence, [xf * (top + Vector3(0, 0, -size.z * 0.5)), xf * (top + Vector3(0, 0, size.z * 0.5)),
 				xf * (top + Vector3(0, 2.6, size.z * 0.5)), xf * (top + Vector3(0, 2.6, -size.z * 0.5))],
 				[Vector2(0, 2), Vector2(size.z / 1.3, 2), Vector2(size.z / 1.3, 0), Vector2(0, 0)], -track._side(i) * s)
-			if (i / step) % 3 == 0:
+			if i % 6 == 0:
 				_cuboid(_steel, xf, Vector3(s * 0.1, 2.0, 0), Vector3(0.1, 2.6, 0.1), Color(0.5, 0.52, 0.55))
-			if (i / step) % 9 == 4:
+			if i % 18 == 8:
 				var sp: Array = StartArea.SPONSORS[boards % StartArea.SPONSORS.size()]
 				boards += 1
 				var tex := StartArea._panel(sp[0], 2.9 / 0.9, sp[1], sp[2], sp[1], 9)
