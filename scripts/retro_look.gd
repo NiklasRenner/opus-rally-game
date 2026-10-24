@@ -195,12 +195,14 @@ func _convert_node(node: Node) -> void:
 		return
 	for s in mesh.get_surface_count():
 		if gi is MeshInstance3D:
+			# always through the instance's surface override, which survives
+			# the car rebuilding its dented meshes (a new mesh brings back the
+			# plain material)
 			var mi := gi as MeshInstance3D
 			var m := mi.get_surface_override_material(s)
-			if m:
-				_swap(gi, mi, "surface", s, m)
-				continue
-		# a material that lives on the mesh resource itself
+			_swap(gi, mi, "surface", s, m if m else mesh.surface_get_material(s))
+			continue
+		# a multimesh's material lives on the mesh resource itself
 		_swap(gi, mesh, "mesh", s, mesh.surface_get_material(s))
 
 
@@ -262,10 +264,12 @@ func _copy(mat: Material, on_car: bool) -> ShaderMaterial:
 	sm.set_shader_parameter("uv1_offset", m.uv1_offset)
 	sm.set_shader_parameter("roughness_v", m.roughness)
 	sm.set_shader_parameter("spec", m.metallic_specular)
-	if on_car:  # a hard highlight on a whole road would be a hard-edged blob
+	# only the car's glass gets the fake sky (on the road the band edges would
+	# sit at a fixed distance from the camera and draw a ring round it), and
+	# only its paint the hard highlight (on a road it'd be a hard-edged blob,
+	# on glass a hotspot on top of the flat sky)
+	if on_car and m.roughness >= 0.2:
 		sm.set_shader_parameter("gloss", clampf((0.6 - m.roughness) * m.metallic_specular, 0.0, 0.5))
-	# only the car's glass: on the road the band edges would sit at a fixed
-	# distance from the camera and draw a ring round it
 	if on_car and m.roughness < 0.2:
 		sm.set_shader_parameter("mirror", 0.3)
 		sm.set_shader_parameter("sky_hi", sky_colors[0])

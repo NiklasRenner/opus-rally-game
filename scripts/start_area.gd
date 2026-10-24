@@ -22,11 +22,6 @@ const SPONSORS := [
 	["AURA", Color(0.08, 0.1, 0.45), Color(0.95, 0.95, 0.95)],
 	["ZOOM", Color(1.0, 0.9, 0.2), Color(0.45, 0.1, 0.6)],
 ]
-const SHIRTS := [Color(0.9, 0.15, 0.1), Color(0.1, 0.3, 0.85), Color(1.0, 0.85, 0.1), Color(0.95, 0.95, 0.95),
-	Color(0.2, 0.6, 0.2), Color(0.95, 0.5, 0.1), Color(0.55, 0.15, 0.6), Color(0.1, 0.65, 0.75)]
-const SKINS := [Color(0.95, 0.78, 0.62), Color(0.82, 0.62, 0.45), Color(0.55, 0.38, 0.25), Color(0.98, 0.84, 0.72)]
-const PANTS := [Color(0.2, 0.22, 0.3), Color(0.15, 0.15, 0.15), Color(0.35, 0.3, 0.22), Color(0.3, 0.38, 0.6)]
-
 const FLAG_SHADER := "shader_type spatial;
 render_mode cull_disabled;
 uniform sampler2D tex : source_color, filter_nearest;
@@ -44,28 +39,15 @@ void fragment() {
 }
 "
 
-## Spectators jump on the spot: UV2.x is each one's phase, UV2.y whether they jump.
-const CROWD_SHADER := "shader_type spatial;
-void vertex() {
-	VERTEX.y += max(0.0, sin(TIME * 8.0 + UV2.x)) * 0.16 * UV2.y;
-}
-void fragment() {
-	ALBEDO = COLOR.rgb;
-	ROUGHNESS = 0.9;
-}
-"
-
 static var _flag_shader: Shader
-static var _crowd_shader: Shader
 
 var track: TrackBuilder
 var theme := ""
 var _rng := RandomNumberGenerator.new()
 var _root: Node3D
 var _bodies: StaticBody3D
-var _crowd: SurfaceTool
+var _crowd: Crowd
 var _bunting: SurfaceTool
-var _people := 0
 var _pennants := 0
 var _stand_side := 0.0  # side of the road with a grandstand, 0 = none
 var _stand_from := 0
@@ -86,8 +68,7 @@ func build() -> void:
 	_bodies.name = "StartBarriers"
 	_bodies.set_meta("surface", "grass")
 	_root.add_child(_bodies)
-	_crowd = SurfaceTool.new()
-	_crowd.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_crowd = Crowd.new(_rng)
 	_bunting = SurfaceTool.new()
 	_bunting.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_line()
@@ -506,7 +487,7 @@ func _grandstand(s: float, k0: int, k1: int, rows: int, roof: bool) -> void:
 		var z := -length * 0.5 + 0.4
 		while z < length * 0.5 - 0.3:
 			if _rng.randf() < 0.85:
-				_person(xf * Transform3D(Basis(Vector3.UP, (PI * 0.5) * s + _rng.randf_range(-0.3, 0.3)),
+				_crowd.person(xf * Transform3D(Basis(Vector3.UP, (PI * 0.5) * s + _rng.randf_range(-0.3, 0.3)),
 					Vector3(s * (off0 + depth * (r + 0.5)), top, z)), _rng.randf() < 0.6)
 			z += _rng.randf_range(0.6, 0.9)
 	var back := off0 + depth * rows
@@ -639,7 +620,7 @@ func _flags_and_crowd() -> void:
 				while z < 1.5:
 					if _rng.randf() < density * (1.0 - row * 0.2):
 						var p := Vector3(s * (off + _rng.randf_range(-0.15, 0.15)), _drop(k, off) + row * 0.25, z)
-						_person(xf * Transform3D(Basis(Vector3.UP, s * PI * 0.5 + _rng.randf_range(-0.4, 0.4)), p),
+						_crowd.person(xf * Transform3D(Basis(Vector3.UP, s * PI * 0.5 + _rng.randf_range(-0.4, 0.4)), p),
 							_rng.randf() < 0.55)
 					z += _rng.randf_range(0.55, 0.85)
 
@@ -665,63 +646,10 @@ func _string_bunting(a: Vector3, b: Vector3) -> void:
 			_bunting.add_vertex(v)
 
 
-## One spectator standing at `xf` (feet), facing along its -z.
-func _person(xf: Transform3D, hop: bool) -> void:
-	_people += 1
-	var uv2 := Vector2(_rng.randf() * TAU, 1.0 if hop else 0.0)
-	var shirt: Color = SHIRTS[_rng.randi() % SHIRTS.size()]
-	var skin: Color = SKINS[_rng.randi() % SKINS.size()]
-	_box(xf, Vector3(0, 0.4, 0), Vector3(0.42, 0.8, 0.26), PANTS[_rng.randi() % PANTS.size()], uv2)
-	_box(xf, Vector3(0, 1.15, 0), Vector3(0.5, 0.7, 0.3), shirt, uv2)
-	_box(xf, Vector3(0, 1.68, 0), Vector3(0.3, 0.3, 0.3), skin, uv2)
-	var arms := _rng.randf()
-	for sx in [-1.0, 1.0]:
-		var up: bool = arms < 0.35 or (arms < 0.65 and sx > 0.0)
-		if up:
-			_box(xf, Vector3(sx * 0.31, 1.78, 0), Vector3(0.12, 0.62, 0.12), skin, uv2)
-		else:
-			_box(xf, Vector3(sx * 0.31, 1.12, 0), Vector3(0.12, 0.62, 0.14), shirt, uv2)
-	if _rng.randf() < 0.3:
-		_box(xf, Vector3(0, 1.88, -0.04), Vector3(0.34, 0.1, 0.38), SHIRTS[_rng.randi() % SHIRTS.size()], uv2)
-
-
-func _box(xf: Transform3D, at: Vector3, size: Vector3, col: Color, uv2: Vector2) -> void:
-	var h := size * 0.5
-	var lc := col.srgb_to_linear()
-	for axis in 3:
-		for sgn in [-1.0, 1.0]:
-			var n := Vector3.ZERO
-			n[axis] = sgn
-			var u := Vector3.ZERO
-			u[(axis + 1) % 3] = h[(axis + 1) % 3]
-			var v := Vector3.ZERO
-			v[(axis + 2) % 3] = h[(axis + 2) % 3]
-			var c := at + n * h[axis]
-			var q := [xf * (c - u - v), xf * (c + u - v), xf * (c + u + v), xf * (c - u + v)]
-			var wn := (xf.basis * n).normalized()
-			_crowd_tri([q[0], q[1], q[2]], wn, lc, uv2)
-			_crowd_tri([q[0], q[2], q[3]], wn, lc, uv2)
-
-
-func _crowd_tri(v: Array, n: Vector3, col: Color, uv2: Vector2) -> void:
-	var order := [0, 2, 1] if Geo.flipped(v[0], v[1], v[2], n) else [0, 1, 2]
-	for k in order:
-		_crowd.set_normal(n)
-		_crowd.set_color(col)
-		_crowd.set_uv2(uv2)
-		_crowd.add_vertex(v[k])
-
-
 func _flush() -> void:
-	if _people > 0:
-		var crowd := _crowd.commit()
-		if _crowd_shader == null:
-			_crowd_shader = Shader.new()
-			_crowd_shader.code = CROWD_SHADER
-		var mat := ShaderMaterial.new()
-		mat.shader = _crowd_shader
-		var mi := _mesh(crowd, mat, Transform3D.IDENTITY)
-		mi.name = "Crowd"
+	var crowd := _crowd.make()
+	if crowd:
+		_root.add_child(crowd)
 	if _pennants > 0:
 		var bunting := _bunting.commit()
 		var bm := StandardMaterial3D.new()
