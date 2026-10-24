@@ -25,7 +25,7 @@ const DATA := {
 	"wet": {"label": "WET", "peak": 0.09, "grip": 0.78, "slide": 0.50, "drag": 0.022, "bump": 0.00,
 		"hud": Color(0.40, 0.62, 1.00), "fx": Color(0.80, 0.86, 0.95, 0.55), "fx_always": true,
 		"rain": 0.95, "mark": "wet"},
-	"ice": {"label": "ICE", "peak": 0.08, "grip": 0.28, "slide": 0.62, "drag": 0.006, "bump": 0.00,
+	"ice": {"label": "ICE", "peak": 0.09, "grip": 0.48, "slide": 0.72, "drag": 0.006, "bump": 0.00,
 		"hud": Color(0.72, 0.96, 1.00), "fx": Color(0.95, 0.98, 1.00, 0.70), "fx_always": false,
 		"rain": 0.9, "mark": "scrape"},
 	"grass": {"label": "GRASS", "peak": 0.16, "grip": 0.62, "slide": 0.72, "drag": 0.110, "bump": 0.070,
