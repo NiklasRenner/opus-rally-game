@@ -294,8 +294,11 @@ class Body:
         w0 = self.half_width(y, False) if self.c.get("box_flare") else w
         cab = self.cab(y)
         roof = lerp(w0 * 0.93, self.c["roof_hw"], cab)
+        # fenders: the wings bulge up over the front wheels and the bonnet
+        # dips between them, fading out at the nose tip and the windscreen
+        f = self.c.get("fenders", 0.0) * (1.0 - cab) * smoothstep(0.0, 0.3, self.front() - y)
         right = [(w * 0.84, h[0]), (w, h[1]), (w + 0.012, h[2]), (lerp(w0, w, 0.5), h[3]), (w0 * 0.965, h[4]),
-                 (roof, h[5] - 0.05 * cab - 0.012), (roof * 0.86, h[5]), (roof * 0.42, h[5] + 0.018)]
+                 (roof, h[5] - 0.05 * cab - 0.012 + f * 0.7), (roof * 0.86, h[5] + f), (roof * 0.42, h[5] + 0.018 - f * 0.4)]
         return [(x, z) for x, z in right] + [(-x, z) for x, z in reversed(right)]
 
     def stations(self):
@@ -484,6 +487,16 @@ def body_x(body, y, z):
     return best
 
 
+def body_top(body, y, x):
+    """Height of the lofted body's top surface at length y, x out from the middle."""
+    pts = sorted((px, z) for px, z in body.ring(y)[4:8])
+    pts = [(0.0, pts[0][1])] + pts
+    for (x0, z0), (x1, z1) in zip(pts, pts[1:]):
+        if x <= x1:
+            return lerp(z0, z1, (x - x0) / (x1 - x0))
+    return pts[-1][1]
+
+
 def hyper_extras(g, body):
     """Chrome C on each flank, engine cover louvres and spine, rear deck vents."""
     # the C: a thin chrome bar standing just proud of the skin, from the
@@ -524,18 +537,23 @@ def hyper_parts(B, c, root, M):
     body.build(g)
     for extra in c.get("body_extras", []):
         extra(g, body)
-    # slit headlamps on the top of each front wing, four round LEDs in each
+    # slit headlamps in the recess under each fender bulge, four round LEDs
+    # in each looking forward
+    fy = body.front()
+    y0, y1 = fy - 0.1, fy - 0.26
+    xs = [0.3, 0.42, 0.54, 0.66, 0.78]
     for s in (-1, 1):
-        y0, y1 = body.front() - 0.1, body.front() - 0.3
-        xi, xo = 0.42, 0.78
-        za, zb = body.heights(y0)[5], body.heights(y1)[5]
-        g.hull([(s * x, y, z + dz) for x in (xi, xo) for (y, z) in ((y0, za), (y1, zb)) for dz in (-0.01, 0.02)],
-               "Trim")
-        for i in range(4):
-            x = lerp(xi + 0.05, xo - 0.05, i / 3)
-            yy = lerp(y0, y1, 0.45)
-            zz = lerp(za, zb, 0.45) + 0.022
-            g.cyl((s * x, yy, zz), "Z", 0.032, 0.012, "Lamp", segs=8)
+        # a thin dark strip laid along the curve of the bonnet and wing
+        for xa, xb in zip(xs, xs[1:]):
+            g.hull([(s * x, y, body_top(body, y, x) + dz) for x in (xa, xb) for y in (y0, y1)
+                    for dz in (-0.015, 0.012)], "Trim")
+            x = (xa + xb) / 2
+            y = (y0 + y1) / 2
+            g.cyl((s * x, y, body_top(body, y, x) + 0.014), "Z", 0.03, 0.01, "Lamp", segs=8)
+    # raised spine down the middle of the bonnet, from the grille to the screen
+    sy = c["screen"][0][0]
+    g.hull([(sx * x, y, body_top(body, y, 0.0) + dz) for sx in (-1, 1) for x in (0.03,)
+            for y in (fy - 0.02, sy) for dz in (-0.01, 0.035)], "Livery")
     hull = B.make("Body", g, (0, 0, 0.55), root, M)
 
     fy, ry = body.front(), body.rear()
@@ -544,10 +562,15 @@ def hyper_parts(B, c, root, M):
     # middle, a wide dark intake with a silver splitter along the bottom
     bt = c["bumper_top"]
     g = G()
+    tip = c.get("nose_tip", 0.0)  # how far the middle of the nose stands ahead of its corners
     g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
         (hwf + 0.01, fy - 0.45, 0.14), (hwf + 0.01, fy - 0.45, bt[0]), (hwf * 0.9, fy + 0.04, 0.16),
-        (hwf * 0.88, fy + 0.02, bt[0] - 0.02), (hwf * 0.97, fy - 0.14, bt[0]), (hwf * 0.95, fy - 0.03, 0.13)]], "Livery")
-    gy = fy + 0.045
+        (hwf * 0.88, fy + 0.02, bt[0] - 0.02), (hwf * 0.97, fy - 0.14, bt[0]), (hwf * 0.95, fy - 0.03, 0.13),
+        (0.2, fy + 0.04 + tip, 0.15), (0.2, fy + 0.03 + tip, bt[0] - 0.01)]], "Livery")
+
+    def face(x):  # front of the fascia at x: a shallow V to the pointed middle
+        return fy + 0.04 + tip * min(max((hwf * 0.9 - abs(x)) / (hwf * 0.9 - 0.2), 0.0), 1.0)
+    gy = fy + 0.07 + tip  # the grille stands proud of the nose
     # horseshoe: chrome rim round a dark mesh, rounded top, flat-ish base
     shoe = []
     for i in range(15):
@@ -558,12 +581,14 @@ def hyper_parts(B, c, root, M):
     for (x0, z0), (x1, z1) in zip(shoe, shoe[1:]):
         rod(g, (x0, gy + 0.005, z0), (x1, gy + 0.005, z1), 0.03, "Chrome")
     rod(g, (shoe[-1][0], gy + 0.005, shoe[-1][1]), (shoe[0][0], gy + 0.005, shoe[0][1]), 0.03, "Chrome")
-    g.cyl((0, gy + 0.012, 0.465), "Y", 0.032, 0.01, "Tail", segs=10)  # little red oval badge
-    # lower intakes either side of the grille and the splitter
+    g.cyl((0, gy + 0.012, 0.43), "Y", 0.032, 0.01, "Tail", segs=10)  # little red oval badge
+    # deep lower intakes either side of the grille, each with a silver lip
+    # under it, and the splitter following the V of the nose
     for sx in (-1, 1):
-        g.hull([(sx * x, y, z) for (x, z) in ((0.22, 0.17), (0.22, 0.3), (0.72, 0.17), (0.66, 0.3))
-                for y in (fy - 0.03, fy + 0.035)], "Trim")
-    g.box((0, fy + 0.05, 0.14), (hwf * 1.85, 0.06, 0.025), "Chrome")
+        g.hull([(sx * x, face(x) + dy, z) for (x, z) in ((0.22, 0.16), (0.22, 0.33), (0.76, 0.16), (0.7, 0.32))
+                for dy in (-0.06, 0.012)], "Trim")
+        rod(g, (sx * 0.22, face(0.22) + 0.02, 0.15), (sx * 0.77, face(0.77) + 0.02, 0.15), 0.025, "Chrome")
+        rod(g, (sx * 0.05, face(0.2) + 0.03, 0.12), (sx * hwf * 0.92, face(hwf * 0.92) + 0.02, 0.12), 0.03, "Chrome")
     B.make("Bumper_F", g, (0, fy - 0.15, 0.32), hull, M)
 
     # rear: diffuser and the central exhaust under the mesh panel
@@ -994,17 +1019,17 @@ CARS = [
          screen=((0.8, 2.02), (0.5, 2.44))),
     dict(name="Bellatrix", file="bellatrix", kind="hyper", paint=(0.12, 0.42, 0.85), flaps=(0.1, 0.1, 0.1),
          rims=(0.22, 0.23, 0.25), half_len=2.3,
-         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8,
+         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8, fenders=0.07, nose_tip=0.1,
          # low, wide mid-engined coupe: short rounded nose, long raked screen,
          # a roof that runs straight into the engine cover, cut-off tail
-         profile=[(2.28, 0.44, 0.4), (2.22, 0.58, 0.54), (2.05, 0.66, 0.62), (1.6, 0.72, 0.68), (1.2, 0.77, 0.72),
-                  (0.88, 0.82, 0.76), (0.45, 1.05, 0.8), (0.05, 1.17, 0.84), (-0.35, 1.19, 0.86),
+         profile=[(2.28, 0.42, 0.38), (2.2, 0.56, 0.52), (2.0, 0.64, 0.6), (1.6, 0.7, 0.66), (1.25, 0.74, 0.7),
+                  (1.0, 0.78, 0.74), (0.5, 1.03, 0.79), (0.05, 1.17, 0.84), (-0.35, 1.19, 0.86),
                   (-0.8, 1.13, 0.87), (-1.3, 1.04, 0.89), (-1.8, 0.98, 0.9), (-2.1, 0.95, 0.9), (-2.24, 0.9, 0.86)],
          glass_y=(0.8, -0.8), pillars=[9.0], b_pillar=9.0, mirror_y=0.72,
          c_line=(-0.45, (-0.9, 0.32)),  # chrome C: where its top run ends, its back and its bottom run
          wheel_y=(1.4, -1.32), wheel_x=0.87, wheel_r=0.36, wheel_w=(0.3, 0.36),
          bumper_top=(0.42, 0.6), tail_z=0.8, wing_y=-1.98,
-         body_extras=[hyper_extras], screen=((0.88, 0.82), (0.05, 1.17))),
+         body_extras=[hyper_extras], screen=((1.0, 0.78), (0.05, 1.17))),
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
          wheel_y=(1.72, -1.42), wheel_x=0.84, wheel_r=(0.32, 0.35), wheel_w=(0.3, 0.42)),
