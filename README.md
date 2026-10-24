@@ -7,6 +7,8 @@ code; the vehicles are modelled in Blender (sources in `art/`, exported to
 `models/*.glb`). The cars wear pixel-art skins from `models/`; the tank is
 painted in code at startup.
 
+![On the grid at Downtown GP, the city street circuit](docs/downtown_gp_start.png)
+
 ## Open and play
 
 1. Install Godot **4.7 or newer** (standard build, no .NET needed).
@@ -106,17 +108,21 @@ its camouflage, crosses and number are painted in code (`TexGen.camo`,
 | Spa F1 | 3.1 km | Spa-Francorchamps: La Source, down to Eau Rouge and up Raidillon, the Kemmel straight, Les Combes, Bruxelles, a wet Pouhon, Stavelot, Blanchimont and the Bus Stop. Kerbs, armco and the Ardennes forest |
 | Jungle Temple | 2.1 km | Gravel and mud through dense rainforest (palms, vine-hung giants, ferns), over a plank bridge, through a river ford that slows you right down, past overgrown temples and a stepped pyramid |
 | Monaco Ruins | 3.2 km | The Monaco GP street circuit after a nuclear war: Sainte Devote, Casino Square, the Grand Hotel hairpin, a half-collapsed tunnel, the chicane, the flooded swimming pool section and La Rascasse, past bombed-out blocks, wrecks and a toxic harbour |
+| Luna Base | 2.8 km | The Moon: low gravity, so the crests launch you; packed regolith and loose dust in the crater floors, past a lunar base with domes, landers and dishes, under a black sky with the Earth in it. Never rains |
+| Downtown GP | 2.0 km | A walled street circuit through a modern city: wide square corners, a chicane and a cobbled square, office blocks and shops, catch fences, traffic lights and a grandstand at the start |
 
 Stages are defined in `scripts/maps.gd`: a list of route points, surface
 sections, elevation keyframes, jumps, a village range and forest density.
 Copy an entry to make a new stage. Optional keys add a `theme` ("wasteland"
 swaps the sky, houses, trees, barriers and cones; "jungle" brings palms,
-temples and log barriers; "circuit" adds kerbs and armco), a `tunnel`,
+temples and log barriers; "circuit" adds kerbs and armco; "moon" and "city"
+dress the two stages above), a `gravity`, a `tunnel`,
 `water` areas (route sections on "ford" dip under the water, sections on
 "wood" become a bridge over it) and a `landmark` pyramid.
 
 The surface table (`scripts/surfaces.gd`) has asphalt, gravel, wet, ice,
-grass, mud, river (ford) and wooden bridge surfaces, each with its own grip,
+grass, mud, river (ford), wooden bridge, regolith, moon dust and cobbles
+surfaces, each with its own grip,
 slide, drag and roughness.
 
 ## Weather and tyre marks
