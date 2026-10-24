@@ -55,7 +55,6 @@ var spec: Dictionary = Cars.LIST[0]  # set before adding to the tree
 var control_enabled := false
 var rain := false  # wet weather: less grip, spray off every tyre
 var marks: SkidMarks  # set by the race scene; tyre marks are left here
-var fx_light := 1.0  # dims the (unshaded) dust and spray at dusk and night
 var model: CarModel
 var wheels: Array[Wheel] = []
 
@@ -613,9 +612,7 @@ func _update_fx(delta: float) -> void:
 		if on:
 			w.fx.global_position = w.spinner.global_position - Vector3(0, w.radius * 0.7, 0)
 			var c: Color = sd["fx"]
-			if spray:
-				c = Color(0.82, 0.86, 0.92, 0.5)
-			w.fx.color = Color(c.r * fx_light, c.g * fx_light, c.b * fx_light, c.a)
+			w.fx.color = Color(0.82, 0.86, 0.92, 0.5) if spray else c
 	_smoke.emitting = damage["front"] > 0.5
 	_smoke.color = Color(0.15, 0.15, 0.17, 0.4 + damage["front"] * 0.5)
 

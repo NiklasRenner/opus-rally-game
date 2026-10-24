@@ -17,8 +17,7 @@ var weather := "RANDOM"  # menu choice, see Conditions.WEATHERS
 # what the current race actually got (rolled when a race starts from the menu,
 # kept for restarts)
 var race_rain := false
-var race_time_of_day := "DAY"  # dusk and night are switched off for now
-var retro_look := true  # banded light, hard shadows, 15-bit colour (F2, RetroLook)
+var retro_look := true  # banded light, hard shadows, depth fog (F2, RetroLook)
 
 var _records := {}
 

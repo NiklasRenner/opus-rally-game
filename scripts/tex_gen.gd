@@ -198,46 +198,6 @@ static func puff() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-## Equirectangular sky with saturated blue and chunky clouds (Sega Rally sky).
-static func sky_panorama(theme := "") -> ImageTexture:
-	var w := 512
-	var h := 256
-	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 3
-	noise.frequency = 1.6
-	noise.fractal_octaves = 4
-	var top := Color(0.08, 0.30, 0.86)
-	var horizon := Color(0.60, 0.78, 0.98)
-	var ground := Color(0.42, 0.52, 0.48)
-	var cloud_hi := Color(0.98, 0.98, 1.0)
-	var cloud_lo := Color(0.72, 0.76, 0.86)
-	if theme == "wasteland":
-		# nuclear dusk: rust-brown overhead, a sick orange glow on the horizon
-		top = Color(0.22, 0.17, 0.14)
-		horizon = Color(0.88, 0.55, 0.26)
-		ground = Color(0.35, 0.28, 0.22)
-		cloud_hi = Color(0.62, 0.50, 0.40)
-		cloud_lo = Color(0.24, 0.20, 0.18)
-	for y in h:
-		var lat := 0.5 - float(y) / h  # +0.5 top, -0.5 bottom
-		for x in w:
-			var c: Color
-			if lat < 0.0:
-				c = horizon.lerp(ground, clampf(-lat * 6.0, 0.0, 1.0))
-			else:
-				c = horizon.lerp(top, pow(clampf(lat * 2.4, 0.0, 1.0), 0.6))
-				var a := TAU * float(x) / w
-				var n := noise.get_noise_3d(cos(a), sin(a), lat * 5.0)
-				var band := clampf(1.0 - absf(lat - 0.12) * 5.0, 0.0, 1.0)
-				var cloud := clampf((n + 0.05) * 3.0, 0.0, 1.0) * band
-				if cloud > 0.0:
-					var shade := cloud_hi.lerp(cloud_lo, clampf(-n * 2.0 + 0.4, 0.0, 1.0))
-					c = c.lerp(shade, cloud)
-			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
-
-
 # --------------------------------------------------------------------------- scenery
 
 static var _cache := {}
