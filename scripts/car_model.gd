@@ -160,8 +160,9 @@ func _frame_mat() -> StandardMaterial3D:
 
 ## Darker, duller than chrome: cast metal like the truck's diff housings.
 func _steel_mat() -> StandardMaterial3D:
-	var m := TexGen.flat_material(Color(0.2, 0.21, 0.23), 0.5)
+	var m := TexGen.flat_material(Color(0.24, 0.25, 0.27), 0.5)
 	m.metallic = 0.4
+	m.vertex_color_use_as_albedo = true  # light baked into the model, like the frame
 	return m
 
 

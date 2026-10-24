@@ -627,7 +627,7 @@ def truck_parts(B, c, root, M):
     for wy, n in ((c["wheel_y"][0], "F"), (c["wheel_y"][1], "R")):
         g = G()
         rod(g, (-0.8, wy, r), (0.8, wy, r), 0.14, "Trim", 8)
-        g.cyl((0.0, wy, r), "Y", 0.2, 0.3, "Steel", segs=10)  # diff housing
+        g.cyl((0.0, wy, r), "Y", 0.2, 0.3, "Steel", segs=16)  # diff housing
         g.cyl((0.0, wy - 0.16 * (1 if n == "F" else -1), r + 0.02), "Y", 0.08, 0.2, "Trim", segs=8)
         for sx in (-1, 1):
             for dy in (-0.16, 0.16):
@@ -656,15 +656,16 @@ def rod(g, a, b, t, key, sides=4):
 
 
 def shade_tubes(ob):
-    """Bake light into vertex colours on the tube frame: tops catch the sun,
-    undersides fall into shadow, so plain red reads as round tubing."""
+    """Bake light into vertex colours on the tube frame and diff housings:
+    tops catch the sun, undersides fall into shadow, so flat colour reads as
+    round metal."""
     me = ob.data
     keys = [m.name.split(".")[0] for m in me.materials]
     attr = me.color_attributes.new("Col", "BYTE_COLOR", "CORNER")
     for poly in me.polygons:
         n = poly.normal
         lit = 0.6 + 0.4 * max(min(n.z * 0.8 + n.y * 0.2 + 0.25, 1.0), 0.0)
-        if keys[poly.material_index] != "Frame":
+        if keys[poly.material_index] not in ("Frame", "Steel"):
             lit = 1.0
         for li in poly.loop_indices:
             attr.data[li].color = (lit, lit, lit, 1.0)
