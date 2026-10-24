@@ -261,6 +261,7 @@ func _buildings() -> void:
 ## One block: facade walls, a flat roof with plant on it, and on the side
 ## facing the street a shop sign under an awning at ground level.
 func _block(xf: Transform3D, size: Vector3, s: float) -> void:
+	xf.origin.y = _ground(xf, size) - 0.3
 	var style := _rng.randi() % FACADES.size()
 	if size.y > 30.0 and _rng.randf() < 0.6:
 		style = 3  # the tall ones are mostly glass
@@ -336,6 +337,17 @@ func _infill() -> void:
 				_block(Transform3D(Basis.IDENTITY, p), size, 1.0 if _rng.randf() < 0.5 else -1.0)
 			z += pitch
 		x += pitch
+
+
+## The lowest ground under a block's footprint (a grid of points over it),
+## so no corner of it is left hanging over a dip.
+func _ground(xf: Transform3D, size: Vector3) -> float:
+	var low := INF
+	for gx in 5:
+		for gz in 5:
+			var p := xf * Vector3((gx / 4.0 - 0.5) * size.x, 0, (gz / 4.0 - 0.5) * size.z)
+			low = minf(low, track.terrain_height(p.x, p.z))
+	return low
 
 
 # --------------------------------------------------------------------------- street furniture
