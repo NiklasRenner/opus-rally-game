@@ -484,11 +484,11 @@ def paint_balear(sk):
         sk.text("BALEAR", sk.side_pt(side, 0.2, 0.47), 21, blue, bold=True, italic=True)
         sk.text("KIT CAR", sk.side_pt(side, 0.42, 0.72), 7, blue, bold=True, italic=True)
         sk.text("SPORT", sk.side_pt(side, -0.4, 0.4), 7, RED, italic=True)
-        # stickers on the rear quarter and behind the front wheel
+        # stickers on the rear quarter and the front bumper corner
         for i, col in enumerate((blue, RED, WHITE)):
             yy = -0.8 - i * 0.14
             sk.side_box(side, yy, yy - 0.12, 0.62, 0.67, col)
-        sk.text("PIXELLI", sk.side_pt(side, 1.32, 0.78), 7, BLACK)
+        sk.text("PIXELLI", sk.side_pt(side, 1.68, 0.4), 7, BLACK)
 
     # top: phone-company panel across the bonnet front, fuel stripe at the
     # base of the screen, roof number, the name along the spoiler

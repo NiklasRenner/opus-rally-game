@@ -328,6 +328,11 @@ class Body:
         verts = []
         for y, r in zip(ys, rings):
             verts += [(x, y, z) for x, z in r]
+        scr = self.c.get("screen")
+
+        def in_screen(y):
+            return scr is not None and scr[1][0] < y < scr[0][0]
+
         faces, keys = [], []
         for j in range(len(ys) - 1):
             yc = (ys[j] + ys[j + 1]) / 2
@@ -343,9 +348,12 @@ class Body:
                             and self.c["glass_y"][1] < yc < self.c["glass_y"][0]:
                         key = "Glass"
                 elif 5 <= e <= n - 7:  # roof: screens where it slopes
-                    p = [Vector(verts[i]) for i in (a, b, c)]
-                    nr = (p[1] - p[0]).cross(p[2] - p[0]).normalized()
-                    if abs(nr.y) > 0.3 and cab > 0.3:
+                    p = [Vector(verts[i]) for i in (a, b, c, d)]
+                    # across the diagonals, so a bent quad reads the same on both sides
+                    nr = (p[2] - p[0]).cross(p[3] - p[1]).normalized()
+                    # the windscreen runs all the way down to the bonnet, where
+                    # the roof is still too low over the belt to count as cabin
+                    if abs(nr.y) > 0.3 and (cab > 0.3 or in_screen(yc)):
                         key = "Glass"
                 faces.append((a, b, c, d))
                 keys.append(key)
@@ -1000,12 +1008,13 @@ CARS = [
          hw=0.84, roof_hw=0.65, flare=0.09, bottom=0.2, nose_round=0.86,
          # compact three-door kit car: short bonnet, raked screen, short roof
          # falling into a hatch, wide arches
-         profile=[(1.98, 0.55, 0.51), (1.92, 0.7, 0.66), (1.5, 0.76, 0.72), (1.0, 0.82, 0.78), (0.3, 1.34, 0.86),
-                  (-1.15, 1.33, 0.9), (-1.65, 0.98, 0.92), (-1.85, 0.62, 0.58)],
-         glass_y=(0.95, -1.3), pillars=[-0.62], b_pillar=-0.62, mirror_y=0.8,
+         # bonnet runs nearly level into the screen base, shallow window band
+         profile=[(1.98, 0.57, 0.53), (1.92, 0.73, 0.69), (1.5, 0.8, 0.76), (0.95, 0.88, 0.84), (0.3, 1.32, 0.9),
+                  (-1.15, 1.31, 0.93), (-1.65, 0.98, 0.95), (-1.85, 0.62, 0.58)],
+         glass_y=(0.9, -1.3), pillars=[-0.62], b_pillar=-0.62, mirror_y=0.8,
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
-         wing=ibiza_wing, screen=((1.0, 0.82), (0.3, 1.34))),
+         wing=ibiza_wing, screen=((0.95, 0.88), (0.3, 1.32))),
     dict(name="Swamp", file="swamp", kind="truck", paint=(0.55, 0.85, 0.1), flaps=(0.1, 0.1, 0.1),
          rims=(1.0, 0.5, 0.05), frame=(0.8, 0.08, 0.06), tyre_segs=20,
          hw=0.92, roof_hw=0.8, flare=0.0, bottom=1.38, nose_round=0.93, half_len=2.45, px_m=70.0,
