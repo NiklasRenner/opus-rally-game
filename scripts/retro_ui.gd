@@ -35,3 +35,20 @@ static func panel(ci: CanvasItem, r: Rect2, alpha := 0.78) -> void:
 static func cursor(ci: CanvasItem, r: Rect2) -> void:
 	var blink := 0.55 + 0.25 * sin(Time.get_ticks_msec() / 120.0)
 	ci.draw_rect(r, Color(1.0, 0.84, 0.1, blink * 0.45))
+
+
+## Car class badge: the class letter on a tile in its colour, then its name.
+## `pos` is the text baseline; returns the x where the badge ends.
+static func class_badge(ci: CanvasItem, pos: Vector2, cls: String, size := 12, with_name := true) -> float:
+	var info: Dictionary = Cars.CLASSES.get(cls, Cars.CLASSES[Cars.DEFAULT_CLASS])
+	var h := size + 4.0
+	var tile := Rect2(pos.x, pos.y - size - 1.0, h, h)
+	ci.draw_rect(tile.grow(1), INK)
+	ci.draw_rect(tile, info["col"])
+	text(ci, Vector2(pos.x, pos.y), cls, size, INK, 0, HORIZONTAL_ALIGNMENT_CENTER, h)
+	var end := tile.end.x
+	if with_name:
+		var label: String = info["name"]
+		text(ci, Vector2(end + 5, pos.y), label, size, info["col"], 3)
+		end += 5 + ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	return end

@@ -1054,107 +1054,38 @@ func glow_lid(barrel: MeshInstance3D) -> void:
 	barrel.add_child(lid)
 
 
-## Ranges of faceted peaks on the skyline: each one a few overlapping
-## mountains with jagged ridges, snow (or ash, or forest) above the rock and
-## shading baked into the faces, so they sit with the low-poly hills and
-## trees without needing the sun. The stage fog would wash them out to flat
-## blue shapes at this distance, so they skip it and take a fixed share of
-## the haze colour instead.
+## Ranges of faceted peaks on the skyline (see Mountains), each one to three
+## overlapping mountains spread along the horizon.
 func _build_mountains() -> void:
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.disable_fog = true
+	var sty := Mountains.style(_theme())
+	var mat := Mountains.material(sty)
 	var haze: Color = Conditions.palette(_theme(), rain)["fog"]
 	# own generator, so what's built after the mountains doesn't move
-	var stage_rng := _rng
-	_rng = RandomNumberGenerator.new()
-	_rng.seed = int(map["seed"]) + 13
-	var cols := {"low": Color(0.36, 0.44, 0.40), "rock": Color(0.42, 0.46, 0.56), "top": Color(0.94, 0.96, 1.0)}
-	if _theme() == "wasteland":
-		cols = {"low": Color(0.34, 0.26, 0.20), "rock": Color(0.40, 0.31, 0.24), "top": Color(0.54, 0.47, 0.40)}  # ash, not snow
-	elif _theme() == "jungle":
-		cols = {"low": Color(0.18, 0.32, 0.20), "rock": Color(0.24, 0.38, 0.27), "top": Color(0.32, 0.46, 0.32)}  # forest to the top
-	elif _theme() == "moon":
-		cols = {"low": Color(0.40, 0.40, 0.40), "rock": Color(0.52, 0.52, 0.51), "top": Color(0.70, 0.70, 0.68)}  # bare grey highlands
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(map["seed"]) + 13
 	for k in 22:
-		var a := TAU * k / 22.0 + _rng.randf_range(-0.1, 0.1)
-		var r := _rng.randf_range(900.0, 1150.0) * _world_half / 560.0
+		var a := TAU * k / 22.0 + rng.randf_range(-0.1, 0.1)
+		var r := rng.randf_range(900.0, 1150.0) * _world_half / 560.0
 		var pos := Vector3(_center.x + cos(a) * r, -10.0, _center.y + sin(a) * r)
 		if _in_water(pos.x, pos.z, 200.0):
 			continue
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		# one main peak and up to two lower ones beside it, spread along the skyline
+		# one main peak and up to two lower ones beside it
 		var along := Vector3(-sin(a), 0, cos(a))
-		var peaks := _rng.randi_range(1, 3)
+		var peaks := rng.randi_range(1, 3)
 		for m in peaks:
-			var h := _rng.randf_range(160.0, 360.0) * (1.0 if m == 0 else _rng.randf_range(0.55, 0.8))
-			var off := along * (0.0 if m == 0 else _rng.randf_range(-1.0, 1.0) * 220.0) + Vector3(cos(a), 0, sin(a)) * m * 60.0
-			_mountain(st, off, h, _rng.randf_range(180.0, 300.0) * (h / 300.0 + 0.3), cols, haze)
+			var h := rng.randf_range(160.0, 360.0) * (1.0 if m == 0 else rng.randf_range(0.55, 0.8))
+			var off := along * (0.0 if m == 0 else rng.randf_range(-1.0, 1.0) * 220.0) + Vector3(cos(a), 0, sin(a)) * m * 60.0
+			Mountains.add(st, rng, off, h, rng.randf_range(180.0, 300.0) * (h / 300.0 + 0.3), sty, haze)
 		var mi := MeshInstance3D.new()
 		mi.mesh = st.commit()
 		mi.material_override = mat
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.position = pos
 		add_child(mi)
-	_rng = stage_rng
 	for i in 22 * 13:  # what the old cone mountains drew from the stage's generator
 		_rng.randf()
-
-
-## One faceted mountain: a peak, two jittered rings of ridge points and a
-## ragged base, coloured by height and shaded per face from a fixed light.
-func _mountain(st: SurfaceTool, at: Vector3, h: float, base: float, cols: Dictionary, haze: Color) -> void:
-	var sides := 9
-	var light := Vector3(-0.55, 0.65, 0.5).normalized()
-	var snow_line := _rng.randf_range(0.6, 0.72)
-	var rings: Array = [[at + Vector3(_rng.randf_range(-20, 20), h, _rng.randf_range(-20, 20))]]
-	for ring in [[0.32, 0.66], [0.66, 0.3], [1.0, 0.0]]:
-		var pts: Array = []
-		var twist := _rng.randf_range(0.0, TAU / sides)
-		for s in sides:
-			var ang := TAU * s / sides + twist + _rng.randf_range(-0.12, 0.12)
-			var rr: float = base * ring[0] * _rng.randf_range(0.75, 1.15)
-			# ridges: every other point stands proud, the gullies between sink
-			var y: float = h * ring[1] * (_rng.randf_range(1.0, 1.25) if s % 2 == 0 else _rng.randf_range(0.7, 0.95))
-			pts.append(at + Vector3(cos(ang) * rr, y if (ring[1] as float) > 0.0 else -8.0, sin(ang) * rr))
-		rings.append(pts)
-	for ring in 3:
-		var inner: Array = rings[ring]
-		var outer: Array = rings[ring + 1]
-		for s in sides:
-			var o0: Vector3 = outer[s]
-			var o1: Vector3 = outer[(s + 1) % sides]
-			if ring == 0:
-				_mountain_tri(st, [inner[0], o1, o0], h, snow_line, cols, light, haze)
-			else:
-				var i0: Vector3 = inner[s]
-				var i1: Vector3 = inner[(s + 1) % sides]
-				_mountain_tri(st, [i0, i1, o0], h, snow_line, cols, light, haze)
-				_mountain_tri(st, [i1, o1, o0], h, snow_line, cols, light, haze)
-
-
-func _mountain_tri(st: SurfaceTool, v: Array, h: float, snow_line: float, cols: Dictionary, light: Vector3, haze: Color) -> void:
-	var n := ((v[1] - v[0]) as Vector3).cross(v[2] - v[0]).normalized()
-	if n.y < 0.0:
-		n = -n
-	var y := ((v[0] as Vector3).y + (v[1] as Vector3).y + (v[2] as Vector3).y) / 3.0 / h
-	var c: Color = cols["low"]
-	if y > snow_line:
-		c = cols["top"]
-	elif y > snow_line - 0.08 and _rng.randf() < 0.5:
-		c = (cols["top"] as Color).lerp(cols["rock"], 0.5)  # ragged edge of the snow
-	elif y > 0.2:
-		c = cols["rock"]
-	# steep faces show bare rock even low down
-	if n.y < 0.45 and y > 0.12 and y <= snow_line:
-		c = (cols["rock"] as Color).darkened(0.12)
-	c = (c * (0.62 + 0.38 * maxf(n.dot(light), 0.0))).lerp(haze, 0.4)
-	for p in v:
-		st.set_color(Color(c.r, c.g, c.b))
-		st.add_vertex(p)
 
 
 # --------------------------------------------------------------------------- water, tunnel, wrecks
