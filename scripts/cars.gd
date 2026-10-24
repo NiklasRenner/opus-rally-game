@@ -173,7 +173,7 @@ const LIST := [
 		"type": "f1",
 		"name": "VELOCE F1",
 		"blurb": "Hybrid single-seater, huge downforce",
-		"number": "27",
+		"number": "1",
 		"mesh": "res://models/veloce.glb",
 		"profile": [[-2.62, 0.04, 0.0]],
 		"skin": "res://models/veloce_skin.png",
@@ -181,7 +181,7 @@ const LIST := [
 		"spokes": 0,  # flat wheel covers
 		"rim_ring": Color(0.85, 0.08, 0.1),
 		"flaps": Color(0.1, 0.1, 0.1),
-		"helmet": Color(1.0, 0.85, 0.1),
+		"helmet": Color(0.1, 0.1, 0.12),
 		"helmet_pos": Vector3(0, -0.02, 0.05),
 		"dents": ["Body", "Sidepod_L", "Sidepod_R"],
 		"parts": [["FrontWing", "front", 0.3], ["RearWing", "rear", 0.5], ["Sidepod_L", "left", 0.45],

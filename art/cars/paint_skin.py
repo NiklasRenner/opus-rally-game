@@ -461,62 +461,83 @@ def paint_pleiad(sk):
 # --------------------------------------------------------------------------- the F1 car
 
 def paint_veloce(sk):
-    """Modern works F1 livery: matte navy, yellow nose tip, red wing elements,
-    a red bolt on a yellow sun disc on the engine cover, big white sponsors
-    (made-up ORBITAL and PAYPIX), number 27."""
-    navy = rgb(0.09, 0.11, 0.24)
-    sun = rgb(1.0, 0.8, 0.1)
-    red = rgb(0.86, 0.08, 0.1)
-    base(sk, navy)
+    """Black works F1 livery: gloss black with red highlights, a red charging
+    bolt on the engine cover, red wing elements and endplate details, a
+    silver halo, silver-grey sponsors (made-up ORBITAL and PAYPIX) and a
+    dithered metallic fade along the sidepod flanks. Number 1."""
+    black = rgb(0.045, 0.045, 0.05)
+    matte = rgb(0.03, 0.03, 0.035)
+    red = rgb(0.86, 0.06, 0.08)
+    silver = rgb(0.72, 0.74, 0.78)
+    grey = rgb(0.5, 0.52, 0.56)
+    base(sk, black)
 
-    def bolt(c, r):
-        """Red lightning bolt across a sun disc of radius r (pixels) at c."""
-        sk.disc(c, r, sun)
+    def bolt(c, r, col):
+        """Charging bolt, about r pixels from its centre to its tips."""
         x, y = c
-        pts = [(x - 0.55 * r, y + 0.5 * r), (x + 0.05 * r, y - 0.05 * r), (x - 0.1 * r, y - 0.15 * r),
-               (x + 0.6 * r, y - 0.6 * r), (x - 0.05 * r, y + 0.05 * r), (x + 0.1 * r, y + 0.15 * r)]
-        sk.paint(lambda d: d.polygon(pts, fill=red))
+        pts = [(x - 1.0 * r, y + 0.45 * r), (x + 0.05 * r, y - 0.1 * r), (x - 0.15 * r, y - 0.3 * r),
+               (x + 1.0 * r, y - 0.55 * r), (x - 0.05 * r, y + 0.1 * r), (x + 0.15 * r, y + 0.3 * r)]
+        sk.paint(lambda d: d.polygon(pts, fill=col))
+
+    def fade(side, y0, y1, z0, z1, a, b):
+        """Ordered-dither fade from colour a at y0 to colour b at y1."""
+        p0, p1 = sk.side_pt(side, y0, z0), sk.side_pt(side, y1, z1)
+        bayer = ((0, 8, 2, 10), (12, 4, 14, 6), (3, 11, 1, 9), (15, 7, 13, 5))
+
+        def draw(d):
+            xa, xb = sorted((round(p0[0]), round(p1[0])))
+            ya, yb = sorted((round(p0[1]), round(p1[1])))
+            for x in range(xa, xb):
+                t = (x - p0[0]) / (p1[0] - p0[0])
+                for y in range(ya, yb):
+                    d.point((x, y), fill=b if t * 16 > bayer[y % 4][x % 4] + 0.5 else a)
+        sk.paint(draw)
 
     for side in (-1, 1):
-        # nose tip, front wing endplates, number on the nose
-        sk.side_box(side, 2.2, 2.6, 0.0, 0.6, sun)
+        # red and white nose tip, red front wing endplates with a grey stripe
+        sk.side_box(side, 2.25, 2.6, 0.0, 0.6, red)
+        sk.side_box(side, 2.1, 2.25, 0.0, 0.6, WHITE)
         sk.side_box(side, 2.18, 2.62, 0.04, 0.31, red)
-        sk.side_box(side, 2.18, 2.62, 0.2, 0.23, WHITE)
-        sk.text("27", sk.side_pt(side, 1.75, 0.33), 7, WHITE, bold=True)
-        # sidepods: the big sponsor, a stripe and small stickers
-        sk.text("ORBITAL", sk.side_pt(side, -0.42, 0.4), 14, WHITE, bold=True)
-        sk.side_box(side, 0.2, -1.3, 0.24, 0.27, red)
-        for i, col in enumerate((WHITE, sun, red)):
-            yy = 1.25 - i * 0.14
-            sk.side_box(side, yy, yy - 0.11, 0.25, 0.29, col)
-        # engine cover: sun disc and bolt, number further back
-        bolt(sk.side_pt(side, -0.92, 0.6), 0.15 * sk.s)
-        sk.text("27", sk.side_pt(side, -1.55, 0.36), 7, WHITE, bold=True)
-        sk.text("VELOCE", sk.side_pt(side, 0.85, 0.36), 7, WHITE)
-        # rear wing endplates: sponsor up the plate
+        sk.side_box(side, 2.18, 2.62, 0.2, 0.22, silver)
+        sk.text("1", sk.side_pt(side, 1.8, 0.34), 7, red, bold=True)
+        sk.side_box(side, 1.62, 1.5, 0.3, 0.36, WHITE)
+        # sidepods: big light-grey sponsor, metallic fade to the gearbox, matte undercut
+        fade(side, -0.5, -1.35, 0.15, 0.36, black, grey)
+        sk.side_box(side, 0.22, -1.35, 0.15, 0.22, matte)
+        sk.text("ORBITAL", sk.side_pt(side, -0.4, 0.42), 14, silver, bold=True)
+        sk.side_box(side, 0.2, -0.95, 0.28, 0.3, red)
+        # engine cover: the red charging bolt by the airbox, small red logos
+        bolt(sk.side_pt(side, -0.9, 0.7), 0.2 * sk.s, red)
+        sk.text("PAYPIX", sk.side_pt(side, -1.55, 0.36), 7, red)
+        sk.text("VELOCE", sk.side_pt(side, 0.85, 0.36), 7, grey)
+        # silver halo, red rear wing endplate details
+        sk.side_box(side, 0.36, -0.46, 0.66, 0.84, silver)
         x0, y0 = sk.side_pt(side, -2.08, 0.72)
-        sk.text("PAYPIX", (x0, y0), 7, WHITE, rotate=90 * side, bold=True)
+        sk.text("PAYPIX", (x0, y0), 7, silver, rotate=90 * side, bold=True)
         sk.side_box(side, -1.85, -2.31, 0.98, 1.03, red)
+        sk.side_box(side, -1.85, -2.31, 0.42, 0.47, red)
 
-    # top: yellow nose tip, red wing elements with sponsors, number, engine
-    # cover bolt, rear wing sponsor reading from behind
-    sk.top_box(-0.12, 0.12, 2.18, 2.6, sun)
+    # top: red/white nose, red wing elements with grey-white lettering, halo,
+    # the bolt on the engine cover, rear wing sponsor
+    sk.top_box(-0.12, 0.12, 2.25, 2.6, red)
+    sk.top_box(-0.12, 0.12, 2.1, 2.25, WHITE)
     for sx in (-1, 1):
         sk.top_box(sx * 0.12, sx * 1.0, 2.15, 2.6, red)
-        sk.text("PAYPIX", sk.px("top", (sx * 0.55, 2.41, 0)), 7, WHITE, rotate=90, bold=True)
-    sk.text("27", sk.px("top", (0.0, 1.75, 0)), 7, WHITE, rotate=90, bold=True)
-    sk.text("VELOCE", sk.px("top", (0.0, 1.1, 0)), 7, sun, rotate=90)
-    bolt(sk.px("top", (0.0, -1.05, 0)), 0.11 * sk.s)
-    sk.text("ORBITAL", sk.px("top", (0.0, -2.12, 0)), 7, WHITE, rotate=-90, bold=True)
+        sk.text("VELOCE", sk.px("top", (sx * 0.55, 2.41, 0)), 7, rgb(0.9, 0.9, 0.9), rotate=90, bold=True)
+        sk.top_box(sx * 0.23, sx * 0.33, 0.25, -0.45, silver)
+    sk.text("1", sk.px("top", (0.0, 1.85, 0)), 7, red, rotate=90, bold=True)
+    sk.top_box(-0.05, 0.05, 1.45, 1.3, WHITE)
+    sk.top_box(-0.05, 0.05, 0.33, 0.22, silver)
+    bolt(sk.px("top", (0.0, -1.05, 0)), 0.12 * sk.s, red)
+    sk.text("ORBITAL", sk.px("top", (0.0, -2.12, 0)), 7, silver, rotate=-90, bold=True)
     sk.top_box(-0.6, 0.6, -2.26, -2.3, red)
 
-    # front: nose tip and wing faces; rear: rain light surround, beam wing
-    sk.end_box(True, -0.15, 0.15, 0.1, 0.5, sun)
+    # front: nose and wing faces; rear: rear wing edge, rain light surround
+    sk.end_box(True, -0.15, 0.15, 0.1, 0.5, red)
     sk.end_box(True, -1.0, -0.15, 0.04, 0.3, red)
     sk.end_box(True, 0.15, 1.0, 0.04, 0.3, red)
-    sk.end_box(False, -0.6, 0.6, 0.85, 1.05, navy)
     sk.end_box(False, -0.6, 0.6, 0.97, 1.03, red)
-    sk.end_box(False, -0.12, 0.12, 0.27, 0.37, BLACK)
+    sk.end_box(False, -0.12, 0.12, 0.27, 0.37, matte)
 
     finish(sk, wheels=())
 
