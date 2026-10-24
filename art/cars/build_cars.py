@@ -319,9 +319,9 @@ class Body:
         return out
 
     def in_screen(self, y):
-        """Cars with full_screen glaze the whole windscreen down to its base,
-        not only where the cabin has risen clear of the bonnet."""
-        if not self.c.get("full_screen"):
+        """The windscreen is glazed all the way down to its base, not only
+        where the cabin has risen clear of the bonnet."""
+        if "screen" not in self.c:
             return False
         (y0, _), (y1, _) = self.c["screen"]
         return y1 < y < y0 + 0.01
@@ -351,8 +351,9 @@ class Body:
                             and self.c["glass_y"][1] < yc < self.c["glass_y"][0]:
                         key = "Glass"
                 elif 5 <= e <= n - 7:  # roof: screens where it slopes
-                    p = [Vector(verts[i]) for i in (a, b, c)]
-                    nr = (p[1] - p[0]).cross(p[2] - p[0]).normalized()
+                    p = [Vector(verts[i]) for i in (a, b, c, d)]
+                    # across the diagonals, so a bent quad reads the same on both sides
+                    nr = (p[2] - p[0]).cross(p[3] - p[1]).normalized()
                     if abs(nr.y) > 0.3 and (cab > 0.3 or self.in_screen(yc)):
                         key = "Glass"
                 faces.append((a, b, c, d))
@@ -1016,12 +1017,13 @@ CARS = [
          hw=0.84, roof_hw=0.65, flare=0.09, bottom=0.2, nose_round=0.86,
          # compact three-door kit car: short bonnet, raked screen, short roof
          # falling into a hatch, wide arches
-         profile=[(1.98, 0.55, 0.51), (1.92, 0.7, 0.66), (1.5, 0.76, 0.72), (1.0, 0.82, 0.78), (0.3, 1.34, 0.86),
-                  (-1.15, 1.33, 0.9), (-1.65, 0.98, 0.92), (-1.85, 0.62, 0.58)],
-         glass_y=(0.95, -1.3), pillars=[-0.62], b_pillar=-0.62, mirror_y=0.8,
+         # bonnet runs nearly level into the screen base, shallow window band
+         profile=[(1.98, 0.57, 0.53), (1.92, 0.73, 0.69), (1.5, 0.8, 0.76), (0.95, 0.88, 0.84), (0.3, 1.32, 0.9),
+                  (-1.15, 1.31, 0.93), (-1.65, 0.98, 0.95), (-1.85, 0.62, 0.58)],
+         glass_y=(0.9, -1.3), pillars=[-0.62], b_pillar=-0.62, mirror_y=0.8,
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
-         wing=ibiza_wing, screen=((1.0, 0.82), (0.3, 1.34))),
+         wing=ibiza_wing, screen=((0.95, 0.88), (0.3, 1.32))),
     dict(name="Swamp", file="swamp", kind="truck", paint=(0.55, 0.85, 0.1), flaps=(0.1, 0.1, 0.1),
          rims=(1.0, 0.5, 0.05), frame=(0.8, 0.08, 0.06), tyre_segs=20,
          hw=0.92, roof_hw=0.8, flare=0.0, bottom=1.38, nose_round=0.93, half_len=2.45, px_m=70.0,
@@ -1035,7 +1037,7 @@ CARS = [
          screen=((0.8, 2.02), (0.5, 2.44))),
     dict(name="Bellatrix", file="bellatrix", kind="hyper", paint=(0.12, 0.42, 0.85), flaps=(0.1, 0.1, 0.1),
          rims=(0.22, 0.23, 0.25), half_len=2.3,
-         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8, fenders=0.07, nose_tip=0.1, full_screen=True,
+         hw=0.93, roof_hw=0.6, flare=0.075, bottom=0.13, nose_round=0.8, fenders=0.07, nose_tip=0.1,
          # low, wide mid-engined coupe: short rounded nose, long raked screen,
          # a roof that runs straight into the engine cover, cut-off tail
          profile=[(2.28, 0.38, 0.34), (2.2, 0.5, 0.46), (2.0, 0.6, 0.56), (1.6, 0.68, 0.64), (1.25, 0.73, 0.69),
