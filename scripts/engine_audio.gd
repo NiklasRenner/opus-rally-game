@@ -36,7 +36,7 @@ func _process(delta: float) -> void:
 	synth.skid = car.skid
 	synth.surface = car.surface
 	synth.rain = car.rain
-	synth.track_skid = car._track_skid
+	synth.track_skid = car.track_skid
 	var grounded := false
 	for w in car.wheels:
 		grounded = grounded or w.grounded

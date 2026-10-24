@@ -168,11 +168,9 @@ const LIST := [
 ]
 
 
+## The map for an id; unknown ids fall back to the first map.
 static func get_map(id: String) -> Dictionary:
-	for m in LIST:
-		if m["id"] == id:
-			return m
-	return LIST[0]
+	return LIST[index_of(id)]
 
 
 static func index_of(id: String) -> int:

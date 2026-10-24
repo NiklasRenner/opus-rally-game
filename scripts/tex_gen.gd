@@ -1,8 +1,8 @@
 class_name TexGen
 extends RefCounted
 ## Procedural low-res textures. Everything is tiny (32-64 px) and sampled
-## with nearest filtering for the chunky late-90s look, so the project
-## ships with no image assets at all.
+## with nearest filtering for the chunky late-90s look, so the stages need
+## no image assets at all (only the car skins are painted PNGs).
 
 
 static func _tex(img: Image) -> ImageTexture:
@@ -198,52 +198,13 @@ static func puff() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-## Equirectangular sky with saturated blue and chunky clouds (Sega Rally sky).
-static func sky_panorama(theme := "") -> ImageTexture:
-	var w := 512
-	var h := 256
-	var img := Image.create(w, h, false, Image.FORMAT_RGB8)
-	var noise := FastNoiseLite.new()
-	noise.seed = 3
-	noise.frequency = 1.6
-	noise.fractal_octaves = 4
-	var top := Color(0.08, 0.30, 0.86)
-	var horizon := Color(0.60, 0.78, 0.98)
-	var ground := Color(0.42, 0.52, 0.48)
-	var cloud_hi := Color(0.98, 0.98, 1.0)
-	var cloud_lo := Color(0.72, 0.76, 0.86)
-	if theme == "wasteland":
-		# nuclear dusk: rust-brown overhead, a sick orange glow on the horizon
-		top = Color(0.22, 0.17, 0.14)
-		horizon = Color(0.88, 0.55, 0.26)
-		ground = Color(0.35, 0.28, 0.22)
-		cloud_hi = Color(0.62, 0.50, 0.40)
-		cloud_lo = Color(0.24, 0.20, 0.18)
-	for y in h:
-		var lat := 0.5 - float(y) / h  # +0.5 top, -0.5 bottom
-		for x in w:
-			var c: Color
-			if lat < 0.0:
-				c = horizon.lerp(ground, clampf(-lat * 6.0, 0.0, 1.0))
-			else:
-				c = horizon.lerp(top, pow(clampf(lat * 2.4, 0.0, 1.0), 0.6))
-				var a := TAU * float(x) / w
-				var n := noise.get_noise_3d(cos(a), sin(a), lat * 5.0)
-				var band := clampf(1.0 - absf(lat - 0.12) * 5.0, 0.0, 1.0)
-				var cloud := clampf((n + 0.05) * 3.0, 0.0, 1.0) * band
-				if cloud > 0.0:
-					var shade := cloud_hi.lerp(cloud_lo, clampf(-n * 2.0 + 0.4, 0.0, 1.0))
-					c = c.lerp(shade, cloud)
-			img.set_pixel(x, y, c)
-	return ImageTexture.create_from_image(img)
-
-
 # --------------------------------------------------------------------------- scenery
 
 static var _cache := {}
 
 
-static func _cached(key: String, make: Callable) -> ImageTexture:
+## Builds a texture once per key and shares it (StartArea uses it too).
+static func cached(key: String, make: Callable) -> ImageTexture:
 	if not _cache.has(key):
 		_cache[key] = make.call()
 	return _cache[key]
@@ -252,7 +213,7 @@ static func _cached(key: String, make: Callable) -> ImageTexture:
 ## One storey of house wall, 3 m x 3 m: plaster, shuttered window, sill and a
 ## darker band at the floor line. Tiles across and up the wall.
 static func house_wall(variant: int) -> ImageTexture:
-	return _cached("wall%d" % variant, _make_house_wall.bind(variant))
+	return cached("wall%d" % variant, _make_house_wall.bind(variant))
 
 
 const WALL_COLORS := [Color(0.93, 0.89, 0.79), Color(0.88, 0.80, 0.66), Color(0.95, 0.94, 0.91), Color(0.86, 0.72, 0.58)]
@@ -290,7 +251,7 @@ static func _make_house_wall(variant: int) -> ImageTexture:
 
 ## Terracotta roof tiles in staggered rows.
 static func roof_tiles() -> ImageTexture:
-	return _cached("roof", _make_roof_tiles)
+	return cached("roof", _make_roof_tiles)
 
 
 static func _make_roof_tiles() -> ImageTexture:
@@ -318,7 +279,7 @@ static func _make_roof_tiles() -> ImageTexture:
 
 ## Planked door with a frame and a brass knob.
 static func door() -> ImageTexture:
-	return _cached("door", _make_door)
+	return cached("door", _make_door)
 
 
 static func _make_door() -> ImageTexture:
@@ -339,7 +300,7 @@ static func _make_door() -> ImageTexture:
 
 ## Straw for hay bales.
 static func hay() -> ImageTexture:
-	return _cached("hay", _make_hay)
+	return cached("hay", _make_hay)
 
 
 static func _make_hay() -> ImageTexture:
@@ -361,7 +322,7 @@ static func _make_hay() -> ImageTexture:
 
 ## Corrugated armco crash barrier.
 static func armco() -> ImageTexture:
-	return _cached("armco", _make_armco)
+	return cached("armco", _make_armco)
 
 
 static func _make_armco() -> ImageTexture:
@@ -380,7 +341,7 @@ static func _make_armco() -> ImageTexture:
 
 ## Weathered wooden planks for fences.
 static func planks() -> ImageTexture:
-	return _cached("planks", _make_planks)
+	return cached("planks", _make_planks)
 
 
 static func _make_planks() -> ImageTexture:
@@ -402,7 +363,7 @@ static func _make_planks() -> ImageTexture:
 
 ## Packed snow for the ice-section walls.
 static func snow() -> ImageTexture:
-	return _cached("snow", _make_snow)
+	return cached("snow", _make_snow)
 
 
 static func _make_snow() -> ImageTexture:
@@ -416,7 +377,7 @@ static func _make_snow() -> ImageTexture:
 
 ## Pine bark, stretched up the trunks.
 static func bark() -> ImageTexture:
-	return _cached("bark", _make_bark)
+	return cached("bark", _make_bark)
 
 
 static func _make_bark() -> ImageTexture:
@@ -435,7 +396,7 @@ static func _make_bark() -> ImageTexture:
 
 ## Steel track links: u runs along the track, v across it.
 static func track_links() -> ImageTexture:
-	return _cached("track", _make_track_links)
+	return cached("track", _make_track_links)
 
 
 static func _make_track_links() -> ImageTexture:
@@ -453,9 +414,10 @@ static func _make_track_links() -> ImageTexture:
 	return _tex(img)
 
 
-# --------------------------------------------------------------------------- car decals
+# --------------------------------------------------------------------------- pixel text
 
-## 3x5 pixel font for decals and plates (rows top to bottom, 3 bits each).
+## 3x5 pixel font for decals, banners and the timing board (rows top to
+## bottom, 3 bits each).
 const FONT := {
 	"A": "010101111101101", "B": "110101110101110", "C": "011100100100011", "D": "110101101101110",
 	"E": "111100110100111", "F": "111100110100100", "G": "011100101101011", "H": "101101111101101",
@@ -467,35 +429,30 @@ const FONT := {
 	"2": "110001010100111", "3": "110001010001110", "4": "101101111001001", "5": "111100110001110",
 	"6": "011100110101010", "7": "111001010010010", "8": "010101010101010", "9": "010101011001110",
 	"-": "000000111000000", " ": "000000000000000", ".": "000000000000010", "!": "010010010000010",
+	"/": "001001010100100", ":": "000010000010000", "'": "010010000000000", "\"": "101101000000000",
 }
 
 
-## Text sticker: pixel-font text on a coloured panel with an optional border.
-static func pixel_text(text: String, fg: Color, bg: Color, border := Color(0, 0, 0, 0)) -> ImageTexture:
-	var key := "txt|%s|%s|%s|%s" % [text, fg.to_html(), bg.to_html(), border.to_html()]
-	return _cached(key, _make_pixel_text.bind(text, fg, bg, border))
+## Text sticker: pixel-font text on a coloured panel.
+static func pixel_text(text: String, fg: Color, bg: Color) -> ImageTexture:
+	return cached("txt|%s|%s|%s" % [text, fg.to_html(), bg.to_html()], _make_pixel_text.bind(text, fg, bg))
 
 
-static func _make_pixel_text(text: String, fg: Color, bg: Color, border: Color) -> ImageTexture:
-	var pad := 2 if border.a > 0.0 else 1
-	var w := text.length() * 4 - 1 + pad * 2
-	var h := 5 + pad * 2
-	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+static func _make_pixel_text(text: String, fg: Color, bg: Color) -> ImageTexture:
+	var img := Image.create(text.length() * 4 + 1, 7, false, Image.FORMAT_RGBA8)
 	img.fill(bg)
-	if border.a > 0.0:
-		for x in w:
-			img.set_pixel(x, 0, border)
-			img.set_pixel(x, h - 1, border)
-		for y in h:
-			img.set_pixel(0, y, border)
-			img.set_pixel(w - 1, y, border)
+	draw_text(img, text, 1, 1, fg)
+	return ImageTexture.create_from_image(img)
+
+
+## Pixel-font text with its top-left at (x0, y0), 4 px per character.
+static func draw_text(img: Image, text: String, x0: int, y0: int, col: Color) -> void:
 	for i in text.length():
 		var glyph: String = FONT.get(text[i].to_upper(), FONT[" "])
 		for row in 5:
-			for col in 3:
-				if glyph[row * 3 + col] == "1":
-					img.set_pixel(pad + i * 4 + col, pad + row, fg)
-	return ImageTexture.create_from_image(img)
+			for c in 3:
+				if glyph[row * 3 + c] == "1":
+					img.set_pixel(x0 + i * 4 + c, y0 + row, col)
 
 
 # --------------------------------------------------------------------------- wasteland
@@ -503,7 +460,7 @@ static func _make_pixel_text(text: String, fg: Color, bg: Color, border: Color) 
 ## Road surfaces after the bombs: cracked, pot-holed tarmac with faded
 ## lines, concrete rubble, toxic sludge, ash verges.
 static func road_wasted(kind: String) -> ImageTexture:
-	return _cached("waste_" + kind, _make_road_wasted.bind(kind))
+	return cached("waste_" + kind, _make_road_wasted.bind(kind))
 
 
 static func _make_road_wasted(kind: String) -> ImageTexture:
@@ -558,7 +515,7 @@ static func _cracks(img: Image, rng: RandomNumberGenerator, count: int, col: Col
 
 ## Rough cast concrete, stained.
 static func concrete() -> ImageTexture:
-	return _cached("concrete", _make_concrete)
+	return cached("concrete", _make_concrete)
 
 
 static func _make_concrete() -> ImageTexture:
@@ -578,7 +535,7 @@ static func _make_concrete() -> ImageTexture:
 ## One storey of a burnt-out apartment block: concrete, soot above the
 ## empty window holes, the odd shard of glass left.
 static func ruin_wall(variant: int) -> ImageTexture:
-	return _cached("ruin%d" % variant, _make_ruin_wall.bind(variant))
+	return cached("ruin%d" % variant, _make_ruin_wall.bind(variant))
 
 
 static func _make_ruin_wall(variant: int) -> ImageTexture:
@@ -609,7 +566,7 @@ static func _make_ruin_wall(variant: int) -> ImageTexture:
 
 ## Rusty oil drum with a hazard band.
 static func barrel() -> ImageTexture:
-	return _cached("barrel", _make_barrel)
+	return cached("barrel", _make_barrel)
 
 
 static func _make_barrel() -> ImageTexture:
@@ -631,7 +588,7 @@ static func _make_barrel() -> ImageTexture:
 ## Three-colour NATO camouflage (green, brown, black) in big soft-edged blobs,
 ## with a little grime. Tiles in both directions; one tile is 2.5 m on the tank.
 static func camo() -> ImageTexture:
-	return _cached("camo", _make_camo)
+	return cached("camo", _make_camo)
 
 
 static func _make_camo() -> ImageTexture:
@@ -660,7 +617,7 @@ static func _make_camo() -> ImageTexture:
 
 ## Balkenkreuz: black cross with a white outline on transparent pixels.
 static func tank_cross() -> ImageTexture:
-	return _cached("cross", _make_tank_cross)
+	return cached("cross", _make_tank_cross)
 
 
 static func _make_tank_cross() -> ImageTexture:
@@ -682,7 +639,7 @@ static func _make_tank_cross() -> ImageTexture:
 ## Wheel face: tyre sidewall round a spoked rim (0 spokes: a flat cover) and
 ## a hub, with an optional coloured ring on the tyre wall.
 static func rim(col: Color, spokes := 5, ring := Color(0, 0, 0, 0)) -> ImageTexture:
-	return _cached("rim|%s|%d|%s" % [col.to_html(), spokes, ring.to_html()], _make_rim.bind(col, spokes, ring))
+	return cached("rim|%s|%d|%s" % [col.to_html(), spokes, ring.to_html()], _make_rim.bind(col, spokes, ring))
 
 
 static func _make_rim(col: Color, spokes: int, ring: Color) -> ImageTexture:
@@ -707,7 +664,7 @@ static func _make_rim(col: Color, spokes: int, ring: Color) -> ImageTexture:
 
 ## Tyre tread: blocks round the tyre.
 static func tread() -> ImageTexture:
-	return _cached("tread", _make_tread)
+	return cached("tread", _make_tread)
 
 
 static func _make_tread() -> ImageTexture:

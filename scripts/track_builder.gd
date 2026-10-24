@@ -30,6 +30,7 @@ var _grid_n := 0
 var _dist := PackedFloat32Array()
 var _road_h := PackedFloat32Array()
 var _heights := PackedFloat32Array()
+var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
 var _rng := RandomNumberGenerator.new()
 
 
@@ -97,16 +98,17 @@ func count() -> int:
 	return points.size()
 
 
-func surface_at_index(i: int) -> String:
-	return surfaces[wrapi(i, 0, points.size())]
-
-
-func get_spawn_transform(i: int) -> Transform3D:
+## Road frame at sample i (wrapped): origin on the centreline, -z along the
+## road (level), +x to the right.
+func frame(i: int) -> Transform3D:
 	i = wrapi(i, 0, points.size())
 	var flat := tangents[i]
 	flat.y = 0.0
-	var bas := Basis.looking_at(flat.normalized(), Vector3.UP)
-	return Transform3D(bas, points[i] + Vector3(0, 1.0, 0))
+	return Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), points[i])
+
+
+func get_spawn_transform(i: int) -> Transform3D:
+	return frame(i).translated(Vector3(0, 1.0, 0))
 
 
 ## Nearest centreline sample. Searches a window around `hint` first and
@@ -209,6 +211,15 @@ func _side(i: int) -> Vector3:
 	var t := tangents[i]
 	t.y = 0.0
 	return t.normalized().cross(Vector3.UP).normalized()
+
+
+## How far the road turns (radians, + = left) between `reach` samples before
+## and after sample i.
+func _turn(i: int, reach: int) -> float:
+	var n := points.size()
+	var t0 := tangents[wrapi(i - reach, 0, n)]
+	var t1 := tangents[wrapi(i + reach, 0, n)]
+	return Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
 
 
 # --------------------------------------------------------------------------- road
@@ -441,9 +452,7 @@ func _build_barriers() -> void:
 	for i in n:
 		if i < StartArea.REACH + 3 or i > n - StartArea.REACH - 3:
 			continue  # the start area has its own hoardings
-		var t0 := tangents[wrapi(i - 4, 0, n)]
-		var t1 := tangents[wrapi(i + 4, 0, n)]
-		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
+		var turn := _turn(i, 4)
 		if absf(turn) < 0.16:
 			continue
 		var surf: String = surfaces[i]
@@ -455,9 +464,7 @@ func _build_barriers() -> void:
 		var out_sign := 1.0 if turn > 0.0 else -1.0
 		var pos := points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 0.4 + size.x * 0.5)
 		pos.y = points[i].y - 0.45 + size.y * 0.5
-		var flat := tangents[i]
-		flat.y = 0.0
-		var xf := Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), pos)
+		var xf := Transform3D(frame(i).basis, pos)
 		var mi := MeshInstance3D.new()
 		if style.get("log", false):
 			# a felled log lying along the corner
@@ -485,7 +492,7 @@ func _build_barriers() -> void:
 		walls.add_child(cs)
 		# chevron boards on the outside of tight corners
 		if absf(turn) > 0.3 and i % 6 == 0:
-			_chevron(points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5), flat.normalized(), out_sign)
+			_chevron(points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5), -xf.basis.z, out_sign)
 
 
 ## BoxMesh packs its six faces into a 3 x 2 atlas; scale UVs so every face
@@ -598,9 +605,7 @@ func _build_village() -> void:
 				# keep clear of other parts of the route and of the water
 				if _road_dist(pos.x, pos.z) < off - 1.0 or _in_water(pos.x, pos.z, size.x * 0.6 + 2.0) or _near_start(pos):
 					continue
-				var flat := tangents[i]
-				flat.y = 0.0
-				var bas := Basis.looking_at(flat.normalized(), Vector3.UP)
+				var bas := frame(i).basis
 				var house := Node3D.new()
 				house.transform = Transform3D(bas, pos)
 				add_child(house)
@@ -692,6 +697,42 @@ func _place_ruin(house: Node3D, size: Vector3, wall_mat: Material, rubble_mat: M
 		house.add_child(rb)
 
 
+## Jungle ruins: a stepped stone shrine with a doorway and fallen blocks.
+## Returns the height so the caller can size the collision box.
+func _place_temple(house: Node3D, size: Vector3, mat: Material) -> float:
+	var tiers := _rng.randi_range(2, 3)
+	var y := -0.6
+	var dims := Vector3(size.x, 0, size.z)
+	for t in tiers:
+		var h := _rng.randf_range(1.6, 2.4)
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(dims.x, h, dims.z)
+		mi.mesh = bm
+		mi.material_override = mat
+		mi.position = Vector3(0, y + h * 0.5, 0)
+		house.add_child(mi)
+		y += h
+		dims *= 0.72
+	var door := MeshInstance3D.new()
+	var dm := BoxMesh.new()
+	dm.size = Vector3(1.4, 1.8, 0.1)
+	door.mesh = dm
+	door.material_override = TexGen.flat_material(Color(0.06, 0.07, 0.05))
+	door.position = Vector3(0, y - 1.4, dims.z * 0.5 / 0.72 + 0.03)
+	house.add_child(door)
+	for r in 3:
+		var rb := MeshInstance3D.new()
+		var bm2 := BoxMesh.new()
+		bm2.size = Vector3(_rng.randf_range(0.8, 1.6), _rng.randf_range(0.6, 1.0), _rng.randf_range(0.8, 1.6))
+		rb.mesh = bm2
+		rb.material_override = mat
+		rb.position = Vector3(_rng.randf_range(-1, 1) * size.x * 0.7, -0.3, _rng.randf_range(-1, 1) * size.z * 0.7)
+		rb.rotation = Vector3(_rng.randf_range(-0.4, 0.4), _rng.randf() * TAU, _rng.randf_range(-0.4, 0.4))
+		house.add_child(rb)
+	return y + 0.6
+
+
 ## House walls (UVs tile one 3 m storey per texture repeat), a gable roof
 ## running along local z, and plain gable ends.
 func _house_mesh(size: Vector3, wall_mat: Material, roof_mat: Material, gable_mat: Material) -> ArrayMesh:
@@ -749,10 +790,7 @@ func _quad_uv(st: SurfaceTool, v: Array, uv: Array, n: Vector3) -> void:
 
 ## Adds a triangle wound so its front face points along `n`.
 func _tri_uv(st: SurfaceTool, v: Array, uv: Array, n: Vector3) -> void:
-	var order := [0, 1, 2]
-	var cr := (v[1] - v[0] as Vector3).cross(v[2] - v[0])
-	if cr.dot(n) * CarModel.winding() < 0.0:
-		order = [0, 2, 1]
+	var order := [0, 2, 1] if Geo.flipped(v[0], v[1], v[2], n) else [0, 1, 2]
 	for k in order:
 		st.set_normal(n)
 		st.set_uv(uv[k])
@@ -776,17 +814,12 @@ func _build_spectators() -> void:
 	head_mesh.size = Vector3(0.3, 0.3, 0.3)
 	var spots: Array[int] = []
 	for i in n:
-		var t0 := tangents[wrapi(i - 5, 0, n)]
-		var t1 := tangents[wrapi(i + 5, 0, n)]
-		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
-		if absf(turn) > 1.0 and (spots.is_empty() or i - spots[spots.size() - 1] > 25):
+		if absf(_turn(i, 5)) > 1.0 and (spots.is_empty() or i - spots[spots.size() - 1] > 25):
 			spots.append(i)
 	for jump in _jumps:
 		spots.append(int((jump[0] as float) * n) + 4)
 	for i in spots:
-		var t0 := tangents[wrapi(i - 5, 0, n)]
-		var t1 := tangents[wrapi(i + 5, 0, n)]
-		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
+		var turn := _turn(i, 5)
 		var inside := -1.0 if turn > 0.0 else 1.0  # crowd on the inside: safer and visible
 		if absf(turn) < 0.3:
 			inside = 1.0
@@ -892,9 +925,6 @@ func _build_trees() -> void:
 	_scatter_flush(trees)
 
 
-var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
-
-
 ## Queue a placed scenery mesh for batching (and free the temporary node).
 func _scatter_add(mi: MeshInstance3D) -> void:
 	if not _scatter.has(mi.mesh):
@@ -955,7 +985,21 @@ func _build_cones() -> void:
 			cone.position = points[k] + _side(k) * s * (widths[k] * 0.5 - 0.5) + Vector3(0, 0.45, 0)
 			add_child(cone)
 			if _theme() == "wasteland" and _rng.randf() < 0.5:
-				_glow_lid(mi)
+				glow_lid(mi)
+
+
+## Glowing green lid on a wasteland oil drum.
+func glow_lid(barrel: MeshInstance3D) -> void:
+	var lid := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.26
+	cm.bottom_radius = 0.26
+	cm.height = 0.04
+	cm.radial_segments = 8
+	lid.mesh = cm
+	lid.material_override = TexGen.flat_material(Color(0.5, 1.0, 0.2), 0.5, true)
+	lid.position.y = 0.46
+	barrel.add_child(lid)
 
 
 func _build_mountains() -> void:
@@ -1062,8 +1106,6 @@ func _build_bridges() -> void:
 			body.set_meta("surface", "wood")
 			add_child(body)
 		var b := (i + 1) % n
-		var flat := tangents[i]
-		flat.y = 0.0
 		var seg := points[i].distance_to(points[b])
 		var dir := (points[b] - points[i]).normalized()
 		for s in [-1.0, 1.0]:
@@ -1099,7 +1141,7 @@ func _build_bridges() -> void:
 		beam_mesh.size = Vector3(widths[i] + 0.8, 0.35, 0.4)
 		beam.mesh = beam_mesh
 		beam.material_override = dark
-		beam.transform = Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), points[i] + Vector3(0, -0.35, 0))
+		beam.transform = frame(i).translated(Vector3(0, -0.35, 0))
 		body.add_child(beam)
 
 
@@ -1111,10 +1153,7 @@ func _build_kerbs() -> void:
 	var red := Color(0.85, 0.12, 0.10)
 	var white := Color(0.95, 0.95, 0.92)
 	for i in n:
-		var t0 := tangents[wrapi(i - 3, 0, n)]
-		var t1 := tangents[wrapi(i + 3, 0, n)]
-		var turn := Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
-		if absf(turn) < 0.09 or surfaces[i] == "gravel":
+		if absf(_turn(i, 3)) < 0.09 or surfaces[i] == "gravel":
 			continue
 		var b := (i + 1) % n
 		for s in [-1.0, 1.0]:
@@ -1144,42 +1183,6 @@ func _build_kerbs() -> void:
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
-
-
-## Jungle ruins: a stepped stone shrine with a doorway and fallen blocks.
-## Returns the height so the caller can size the collision box.
-func _place_temple(house: Node3D, size: Vector3, mat: Material) -> float:
-	var tiers := _rng.randi_range(2, 3)
-	var y := -0.6
-	var dims := Vector3(size.x, 0, size.z)
-	for t in tiers:
-		var h := _rng.randf_range(1.6, 2.4)
-		var mi := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = Vector3(dims.x, h, dims.z)
-		mi.mesh = bm
-		mi.material_override = mat
-		mi.position = Vector3(0, y + h * 0.5, 0)
-		house.add_child(mi)
-		y += h
-		dims *= 0.72
-	var door := MeshInstance3D.new()
-	var dm := BoxMesh.new()
-	dm.size = Vector3(1.4, 1.8, 0.1)
-	door.mesh = dm
-	door.material_override = TexGen.flat_material(Color(0.06, 0.07, 0.05))
-	door.position = Vector3(0, y - 1.4, dims.z * 0.5 / 0.72 + 0.03)
-	house.add_child(door)
-	for r in 3:
-		var rb := MeshInstance3D.new()
-		var bm2 := BoxMesh.new()
-		bm2.size = Vector3(_rng.randf_range(0.8, 1.6), _rng.randf_range(0.6, 1.0), _rng.randf_range(0.8, 1.6))
-		rb.mesh = bm2
-		rb.material_override = mat
-		rb.position = Vector3(_rng.randf_range(-1, 1) * size.x * 0.7, -0.3, _rng.randf_range(-1, 1) * size.z * 0.7)
-		rb.rotation = Vector3(_rng.randf_range(-0.4, 0.4), _rng.randf() * TAU, _rng.randf_range(-0.4, 0.4))
-		house.add_child(rb)
-	return y + 0.6
 
 
 ## A big stepped pyramid deep in the jungle, seen over the treetops.
@@ -1239,19 +1242,6 @@ func _build_pyramid(at: Array) -> void:
 		mi.position = Vector3(x + off.x, ground + 4.0 * (tier + 1) - 0.1, z + off.y)
 		mi.scale = Vector3.ONE * (1.4 if k % 3 else 0.7)
 		body.add_child(mi)
-
-
-func _glow_lid(barrel: MeshInstance3D) -> void:
-	var lid := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.26
-	cm.bottom_radius = 0.26
-	cm.height = 0.04
-	cm.radial_segments = 8
-	lid.mesh = cm
-	lid.material_override = TexGen.flat_material(Color(0.5, 1.0, 0.2), 0.5, true)
-	lid.position.y = 0.46
-	barrel.add_child(lid)
 
 
 ## The tunnel under the old hotel: thick walls, a roof that has caved in
@@ -1348,9 +1338,7 @@ func _build_wrecks() -> void:
 		m.build()
 		_burn_out(m, rust[_rng.randi() % rust.size()])
 		var flipped := _rng.randf() < 0.25
-		var flat := tangents[i]
-		flat.y = 0.0
-		var bas := Basis.looking_at(flat.normalized(), Vector3.UP).rotated(Vector3.UP, _rng.randf_range(-0.8, 0.8))
+		var bas := frame(i).basis.rotated(Vector3.UP, _rng.randf_range(-0.8, 0.8))
 		if flipped:
 			bas = bas * Basis(Vector3.FORWARD, PI)
 		var y := terrain_height(p.x, p.z)

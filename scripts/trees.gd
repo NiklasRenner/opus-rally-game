@@ -295,14 +295,7 @@ static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, col: Color
 		out = Vector3.UP
 	if n.dot(out) < 0.0:
 		n = -n
-	var verts := [a, b, c]
-	if (b - a).cross(c - a).dot(n) * CarModel.winding() < 0.0:
-		verts = [a, c, b]
-	for v in verts:
-		st.set_normal(n)
-		st.set_color(col)
-		st.set_uv(Vector2(v.x + v.z, v.y) * 0.5)
-		st.add_vertex(v)
+	_emit(st, a, b, c, n, col)
 
 
 ## A tapered n-sided prism from p0 to p1 (trunks and branches).
@@ -332,14 +325,16 @@ static func _side_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, centr
 	n = n.normalized()
 	if n.dot((a + b + c) / 3.0 - centre) < 0.0:
 		n = -n
-	var verts := [a, b, c]
-	if (b - a).cross(c - a).dot(n) * CarModel.winding() < 0.0:
-		verts = [a, c, b]
-	for p in verts:
+	_emit(st, a, b, c, n, col)
+
+
+## Adds a flat triangle wound so its front face points along `n`.
+static func _emit(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3, col: Color) -> void:
+	for v in ([a, c, b] if Geo.flipped(a, b, c, n) else [a, b, c]):
 		st.set_normal(n)
 		st.set_color(col)
-		st.set_uv(Vector2(p.x + p.z, p.y) * 0.5)
-		st.add_vertex(p)
+		st.set_uv(Vector2(v.x + v.z, v.y) * 0.5)
+		st.add_vertex(v)
 
 
 ## Lumpy ball of foliage: a once-subdivided octahedron with jittered radius,

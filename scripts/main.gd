@@ -37,7 +37,7 @@ var _record_clock := 0.0
 var ghost: Ghost  # read by the HUD minimap
 var _ghost_splits := PackedFloat32Array()
 
-# weather / time of day
+# weather
 var _headlights := false
 var _rain: CPUParticles3D
 var _env: Environment
@@ -64,7 +64,6 @@ func _ready() -> void:
 	car.place(track.get_spawn_transform(track.count() - 4))
 	car.impact.connect(_on_impact)
 	car.rain = Game.race_rain
-	car.fx_light = {"DAY": 1.0, "DUSK": 0.75, "NIGHT": 0.3}.get(Game.race_time_of_day, 1.0)
 	var marks := SkidMarks.new()
 	marks.name = "SkidMarks"
 	add_child(marks)
@@ -119,7 +118,7 @@ func _ready() -> void:
 
 func _setup_environment() -> void:
 	var theme: String = Maps.get_map(Game.map_id).get("theme", "")
-	var p := Conditions.palette(theme, Game.race_time_of_day, Game.race_rain)
+	var p := Conditions.palette(theme, Game.race_rain)
 	_palette = p
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
@@ -171,8 +170,6 @@ func _build_rain() -> void:
 	quad.size = Vector2(0.03, 0.9)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.75, 0.82, 0.95, 0.45)
-	if Game.race_time_of_day == "NIGHT":
-		mat.albedo_color = Color(0.45, 0.5, 0.6, 0.35)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y

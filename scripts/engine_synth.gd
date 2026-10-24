@@ -94,9 +94,6 @@ var track_skid := 0.0  # tank pivoting on the spot
 var interior := false  # bonnet / bumper camera: less exhaust, more intake and road
 var engine_level := 1.0  # previews mute the engine to hear the tyres
 
-const GAME_IDLE := 1000.0
-const GAME_RED := 8000.0
-
 # --------------------------------------------------------------------------- state
 var _p: Dictionary
 var _lv_on: Array[PackedFloat32Array] = []  # band-limited copies, LEVELS of them
@@ -340,7 +337,7 @@ func render(n: int) -> PackedVector2Array:
 	_time += dt
 
 	# ---- block controls (smoothed per block, ramped per sample)
-	var rpm_n := clampf((rpm - GAME_IDLE) / (GAME_RED - GAME_IDLE), 0.0, 1.03)
+	var rpm_n := clampf((rpm - RallyCar.IDLE_RPM) / (RallyCar.REDLINE - RallyCar.IDLE_RPM), 0.0, 1.03)
 	_wobble = lerpf(_wobble, randf_range(-1.0, 1.0) * (0.006 if rpm_n < 0.1 else 0.0025), 0.08)
 	var vrpm: float = lerpf(p["idle"], p["red"], rpm_n) * (1.0 + _wobble)
 	_ld += (throttle - _ld) * minf(dt * 14.0, 1.0)
@@ -366,7 +363,7 @@ func render(n: int) -> PackedVector2Array:
 	if _cut > 0.0:
 		_cut -= dt
 		cut = 0.3
-	if rpm >= GAME_RED - 30.0 and throttle > 0.5:
+	if rpm >= RallyCar.REDLINE - 30.0 and throttle > 0.5:
 		_lim_t += dt
 		if fmod(_lim_t, 0.075) < 0.03:
 			cut = 0.25

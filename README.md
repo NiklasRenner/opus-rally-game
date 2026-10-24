@@ -1,15 +1,15 @@
 # Retro Rally (Godot 4 prototype)
 
 Late-90s arcade rally in the spirit of Sega Rally / Colin McRae: chunky
-640x360 render, nearest-filtered procedural textures, low-poly car and
-scenery, arcade HUD. The tracks, textures, sky and engine sound are generated
-in code; the vehicles are modelled in Blender (sources in `art/`, exported to
+640x360 render, nearest-filtered procedural textures, low-poly cars and
+scenery, arcade HUD. The stages, textures, sky and sound are generated in
+code; the vehicles are modelled in Blender (sources in `art/`, exported to
 `models/*.glb`). The cars wear pixel-art skins from `models/`; the tank is
 painted in code at startup.
 
 ## Open and play
 
-1. Install Godot **4.3 or newer** (standard build, no .NET needed).
+1. Install Godot **4.7 or newer** (standard build, no .NET needed).
 2. Godot Project Manager > **Import** > pick `project.godot` in this folder.
 3. Press **F5** (Run Project). First launch takes a few seconds to build the stage.
 
@@ -24,7 +24,7 @@ painted in code at startup.
 | Change camera (Chase, Far chase, Hood, Bumper, TV) | C | Y |
 | Reset onto road | R | Back |
 | Repair car | T | |
-| Arcade / modern lighting | F2 | |
+| Arcade / modern look | F2 | |
 | Pause / back | Esc | Start |
 
 The same list is in the game: Esc > CONTROLS.
@@ -71,6 +71,8 @@ Each car's handling, skin and breakable parts are listed in
 Records and ghosts set in cars that have since left the garage still show
 their old names.
 
+### Rebuilding the models
+
 The cars come from `art/cars/build_cars.py`: run it in Blender's Scripting
 tab (with `build_all("<path to this folder>")`) to rebuild their .blend files
 and re-export `models/martello.glb`, `models/pleiad.glb`, `models/balear.glb`
@@ -84,13 +86,15 @@ LibreSprite, Krita or GIMP and run it again; `--repaint` paints the pieces
 from scratch. The builder writes `art/cars/<car>_layout.json` with every
 face's outline in the skin.
 
-The tank lives in `art/tank/`.
+The Pardel is `art/tank/leopard_tank.blend`, exported to `models/leopard.glb`;
+its camouflage, crosses and number are painted in code (`TexGen.camo`,
+`CarModel`).
 
 ## Stages
 
 | Stage | Length | Character |
 |---|---|---|
-| Col de Pixel | 2.6 km | Mixed: tarmac village, gravel forest with a jump, tarmac mountain hairpins |
+| Col de Pixel | 2.6 km | Mixed, about 1:45 a lap: tarmac village chicane, a gravel forest run with a tight hairpin and a crest jump, tarmac mountain hairpins climbing to 22 m, then gravel back down. Stone walls on the tarmac corners, hay bales on the gravel |
 | Pine Forest | 1.5 km | Gravel: fast and flowing through dense forest, two crests |
 | Old Town | 1.1 km | Tarmac: tight town corners lined with houses and walls |
 | Spa F1 | 3.1 km | Spa-Francorchamps: La Source, down to Eau Rouge and up Raidillon, the Kemmel straight, Les Combes, Bruxelles, a wet Pouhon, Stavelot, Blanchimont and the Bus Stop. Kerbs, armco and the Ardennes forest |
@@ -105,6 +109,10 @@ temples and log barriers; "circuit" adds kerbs and armco), a `tunnel`,
 `water` areas (route sections on "ford" dip under the water, sections on
 "wood" become a bridge over it) and a `landmark` pyramid.
 
+The surface table (`scripts/surfaces.gd`) has asphalt, gravel, wet, ice,
+grass, mud, river (ford) and wooden bridge surfaces, each with its own grip,
+slide, drag and roughness.
+
 ## Weather and tyre marks
 
 - **Rain**: every surface loses grip (tarmac the most, about a quarter),
@@ -116,18 +124,7 @@ temples and log barriers; "circuit" adds kerbs and armco), a `tunnel`,
   when you drift); grass and mud get brown mud tracks; ice gets white
   scratches. The tank chews up everything.
 
-## The stage: Col de Pixel
-
-A 2.6 km closed loop, roughly 1:45 a lap: tarmac start straight and a village
-chicane, a gravel forest run with a tight hairpin and a crest jump, tarmac
-mountain hairpins climbing to 22 m, then gravel back down to the finish.
-Stone walls line the tarmac corners and hay bales line the gravel, with
-chevrons, houses, crowds at the hairpins and the jump, and grass shoulders.
-The terrain follows the road's elevation. The surface table
-(`scripts/surfaces.gd`) also has wet, ice, grass, mud, river (ford) and wooden
-bridge surfaces.
-
-## Handling model (v2)
+## Handling model
 
 Based on how arcade rally games and classic game car-physics write-ups do it:
 
@@ -145,13 +142,8 @@ Based on how arcade rally games and classic game car-physics write-ups do it:
   the car as much as the stick asks, within what the surface can plausibly
   give. Counter-steer catches slides, a drift-angle cap stops held slides
   from becoming spins, and the handbrake pivots the car for hairpins.
-- Faster steering input (full lock in about 0.12 s on keys) and more lock at
-  speed.
-
-Measured against v1 (60 km/h step steer on a flat pad): yaw response about
-35% quicker (90% in 0.13 s vs 0.20 s); full-lock rotation +20% on tarmac and
-+30% on gravel; a 1 s handbrake turn at 45 km/h on gravel goes from 38 deg
-to about 100 deg.
+- Quick steering input (full lock in about 0.12 s on keys), with less lock
+  the faster you go.
 
 ## Also in it
 
@@ -160,6 +152,10 @@ to about 100 deg.
   costs power and makes the engine smoke, side damage pulls the steering.
 - **Cameras** (`scripts/camera_rig.gd`): chase, far chase, hood, bumper,
   trackside TV.
+- **Arcade look** (`scripts/retro_look.gd`, F2 to switch): sunlight falls off
+  across a surface in a few soft steps, the sun casts hard-edged shadows, the
+  car's windows reflect a flat fake sky and the distance fades into a wall of
+  depth fog. F2 swaps back to Godot's standard shading.
 - **HUD** (`scripts/hud.gd`): total, lap and best times, a start-to-goal
   progress bar, tach with redline, gear, big italic speed, a minimap coloured
   by surface, and a damage diagram.
@@ -169,13 +165,34 @@ to about 100 deg.
   the Pleiad a burbling flat four, the Balear a revvy non-turbo four, the
   Veloce a snarling V10 and the Pardel a deep, lumpy V12 diesel with
   rumbling, clanking tracks. The engine is band-limited to each profile's
-  `top` so high revs never alias into whistles. Upshifts cut and bang, lifting off crackles, straight-cut gears
-  whine. Tyres sound different on every surface (squeal on tarmac, crunch on
+  `top` so high revs never alias into whistles. Upshifts cut and bang,
+  lifting off crackles, straight-cut gears whine. Tyres sound different on every surface (squeal on tarmac, crunch on
   gravel, spray in the wet, swish on grass), plus wind, rain on the body,
   crashes and landings. The bonnet and bumper cameras hear more intake and
   road. `tools/audio_preview.gd` renders it all to WAV files to listen to
   without driving:
   `godot --headless --path . --script res://tools/audio_preview.gd -- <out dir>`.
+
+## Code layout
+
+Everything is built in code from two tiny scenes (`menu.tscn`, `main.tscn`);
+the scripts are in `scripts/`:
+
+| Script | What it does |
+|---|---|
+| `game_state.gd` | Autoload `Game`: menu choices, input bindings, highscores and ghosts on disk |
+| `menu.gd`, `race_menu.gd`, `hud.gd`, `retro_ui.gd` | Main menu, pause / initials / results overlay, race HUD, shared drawing helpers |
+| `main.gd` | The race: builds stage, car, camera and HUD, runs countdown, laps, ghost and finish |
+| `maps.gd`, `track_builder.gd`, `start_area.gd`, `trees.gd` | Stage definitions and the code that turns one into road, terrain, scenery and the start/finish dressing |
+| `surfaces.gd`, `conditions.gd` | Surface grip table; weather, lighting and sky |
+| `cars.gd`, `car.gd`, `car_model.gd` | The garage, the raycast car physics, the model with its dents and breakable parts |
+| `camera_rig.gd`, `skid_marks.gd`, `ghost.gd` | Cameras, tyre marks, ghost recording and playback |
+| `engine_synth.gd`, `engine_audio.gd` | Synthesised sound and the player that feeds it the car's state |
+| `retro_look.gd` | The arcade shading (F2) |
+| `tex_gen.gd`, `geo.gd` | Procedural pixel textures and the pixel font; mesh winding helpers |
+
+`tools/audio_preview.gd` renders the sound offline, and `art/` (ignored by
+Godot) holds the Blender sources and skin painter.
 
 ## Tuning tips
 

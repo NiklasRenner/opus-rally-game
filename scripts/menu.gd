@@ -21,7 +21,7 @@ var _turntable: Node3D
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_sky = TexGen.sky_panorama()
+	_sky = Conditions.sky(Conditions.palette("", false))
 	_map_i = Maps.index_of(Game.map_id)
 	_car_i = Cars.index_of(Game.car_id)
 	_build_showroom()
