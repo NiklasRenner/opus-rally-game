@@ -1,6 +1,8 @@
 extends Node3D
 ## The race scene. Builds the chosen map, car, camera and HUD in code and runs
-## the race: countdown, laps, ghost recording and playback, finish, pause.
+## the race: countdown, laps (or one run from start to finish on a
+## point-to-point stage, with split times on the way), ghost recording and
+## playback, finish, pause.
 
 # Hidden checkpoints are off until they have something to show them on the
 # road; meanwhile a lap only needs the car to have been half way round.
@@ -8,6 +10,9 @@ const CHECKPOINTS := false
 const CHECKPOINT_SPACING := 200.0  # metres of road between hidden checkpoints
 const CHECKPOINT_MARGIN := TrackBuilder.VERGE + 4.0  # beyond the road edge, room to cut an apex
 const FINISH_MARGIN := 1.0  # beyond the road edge: the car has to go under the gantry
+const SPLITS := 3  # split times on the way along a point-to-point stage
+const FALL_DEPTH := 7.0  # this far below the road it last drove on, a car has gone over the edge
+const FALL_TIME := 1.3  # seconds of falling to watch before it's put back on the road
 
 var track: TrackBuilder
 var car: RallyCar
@@ -29,17 +34,24 @@ var progress_fraction := 0.0
 var message := ""
 var split_text := ""
 var finished := false
+var point_to_point := false  # one run from start to finish, no laps
+var splits_passed := 0  # point-to-point: split points passed so far, of SPLITS
+var distance_to_go := 0.0  # metres to the finish on a point-to-point stage
 
 var _countdown := 3.6
 var _racing := false
 var _progress_index := 0
-var _gates := PackedInt32Array()  # road sample of each checkpoint in order, the finish line (0) last
+var _gates := PackedInt32Array()  # road sample of each checkpoint in order, the finish line last
 var _next_gate := 0
 var _halfway := false  # been half way round this lap, the rule while checkpoints are off
 var _last_pos := Vector3.ZERO
+var _cliffs := false  # the stage has drops a car can go over (see _check_fall)
+var _on_road := -1  # road sample the car was last on, where a fall puts it back
+var _fall_timer := -1.0
 var _message_timer := 0.0
 var _split_timer := 0.0
-var _splits := PackedFloat32Array()
+var _splits := PackedFloat32Array()  # race time at each lap line, or each split point and the finish
+var _split_points := PackedInt32Array()  # road samples of a point-to-point stage's split points
 
 # ghosts
 var _recording := PackedFloat32Array()
@@ -56,7 +68,8 @@ var _palette: Dictionary
 
 
 func _ready() -> void:
-	total_laps = Game.laps
+	point_to_point = Maps.get_map(Game.map_id).get("point_to_point", false)
+	total_laps = 1 if point_to_point else Game.laps
 	best_lap = Game.best_lap()
 	_setup_environment()
 	# the world keeps its gravity between races, so every stage sets its own
@@ -74,7 +87,7 @@ func _ready() -> void:
 	car.name = "Car"
 	car.spec = Cars.get_car(Game.car_id)
 	add_child(car)
-	car.place(track.get_spawn_transform(track.count() - 4))
+	car.place(track.get_spawn_transform(track.wrap_index(track.start_index - 4)))
 	car.impact.connect(_on_impact)
 	car.rain = Game.race_rain
 	car.gravity = gravity
@@ -120,13 +133,20 @@ func _ready() -> void:
 	overlay = RaceMenu.new()
 	overlay.race = self
 	layer.add_child(overlay)
-	_progress_index = track.count() - 4
+	_progress_index = track.wrap_index(track.start_index - 4)
 	_last_pos = track.get_spawn_transform(_progress_index).origin
+	var span := track.count() if track.loop else track.finish_index - track.start_index
 	if CHECKPOINTS:
-		var gate_count := maxi(4, roundi(track.total_length / CHECKPOINT_SPACING))
+		var gate_count := maxi(4, roundi(track.stage_length / CHECKPOINT_SPACING))
 		for k in range(1, gate_count):
-			_gates.append(k * track.count() / gate_count)
-	_gates.append(0)
+			_gates.append(track.start_index + k * span / gate_count)
+	_gates.append(track.finish_index)
+	if point_to_point:
+		# split times along the way, against the ghost's at the same points
+		for k in range(1, SPLITS + 1):
+			_split_points.append(track.start_index + k * span / (SPLITS + 1))
+	_cliffs = track.map.has("cliffs")
+	distance_to_go = track.stage_length
 
 	look = RetroLook.new()
 	look.env = _env
@@ -219,11 +239,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		restart()
 
 
-func reset_car() -> void:
-	var idx := track.nearest_index(car.global_position, _progress_index)
+## Put the car back on the road: where it is, or at road sample `at`.
+func reset_car(at := -1) -> void:
+	var idx := at if at >= 0 else track.nearest_index(car.global_position, _progress_index)
 	# never past a checkpoint the car hasn't been through, so a reset can't skip one
 	if _gate_missed(idx) >= 0:
-		idx = wrapi(_gates[_next_gate] - 3, 0, track.count())
+		idx = track.wrap_index(_gates[_next_gate] - 3)
+	# nor out on a point-to-point stage's lead-in or run-out
+	if not track.loop:
+		idx = clampi(idx, track.start_index, track.finish_index - 3)
 	var xf := track.get_spawn_transform(idx)
 	car.place(xf)
 	_last_pos = xf.origin
@@ -272,10 +296,9 @@ func _physics_process(delta: float) -> void:
 	_record(delta)
 	_update_ghost()
 
-	var n := track.count()
 	var pos := car.global_position
 	var idx := track.nearest_index(pos, _progress_index)
-	if idx > n * 0.45 and idx < n * 0.55:
+	if track.frac_of(idx) > 0.45 and track.frac_of(idx) < 0.55:
 		_halfway = true
 	# laps count only through every checkpoint in order and then the finish gate
 	var gate := _gates[_next_gate]
@@ -285,9 +308,16 @@ func _physics_process(delta: float) -> void:
 			_next_gate = 0
 			_halfway = false
 			_complete_lap()
+	if splits_passed < _split_points.size() and idx >= _split_points[splits_passed] and idx - _split_points[splits_passed] < 20:
+		splits_passed += 1
+		_split()
 	_last_pos = pos
 	_progress_index = idx
-	progress_fraction = float(idx) / n
+	progress_fraction = clampf(track.frac_of(idx), 0.0, 1.0)
+	if point_to_point:
+		distance_to_go = maxf(track.finish_index - idx, 0) * track.stage_length / (track.finish_index - track.start_index)
+	if _cliffs:
+		_check_fall(delta, idx)
 
 	# wrong way and missed checkpoint warnings
 	if _message_timer <= 0.0 and not finished:
@@ -311,7 +341,7 @@ func _through_gate(i: int, a: Vector3, b: Vector3) -> bool:
 		return false
 	var x := a.lerp(b, da / (da - db))
 	var lateral := absf((x - c).dot(Vector3(-t.z, 0.0, t.x)))
-	var margin := FINISH_MARGIN if i == 0 else CHECKPOINT_MARGIN
+	var margin := FINISH_MARGIN if i == track.finish_index else CHECKPOINT_MARGIN
 	return lateral <= track.widths[i] * 0.5 + margin and absf(x.y - c.y) < 10.0
 
 
@@ -323,6 +353,8 @@ func _gate_missed(idx: int) -> int:
 		return -1
 	var n := track.count()
 	var nxt := _gates[_next_gate]
+	if not track.loop:
+		return idx - nxt if idx >= nxt else -1
 	var prev := _gates[_next_gate - 1] if _next_gate > 0 else _gates[_gates.size() - 1]
 	if wrapi(idx - prev, 0, n) < wrapi(nxt - prev, 0, n):
 		return -1
@@ -332,16 +364,10 @@ func _gate_missed(idx: int) -> int:
 
 func _complete_lap() -> void:
 	last_lap = lap_time
-	_splits.append(race_time)
+	_split()
 	var new_best := Game.submit_lap(lap_time)
 	if new_best:
 		best_lap = lap_time
-	# split against the ghost at the same lap line
-	var k := _splits.size() - 1
-	if k < _ghost_splits.size():
-		var d := race_time - _ghost_splits[k]
-		split_text = "%s%.2f" % ["+" if d >= 0.0 else "-", absf(d)]
-		_split_timer = 3.0
 	if lap >= total_laps:
 		_finish()
 		return
@@ -355,9 +381,40 @@ func _complete_lap() -> void:
 		_flash("LAP %d" % lap, 1.5)
 
 
+## Note the race time at a lap line (or a point-to-point split point) and show
+## the split against the ghost's time at the same one.
+func _split() -> void:
+	_splits.append(race_time)
+	var k := _splits.size() - 1
+	if k < _ghost_splits.size():
+		var d := race_time - _ghost_splits[k]
+		split_text = "%s%.2f" % ["+" if d >= 0.0 else "-", absf(d)]
+		_split_timer = 3.0
+
+
+## Over the edge of a cliff: once the car has dropped well below the road it
+## was last on, give it a moment to fall, then put it back on that road
+## (behind the next checkpoint, as any reset).
+func _check_fall(delta: float, idx: int) -> void:
+	var pos := car.global_position
+	if _fall_timer < 0.0:
+		if track.distance_to_road(pos, idx) < track.widths[idx] * 0.5 + TrackBuilder.VERGE + 1.0 \
+				and absf(pos.y - track.points[idx].y) < 3.0:
+			_on_road = idx
+		if _on_road >= 0 and pos.y < track.points[_on_road].y - FALL_DEPTH:
+			_fall_timer = FALL_TIME
+			_flash("OFF THE CLIFF!", FALL_TIME + 0.4)
+	else:
+		_fall_timer -= delta
+		if _fall_timer <= 0.0:
+			_fall_timer = -1.0
+			reset_car(_on_road)
+
+
 func _finish() -> void:
 	finished = true
 	car.control_enabled = false
+	car.stopping = point_to_point  # there's a wall at the end of the run-out
 	message = ""
 	var faster_ghost := race_time < Game.ghost_time()
 	if faster_ghost:

@@ -95,9 +95,9 @@ func _update_tv(car_pos: Vector3) -> void:
 		return
 	var n := track.count()
 	var idx := track.nearest_index(car_pos, maxi(_tv_index, 0))
-	var behind := wrapi(idx - _tv_index, 0, n)
+	var behind := track.ahead(_tv_index, idx)
 	if _tv_index < 0 or (behind > 12 and behind < n / 2):
-		_tv_index = wrapi(idx + 22, 0, n)
+		_tv_index = track.wrap_index(idx + 22)
 		var side := track.tangents[_tv_index].cross(Vector3.UP).normalized()
 		var s := 1.0 if (_tv_index / 22) % 2 == 0 else -1.0
 		_tv_spot = track.points[_tv_index] + side * s * 13.0 + Vector3.UP * 3.5

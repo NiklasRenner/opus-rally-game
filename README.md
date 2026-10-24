@@ -104,6 +104,7 @@ its camouflage, crosses and number are painted in code (`TexGen.camo`,
 | Stage | Length | Character |
 |---|---|---|
 | Col de Pixel | 2.6 km | Mixed, about 1:45 a lap: tarmac village chicane, a gravel forest run with a tight hairpin and a crest jump, tarmac mountain hairpins climbing to 22 m, then gravel back down. Stone walls on the tarmac corners, hay bales on the gravel |
+| Aquila Pass | 2.4 km, A to B | A point-to-point stage from the valley up to the col, about 2:00. Tarmac along the river, then a road cut into the cliffs over the gorge (a waterfall spills across it and wets the road), four gravel hairpins up the mountain face, the summit road along the top of a 150 m drop and ice below the pass. Rock walls on one side, a sheer drop with stone guard posts on the other; go over and you're put back on the road you fell from (the fall costs you the time) |
 | Downtown GP | 2.0 km | A walled street circuit through a modern city: wide square corners, a chicane and a cobbled square, office blocks and shops, catch fences, traffic lights and a grandstand at the start |
 | Jungle Temple | 2.1 km | Gravel and mud through dense rainforest (palms, vine-hung giants, ferns), over a plank bridge, through a river ford that slows you right down, past overgrown temples and a stepped pyramid |
 | Monaco Ruins | 3.2 km | The Monaco GP street circuit after a nuclear war: Sainte Devote, Casino Square, the Grand Hotel hairpin, a half-collapsed tunnel, the chicane, the flooded swimming pool section and La Rascasse, past bombed-out blocks, wrecks and a toxic harbour |
@@ -112,12 +113,19 @@ its camouflage, crosses and number are painted in code (`TexGen.camo`,
 | Spa F1 | 3.1 km | Spa-Francorchamps: La Source, down to Eau Rouge and up Raidillon, the Kemmel straight, Les Combes, Bruxelles, a wet Pouhon, Stavelot, Blanchimont and the Bus Stop. Kerbs, armco and the Ardennes forest |
 | Luna Base | 2.8 km | The Moon: low gravity, so the crests launch you; packed regolith and loose dust in the crater floors, past a lunar base with domes, landers and dishes, under a black sky with the Earth in it. Never rains |
 
+Most stages are laps. A point-to-point stage (Aquila Pass) runs once from a
+start to a finish somewhere else: the LAPS row reads A TO B, the HUD shows the
+distance to go and gives split times against your ghost at three points on the
+way, and its records (top 5, best run and ghost) are kept per stage and car
+class like the others.
+
 Stages are defined in `scripts/maps.gd`: a list of route points, surface
 sections, elevation keyframes, jumps, a village range and forest density.
 Copy an entry to make a new stage. Optional keys add a `theme` ("wasteland"
 swaps the sky, houses, trees, barriers and cones; "jungle" brings palms,
 temples and log barriers; "circuit" adds kerbs and armco; "moon" and "city"
-dress the two stages above), a `gravity`, a `tunnel`,
+dress the two stages above, "alpine" builds the mountain pass with
+`scripts/cliff_road.gd`), `point_to_point`, a `gravity`, a `tunnel`,
 `water` areas (route sections on "ford" dip under the water, sections on
 "wood" become a bridge over it) and a `landmark` pyramid.
 
@@ -197,6 +205,7 @@ the scripts are in `scripts/`:
 | `menu.gd`, `race_menu.gd`, `hud.gd`, `retro_ui.gd` | Main menu, pause / initials / results overlay, race HUD, shared drawing helpers |
 | `main.gd` | The race: builds stage, car, camera and HUD, runs countdown, laps, ghost and finish |
 | `maps.gd`, `track_builder.gd`, `start_area.gd`, `trees.gd` | Stage definitions and the code that turns one into road, terrain, scenery and the start/finish dressing |
+| `cliff_road.gd` | The mountain pass: terrain with drops and rock walls, cliff faces, guard posts, the waterfall |
 | `surfaces.gd`, `conditions.gd` | Surface grip table; weather, lighting and sky |
 | `cars.gd`, `car.gd`, `car_model.gd` | The garage, the raycast car physics, the model with its dents and breakable parts |
 | `camera_rig.gd`, `skid_marks.gd`, `ghost.gd` | Cameras, tyre marks, ghost recording and playback |

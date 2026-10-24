@@ -8,7 +8,7 @@ const WEATHERS := ["RANDOM", "CLEAR", "RAIN"]
 
 
 ## Everything the race scene needs to light a stage, for a theme ("",
-## "wasteland", "jungle", "circuit", "moon", "city") and rain.
+## "wasteland", "jungle", "circuit", "moon", "city", "alpine") and rain.
 static func palette(theme: String, rain: bool) -> Dictionary:
 	var p := {
 		"sky_top": Color(0.08, 0.30, 0.86), "sky_horizon": Color(0.60, 0.78, 0.98), "sky_ground": Color(0.42, 0.52, 0.48),
@@ -36,6 +36,13 @@ static func palette(theme: String, rain: bool) -> Dictionary:
 				"sky_ground": Color(0.12, 0.12, 0.12), "sun_dir": Vector3(-24, -62, 0), "sun_color": Color(1.0, 0.99, 0.96),
 				"sun_energy": 1.45, "ambient": Color(0.42, 0.48, 0.62), "ambient_energy": 0.32,
 				"fog": Color(0.16, 0.16, 0.17), "fog_density": 0.0002}, true)
+		"alpine":
+			# thin clear mountain air: a deep blue sky, a few clouds over the
+			# peaks and hardly any haze, so you can see all the way down
+			p.merge({"sky_top": Color(0.04, 0.24, 0.80), "sky_horizon": Color(0.62, 0.78, 0.96),
+				"sky_ground": Color(0.40, 0.48, 0.46), "cloud_cover": 0.12, "sun_dir": Vector3(-42, -40, 0),
+				"sun_energy": 1.2, "ambient": Color(0.62, 0.70, 0.88), "fog": Color(0.66, 0.78, 0.96),
+				"fog_density": 0.00045}, true)
 		"city":
 			# a warm afternoon with a little smog over the rooftops
 			p.merge({"sky_top": Color(0.16, 0.38, 0.80), "sky_horizon": Color(0.80, 0.82, 0.84),

@@ -44,6 +44,9 @@ static var _flag_shader: Shader
 
 var track: TrackBuilder
 var theme := ""
+var at := 0  # road sample of the line
+## "both" on a loop; a point-to-point stage has a "start" and a "finish"
+var kind := "both"
 var _rng := RandomNumberGenerator.new()
 var _root: Node3D
 var _bodies: StaticBody3D
@@ -55,10 +58,14 @@ var _stand_from := 0
 var _stand_to := 0
 
 
-func _init(t: TrackBuilder) -> void:
+func _init(t: TrackBuilder, line := 0, line_kind := "both") -> void:
 	track = t
 	theme = t.map.get("theme", "")
-	_rng.seed = int(t.map["seed"]) + 7
+	if theme == "alpine":
+		theme = ""  # the mountain stage dresses its ends like the countryside
+	at = line
+	kind = line_kind
+	_rng.seed = int(t.map["seed"]) + 7 + (31 if kind == "finish" else 0)
 
 
 func build() -> void:
@@ -92,16 +99,12 @@ func build() -> void:
 
 # --------------------------------------------------------------------------- helpers
 
-func _n() -> int:
-	return track.count()
-
-
 func _frame(k: int) -> Transform3D:
-	return track.frame(k)
+	return track.frame(at + k)
 
 
 func _hw(k: int) -> float:
-	return track.widths[wrapi(k, 0, _n())] * 0.5
+	return track.widths[track.wrap_index(at + k)] * 0.5
 
 
 ## Height of the ground below road level at a distance `off` from the centre:
@@ -262,11 +265,13 @@ static func paint_led(img: Image, text: String) -> void:
 # --------------------------------------------------------------------------- line and gantry
 
 func _line() -> void:
-	var w := track.widths[0]
+	var w := _hw(0) * 2.0
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(w, 2.0)
 	var flat := _frame(0)
 	_mesh(pm, TexGen.material(TexGen.checker(), 0.9), flat.translated_local(Vector3(0, 0.03, 0)))
+	if kind == "finish":
+		return
 	# pole box painted round the car's starting spot
 	var paint := TexGen.flat_material(Color(0.92, 0.92, 0.88), 0.9)
 	var box := _frame(-4)
@@ -325,7 +330,7 @@ func _gantry() -> void:
 	# the beam and its banner, front and back
 	var beam_y := top - 0.75
 	var banner_h := 1.3
-	var front := _panel("START / FINISH", span / banner_h, banner_fg.get(theme, Color.WHITE), banner_bg.get(theme, Color.BLACK),
+	var front := _panel({"both": "START / FINISH", "start": "STAGE START", "finish": "STAGE FINISH"}[kind], span / banner_h, banner_fg.get(theme, Color.WHITE), banner_bg.get(theme, Color.BLACK),
 		edge, 11, true, 31 if wasted else 0)
 	var back := _panel("RETRO RALLY", span / banner_h, banner_fg.get(theme, Color.WHITE), banner_bg.get(theme, Color.BLACK),
 		edge, 11, true, 47 if wasted else 0)
@@ -361,10 +366,11 @@ func _gantry() -> void:
 	board.position = Vector3(0, clock_y, 0)
 	g.add_child(board)
 	# start lights hanging under the beam, facing the grid
-	var lights := StartLights.new()
-	lights.position = Vector3(0, beam_y - banner_h * 0.5 - 0.5, 0.05)
-	g.add_child(lights)
-	lights.setup(housing)
+	if kind != "finish":
+		var lights := StartLights.new()
+		lights.position = Vector3(0, beam_y - banner_h * 0.5 - 0.5, 0.05)
+		g.add_child(lights)
+		lights.setup(housing)
 	_gantry_feet(g, tx)
 
 

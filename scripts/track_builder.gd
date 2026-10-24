@@ -1,10 +1,14 @@
 class_name TrackBuilder
 extends Node3D
-## Builds a stage procedurally from a map definition (maps.gd): a closed
-## spline road split into surface sections, hilly terrain that follows the
-## road's elevation, barriers, trees, houses and spectators.
+## Builds a stage procedurally from a map definition (maps.gd): a spline road
+## (a closed lap, or open from a start to a finish on a point-to-point stage)
+## split into surface sections, hilly terrain that follows the road's
+## elevation, barriers, trees, houses and spectators.
 
 const SPACING := 3.0
+const LEAD_IN := 60.0  # point-to-point: metres of road behind the start line
+const RUN_OUT := 150.0  # and past the finish, to stop in
+const CLIFF_ARMCO_TURN := 0.3  # corners this sharp get armco along a drop, gentler ones guard posts
 const CELL := 8.0
 const VERGE := 2.6  # sloped shoulder outside the road edge
 const WIDTH := {"asphalt": 10.0, "gravel": 8.5, "wet": 10.0, "ice": 9.0, "grass": 8.0, "mud": 8.0, "ford": 9.0,
@@ -23,6 +27,11 @@ var tangents := PackedVector3Array()
 var surfaces := PackedStringArray()
 var widths := PackedFloat32Array()
 var total_length := 0.0
+## false on a point-to-point stage: the road has two ends and indices don't wrap
+var loop := true
+var start_index := 0  # sample of the start line
+var finish_index := 0  # sample of the finish line (the start line on a loop)
+var stage_length := 0.0  # metres from the start line to the finish line
 
 var _center := Vector2(333, -153)
 var _world_half := 560.0  # terrain grid half size, grown to fit big stages
@@ -34,13 +43,20 @@ var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
 var _crater_list: Array = []  # [x, z, radius, depth] on the Moon
 var _road_i := PackedInt32Array()  # per terrain cell: the nearest road sample
 var _rng := RandomNumberGenerator.new()
+var _cliff: CliffRoad  # the mountain pass's drops and rock walls ("alpine" theme)
 
 
 func build() -> void:
 	prepare()
+	if _theme() == "alpine":
+		_cliff = CliffRoad.new(self)
 	_build_road()
 	_build_terrain()
+	if _cliff:
+		_cliff.build()
 	_build_barriers()
+	if not loop:
+		_build_road_ends()
 	_build_start_line()
 	_build_section_signs()
 	_build_village()
@@ -75,6 +91,7 @@ func prepare() -> void:
 	_elevation_keys = map["elevation"]
 	_jumps = map["jumps"]
 	_rng.seed = map["seed"]
+	loop = not map.get("point_to_point", false)
 	# centre the terrain grid on the route
 	var mn := Vector2(INF, INF)
 	var mx := Vector2(-INF, -INF)
@@ -91,7 +108,7 @@ func prepare() -> void:
 
 
 ## "" for the normal countryside look, "wasteland", "jungle", "circuit",
-## "moon" or "city".
+## "moon", "city" or "alpine".
 func _theme() -> String:
 	return map.get("theme", "")
 
@@ -114,10 +131,36 @@ func count() -> int:
 	return points.size()
 
 
+## A sample index brought onto the road: wrapped round a loop, held at the
+## ends of a point-to-point road.
+func wrap_index(i: int) -> int:
+	return wrapi(i, 0, points.size()) if loop else clampi(i, 0, points.size() - 1)
+
+
+## Samples from a to b going forwards (wrapping round a loop).
+func ahead(a: int, b: int) -> int:
+	return wrapi(b - a, 0, points.size()) if loop else b - a
+
+
+## How far along the stage sample i is, 0 at the start line and 1 at the
+## finish (beyond them on a point-to-point stage's lead-in and run-out).
+func frac_of(i: int) -> float:
+	if loop:
+		return float(i) / points.size()
+	return float(i - start_index) / maxf(finish_index - start_index, 1.0)
+
+
+## The sample a fraction of the way along the stage (see frac_of).
+func index_at(frac: float) -> int:
+	if loop:
+		return int(frac * points.size())
+	return clampi(start_index + int(frac * (finish_index - start_index)), 0, points.size() - 1)
+
+
 ## Road frame at sample i (wrapped): origin on the centreline, -z along the
 ## road (level), +x to the right.
 func frame(i: int) -> Transform3D:
-	i = wrapi(i, 0, points.size())
+	i = wrap_index(i)
 	var flat := tangents[i]
 	flat.y = 0.0
 	return Transform3D(Basis.looking_at(flat.normalized(), Vector3.UP), points[i])
@@ -134,7 +177,7 @@ func nearest_index(pos: Vector3, hint: int) -> int:
 	var best := hint
 	var best_d := INF
 	for o in range(-25, 26):
-		var i := wrapi(hint + o, 0, n)
+		var i := wrap_index(hint + o)
 		var d := Vector2(points[i].x - pos.x, points[i].z - pos.z).length_squared()
 		if d < best_d:
 			best_d = d
@@ -160,66 +203,85 @@ static func _catmull(p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, t: floa
 	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
 
 
-## Smooth periodic interpolation of the elevation keyframes plus the jump bump.
+## Smooth interpolation of the elevation keyframes plus the jump bump:
+## periodic on a loop, held level past the last key on a point-to-point stage.
 func _elevation(frac: float) -> float:
 	var keys: Array = _elevation_keys
 	var n := keys.size()
+	if not loop:
+		frac = clampf(frac, 0.0, 1.0)
 	var k := n - 1
 	for i in n:
 		if frac >= (keys[i][0] as float):
 			k = i
 	var a: Array = keys[k]
-	var b: Array = keys[(k + 1) % n]
+	var b: Array = keys[(k + 1) % n] if loop or k + 1 < n else a
 	var f0: float = a[0]
 	var f1: float = b[0] if k + 1 < n else 1.0
 	var t := clampf((frac - f0) / maxf(f1 - f0, 0.0001), 0.0, 1.0)
 	t = t * t * (3.0 - 2.0 * t)
 	var h := lerpf(a[1], b[1], t)
 	for jump in _jumps:
-		var jd := (frac - (jump[0] as float)) * total_length / (jump[2] as float)
+		var jd := (frac - (jump[0] as float)) * stage_length / (jump[2] as float)
 		if absf(jd) < 1.0:
 			h += (jump[1] as float) * (0.5 + 0.5 * cos(jd * PI))
 	return h
 
 
 func _sample_spline() -> void:
-	var cp: Array = _control_points
+	var cp: Array = _control_points.duplicate()
+	if not loop:
+		# straight lead-in behind the start line and a run-out past the finish
+		var m0 := cp.size()
+		cp.push_front((cp[0] as Vector2) - ((cp[1] as Vector2) - (cp[0] as Vector2)).normalized() * LEAD_IN)
+		cp.push_back((cp[m0] as Vector2) + ((cp[m0] as Vector2) - (cp[m0 - 1] as Vector2)).normalized() * RUN_OUT)
 	var n := cp.size()
 	var dense: Array[Vector2] = []
-	for i in n:
-		var p0: Vector2 = cp[wrapi(i - 1, 0, n)]
+	for i in (n if loop else n - 1):
+		var p0: Vector2 = cp[wrapi(i - 1, 0, n)] if loop or i > 0 else 2.0 * (cp[0] as Vector2) - (cp[1] as Vector2)
 		var p1: Vector2 = cp[i]
 		var p2: Vector2 = cp[wrapi(i + 1, 0, n)]
-		var p3: Vector2 = cp[wrapi(i + 2, 0, n)]
+		var p3: Vector2 = cp[wrapi(i + 2, 0, n)] if loop or i + 2 < n else 2.0 * (cp[n - 1] as Vector2) - (cp[n - 2] as Vector2)
 		for k in 40:
 			dense.append(_catmull(p0, p1, p2, p3, k / 40.0))
+	if not loop:
+		dense.append(cp[n - 1])
+	var segs := dense.size() if loop else dense.size() - 1
 	var lengths: Array[float] = [0.0]
-	for i in range(1, dense.size() + 1):
+	for i in range(1, segs + 1):
 		lengths.append(lengths[i - 1] + dense[i - 1].distance_to(dense[i % dense.size()]))
 	total_length = lengths[lengths.size() - 1]
+	# the start and finish lines sit on the first and last of the map's points
+	var s_start := 0.0 if loop else lengths[40]
+	var s_finish := total_length if loop else lengths[(n - 2) * 40]
+	stage_length = s_finish - s_start
 	var count_pts := int(total_length / SPACING)
 	var step := total_length / count_pts
+	if not loop:
+		count_pts += 1  # both ends of the road
+	start_index = roundi(s_start / step)
+	finish_index = roundi(s_finish / step) if not loop else 0
 	var j := 0
 	for k in count_pts:
-		var s := k * step
-		while lengths[j + 1] < s:
+		var s := minf(k * step, total_length)
+		while j + 1 < segs and lengths[j + 1] < s:
 			j += 1
-		var t := (s - lengths[j]) / maxf(lengths[j + 1] - lengths[j], 0.0001)
+		var t := clampf((s - lengths[j]) / maxf(lengths[j + 1] - lengths[j], 0.0001), 0.0, 1.0)
 		var p := dense[j].lerp(dense[(j + 1) % dense.size()], t)
-		var frac := float(k) / count_pts
+		var frac := (s - s_start) / stage_length
 		points.append(Vector3(p.x, _elevation(frac), p.y))
-		var surf := "asphalt"
+		var surf: String = _sections[0][1]
 		for sec in _sections:
 			if frac >= sec[0]:
 				surf = sec[1]
 		surfaces.append(surf)
 	for i in count_pts:
-		tangents.append((points[(i + 1) % count_pts] - points[wrapi(i - 1, 0, count_pts)]).normalized())
+		tangents.append((points[wrap_index(i + 1)] - points[wrap_index(i - 1)]).normalized())
 	# road width eases between surfaces instead of stepping
 	for i in count_pts:
 		var acc := 0.0
 		for o in range(-6, 7):
-			acc += WIDTH[surfaces[wrapi(i + o, 0, count_pts)]]
+			acc += WIDTH[surfaces[wrap_index(i + o)]]
 		widths.append(acc / 13.0 * (map.get("width", 1.0) as float))
 
 
@@ -232,9 +294,8 @@ func _side(i: int) -> Vector3:
 ## How far the road turns (radians, + = left) between `reach` samples before
 ## and after sample i.
 func _turn(i: int, reach: int) -> float:
-	var n := points.size()
-	var t0 := tangents[wrapi(i - reach, 0, n)]
-	var t1 := tangents[wrapi(i + reach, 0, n)]
+	var t0 := tangents[wrap_index(i - reach)]
+	var t1 := tangents[wrap_index(i + reach)]
 	return Vector3(t0.x, 0, t0.z).signed_angle_to(Vector3(t1.x, 0, t1.z), Vector3.UP)
 
 
@@ -247,8 +308,8 @@ func _build_road() -> void:
 	var n := points.size()
 	var v := 0.0
 	var down := Vector3(0, -0.5, 0)
-	for i in n:
-		var b := (i + 1) % n
+	for i in (n if loop else n - 1):
+		var b := wrap_index(i + 1)
 		var surf: String = surfaces[i]
 		if not tools.has(surf):
 			var st := SurfaceTool.new()
@@ -352,6 +413,7 @@ func _build_terrain() -> void:
 	noise.frequency = 0.007
 	noise.fractal_octaves = 3
 	_heights.resize(gn * gn)
+	var alpine := _cliff.heights() if _cliff else PackedFloat32Array()
 	for z in gn:
 		for x in gn:
 			var k := z * gn + x
@@ -368,12 +430,14 @@ func _build_terrain() -> void:
 				hills *= 0.35  # the mare is flat; the craters make the relief
 			var rim := smoothstep(_world_half - 110.0, _world_half, maxf(absf(wx - _center.x), absf(wz - _center.y)))
 			_heights[k] = lerpf(base - 0.3, far_base + hills + 3.0, edge) + rim * 60.0
-			if _theme() == "city":
+			if _cliff:
+				_heights[k] = alpine[k] + rim * 60.0
+			elif _theme() == "city":
 				# flat streets and plazas between the blocks
 				_heights[k] = lerpf(base - 0.3, base * 0.8, smoothstep(30.0, 90.0, _dist[k])) + rim * 30.0
 			elif _theme() == "moon":
 				_heights[k] += _craters(wx, wz) * smoothstep(VERGE + 3.0, 24.0, _dist[k])
-				if _dist[k] < 1e8 and _flat_ground(float(_road_i[k]) / points.size()):
+				if _dist[k] < 1e8 and _flat_ground(frac_of(_road_i[k])):
 					# level pads for the base buildings and the start, no hills or craters
 					_heights[k] = lerpf(base - 0.3, _heights[k], smoothstep(50.0, 75.0, _dist[k]))
 			var sink := _water_depth(wx, wz)
@@ -389,7 +453,7 @@ func _build_terrain() -> void:
 				var k: int = g.y * gn + g.x
 				var h := _heights[k]
 				var wp := Vector3(origin.x + g.x * CELL, h, origin.y + g.y * CELL)
-				st.set_color(_terrain_color(h - _road_h[k] * 0.7, k))
+				st.set_color(_alpine_color(g.x, g.y) if _cliff else _terrain_color(h - _road_h[k] * 0.7, k))
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
@@ -480,11 +544,32 @@ func _terrain_color(h: float, k: int) -> Color:
 
 ## Is this terrain cell (grid x, z) part of a city park? Parks come in
 ## blocks of 64 m.
+## The mountain pass: grass where it's flat enough, bare rock and scree on
+## the steep ground, snow up high.
+func _alpine_color(gx: int, gz: int) -> Color:
+	var gn := _grid_n
+	var k := gz * gn + gx
+	var h := _heights[k]
+	var steep := 0.0
+	for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var q := Vector2i(clampi(gx + o.x, 0, gn - 1), clampi(gz + o.y, 0, gn - 1))
+		steep = maxf(steep, absf(_heights[q.y * gn + q.x] - h) / CELL)
+	var grass := Color(0.40, 0.56, 0.24).lerp(Color(0.56, 0.58, 0.30), clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0) * 0.4)
+	var rock := Color(0.58, 0.55, 0.50).lerp(Color(0.46, 0.44, 0.42), clampf(sin(k * 0.53) * 0.5 + 0.5, 0.0, 1.0))
+	var c := grass.lerp(rock, smoothstep(0.55, 1.1, steep))
+	var snow_line: float = map.get("snow_line", INF)
+	if h > snow_line:
+		c = c.lerp(Color(0.93, 0.95, 1.0), smoothstep(snow_line, snow_line + 14.0, h) * (1.0 - 0.5 * smoothstep(1.0, 2.0, steep)))
+	return c
+
+
 func city_park(gx: int, gz: int) -> bool:
 	return posmod(gx / 8 * 7 + gz / 8 * 13 + int(map["seed"]), 9) == 0
 
 
 func terrain_height(x: float, z: float) -> float:
+	if _cliff:
+		return _cliff.ground(x, z)  # the mountainside is too steep for the nearest grid point
 	var k := _grid_index(x, z)
 	return _heights[k]
 
@@ -540,7 +625,7 @@ func _build_barriers() -> void:
 	add_child(walls)
 	var n := points.size()
 	for i in n:
-		if i < StartArea.REACH + 3 or i > n - StartArea.REACH - 3:
+		if near_line(i, StartArea.REACH + 3):
 			continue  # the start area has its own hoardings
 		var turn := _turn(i, 4)
 		if absf(turn) < 0.16:
@@ -549,10 +634,19 @@ func _build_barriers() -> void:
 		if not styles.has(surf):
 			continue  # bridges and fords have their own edges
 		var style: Dictionary = styles[surf]
-		var size: Vector3 = style["size"]
 		# positive turn = turning left, so the outside is the right (+side)
 		var out_sign := 1.0 if turn > 0.0 else -1.0
-		var pos := points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 0.4 + size.x * 0.5)
+		var edge := widths[i] * 0.5 + VERGE + 0.4
+		var drop := _cliff != null and _cliff.side[i] != 0.0
+		if drop:
+			if out_sign != _cliff.side[i]:
+				continue  # the outside of the corner is the rock wall
+			if absf(turn) < CLIFF_ARMCO_TURN:
+				continue  # guard posts (CliffRoad) on the gentler bends
+			style = styles["wet"]  # armco along the drop
+			edge = widths[i] * 0.5 + VERGE - 0.5  # on the verge, it's thin air past it
+		var size: Vector3 = style["size"]
+		var pos := points[i] + _side(i) * out_sign * (edge + size.x * 0.5)
 		pos.y = points[i].y - 0.45 + size.y * 0.5
 		var xf := Transform3D(frame(i).basis, pos)
 		var mi := MeshInstance3D.new()
@@ -581,8 +675,42 @@ func _build_barriers() -> void:
 		cs.transform = xf
 		walls.add_child(cs)
 		# chevron boards on the outside of tight corners
-		if absf(turn) > 0.3 and i % 6 == 0:
+		if absf(turn) > 0.3 and i % 6 == 0 and not drop:
 			_chevron(points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5), -xf.basis.z, out_sign)
+
+
+## A point-to-point road just stops: a row of bales across each end, with a
+## chevron board to warn you at the bottom of the run-out.
+func _build_road_ends() -> void:
+	var body := StaticBody3D.new()
+	body.name = "RoadEnds"
+	body.set_meta("surface", "grass")
+	add_child(body)
+	var bale := BoxMesh.new()
+	bale.size = Vector3(2.6, 1.2, 1.2)
+	var mat := _box_material(TexGen.hay(), 1.0)
+	var shape := BoxShape3D.new()
+	shape.size = bale.size
+	for i in [1, points.size() - 2]:
+		var xf := frame(i)
+		var span := widths[i] + VERGE * 2.0
+		var x := -span * 0.5 + 1.3
+		while x < span * 0.5:
+			for row in 2:
+				var at := xf * Vector3(x, -0.45 + 0.6 + row * 1.2, 0)
+				var bx := Transform3D(xf.basis, at)
+				var mi := MeshInstance3D.new()
+				mi.mesh = bale
+				mi.material_override = mat
+				mi.transform = bx
+				body.add_child(mi)
+				var cs := CollisionShape3D.new()
+				cs.shape = shape
+				cs.transform = bx
+				body.add_child(cs)
+			x += 2.65
+	var end := points.size() - 2
+	_chevron(points[end] + Vector3(0, 1.4, 0) - frame(end).basis.z * 1.5, -frame(end).basis.z, 1.0)
 
 
 ## BoxMesh packs its six faces into a 3 x 2 atlas; scale UVs so every face
@@ -623,19 +751,36 @@ func _chevron(pos: Vector3, tangent: Vector3, out_sign: float) -> void:
 # --------------------------------------------------------------------------- dressing
 
 func _build_start_line() -> void:
-	StartArea.new(self).build()
+	if loop:
+		StartArea.new(self).build()
+	else:
+		StartArea.new(self, start_index, "start").build()
+		StartArea.new(self, finish_index, "finish").build()
 
 
 ## Inside the space kept free round the start/finish dressing?
 func _near_start(p: Vector3) -> bool:
-	return Vector2(p.x - points[0].x, p.z - points[0].z).length() < StartArea.CLEAR_RADIUS
+	for i in [start_index, finish_index]:
+		if Vector2(p.x - points[i].x, p.z - points[i].z).length() < StartArea.CLEAR_RADIUS:
+			return true
+	return false
+
+
+## Within `reach` samples of the start or finish line? A point-to-point
+## road's lead-in and run-out count too.
+func near_line(i: int, reach: int) -> bool:
+	if not loop and (i < start_index or i > finish_index):
+		return true
+	for at in [start_index, finish_index]:
+		if mini(wrapi(i - at, 0, points.size()), wrapi(at - i, 0, points.size())) <= reach:
+			return true
+	return false
 
 
 func _build_section_signs() -> void:
-	var n := points.size()
 	for sec in _sections:
-		var i := int(float(sec[0]) * n)
-		if i == 0:
+		var i := index_at(float(sec[0]))
+		if i == start_index:
 			continue
 		var surf: String = sec[1]
 		var info := Surfaces.get_surface(surf)
@@ -647,7 +792,7 @@ func _build_section_signs() -> void:
 		label.outline_modulate = Color(0.05, 0.05, 0.1)
 		label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 		label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-		var k := wrapi(i - 10, 0, n)
+		var k := wrap_index(i - 10)
 		label.position = points[k] + _side(k) * (widths[k] * 0.5 + VERGE + 1.5) + Vector3(0, 3.2, 0)
 		add_child(label)
 
@@ -663,7 +808,6 @@ func _build_village() -> void:
 	var ruins := _theme() == "wasteland"
 	var temples := _theme() == "jungle"
 	var temple_mat := TexGen.material(TexGen.stone_wall(), 1.0, Color(0.72, 0.80, 0.62))
-	var n := points.size()
 	var wall_mats: Array[StandardMaterial3D] = []
 	var gable_mats: Array[StandardMaterial3D] = []
 	for v in TexGen.WALL_COLORS.size():
@@ -683,8 +827,8 @@ func _build_village() -> void:
 	bodies.name = "Village"
 	add_child(bodies)
 	for range_f in ranges:
-		var i := int(n * (range_f[0] as float))
-		while i < int(n * (range_f[1] as float)):
+		var i := index_at(range_f[0] as float)
+		while i < index_at(range_f[1] as float):
 			for s in [-1.0, 1.0]:
 				if _rng.randf() < 0.3:
 					continue
@@ -902,14 +1046,14 @@ func _build_spectators() -> void:
 		if absf(_turn(i, 5)) > 1.0 and (spots.is_empty() or i - spots[spots.size() - 1] > 25):
 			spots.append(i)
 	for jump in _jumps:
-		spots.append(int((jump[0] as float) * n) + 4)
+		spots.append(index_at(jump[0] as float) + 4)
 	for i in spots:
 		var turn := _turn(i, 5)
 		var inside := -1.0 if turn > 0.0 else 1.0  # crowd on the inside: safer and visible
 		if absf(turn) < 0.3:
 			inside = 1.0
 		for c in 14:
-			var k := wrapi(i + _rng.randi_range(-6, 6), 0, n)
+			var k := wrap_index(i + _rng.randi_range(-6, 6))
 			var off := widths[k] * 0.5 + VERGE + _rng.randf_range(4.0, 8.0)
 			var pos := points[k] + _side(k) * inside * off
 			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 else points[k].y - 0.45
@@ -958,6 +1102,9 @@ func _build_trees() -> void:
 		var nearest := nearest_index(p, i)
 		if distance_to_road(p, nearest) < min_clear:
 			continue
+		if _cliff and _cliff.side[nearest] != 0.0 and _cliff._toward_drop(nearest, p.x, p.z) < 0.0 \
+				and distance_to_road(p, nearest) < widths[nearest] * 0.5 + VERGE + CliffRoad.WALL_BACK:
+			continue  # inside the rock wall
 		p.y = terrain_height(p.x, p.z) - 0.2
 		var mi := MeshInstance3D.new()
 		if wasteland:
@@ -1058,7 +1205,8 @@ func _build_cones() -> void:
 			var cs := CollisionShape3D.new()
 			cs.shape = shape
 			cone.add_child(cs)
-			cone.position = points[k] + _side(k) * s * (widths[k] * 0.5 - 0.5) + Vector3(0, 0.45, 0)
+			var c := wrap_index(start_index + k)
+			cone.position = points[c] + _side(c) * s * (widths[c] * 0.5 - 0.5) + Vector3(0, 0.45, 0)
 			add_child(cone)
 			if _theme() == "wasteland" and _rng.randf() < 0.5:
 				glow_lid(mi)
@@ -1084,6 +1232,7 @@ func _build_mountains() -> void:
 	var sty := Mountains.style(_theme())
 	var mat := Mountains.material(sty)
 	var haze: Color = Conditions.palette(_theme(), rain)["fog"]
+	var tall := 2.0 if _theme() == "alpine" else 1.0  # the pass is ringed by big peaks
 	# own generator, so what's built after the mountains doesn't move
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(map["seed"]) + 13
@@ -1099,7 +1248,7 @@ func _build_mountains() -> void:
 		var along := Vector3(-sin(a), 0, cos(a))
 		var peaks := rng.randi_range(1, 3)
 		for m in peaks:
-			var h := rng.randf_range(160.0, 360.0) * (1.0 if m == 0 else rng.randf_range(0.55, 0.8))
+			var h := rng.randf_range(160.0, 360.0) * (1.0 if m == 0 else rng.randf_range(0.55, 0.8)) * tall
 			var off := along * (0.0 if m == 0 else rng.randf_range(-1.0, 1.0) * 220.0) + Vector3(cos(a), 0, sin(a)) * m * 60.0
 			Mountains.add(st, rng, off, h, rng.randf_range(180.0, 300.0) * (h / 300.0 + 0.3), sty, haze, along)
 		var mi := MeshInstance3D.new()
@@ -1171,7 +1320,7 @@ func _build_bridges() -> void:
 			body.name = "Bridges"
 			body.set_meta("surface", "wood")
 			add_child(body)
-		var b := (i + 1) % n
+		var b := wrap_index(i + 1)
 		var seg := points[i].distance_to(points[b])
 		var dir := (points[b] - points[i]).normalized()
 		for s in [-1.0, 1.0]:
@@ -1221,7 +1370,7 @@ func _build_kerbs() -> void:
 	for i in n:
 		if absf(_turn(i, 3)) < 0.09 or surfaces[i] == "gravel":
 			continue
-		var b := (i + 1) % n
+		var b := wrap_index(i + 1)
 		for s in [-1.0, 1.0]:
 			for k in 3:
 				var f0 := k / 3.0
@@ -1315,9 +1464,8 @@ func _build_pyramid(at: Array) -> void:
 ## few dim lamps still burning.
 func _build_tunnel() -> void:
 	var span: Array = map["tunnel"]
-	var n := points.size()
-	var i0 := int(n * (span[0] as float))
-	var i1 := int(n * (span[1] as float))
+	var i0 := index_at(span[0] as float)
+	var i1 := index_at(span[1] as float)
 	var concrete := TexGen.material(TexGen.concrete(), 1.0, Color(0.7, 0.68, 0.64))
 	var roof_mat := TexGen.material(TexGen.concrete(), 1.0, Color(0.45, 0.43, 0.40))
 	roof_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1391,7 +1539,7 @@ func _build_wrecks() -> void:
 	while placed < 26 and tries < 300:
 		tries += 1
 		var i := _rng.randi_range(10, n - 10)
-		if map.has("tunnel") and float(i) / n > (map["tunnel"][0] as float) - 0.01 and float(i) / n < (map["tunnel"][1] as float) + 0.01:
+		if map.has("tunnel") and frac_of(i) > (map["tunnel"][0] as float) - 0.01 and frac_of(i) < (map["tunnel"][1] as float) + 0.01:
 			continue
 		var s := 1.0 if _rng.randf() < 0.5 else -1.0
 		var off := widths[i] * 0.5 + VERGE + _rng.randf_range(1.5, 5.0)
