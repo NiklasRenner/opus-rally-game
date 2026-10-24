@@ -345,16 +345,6 @@ func dent(point: Vector3, dir: Vector3, amount: float, radius: float) -> void:
 			_rebuild(d)
 
 
-## Full repair: throw the model away and build a fresh one.
-func reset_damage() -> void:
-	for c in get_children():
-		remove_child(c)
-		c.queue_free()
-	_deformables.clear()
-	_parts.clear()
-	build()
-
-
 ## Detach bolt-on parts whose zone damage passed their threshold.
 func update_parts(zones: Dictionary, car_velocity: Vector3) -> Array[String]:
 	var dropped: Array[String] = []

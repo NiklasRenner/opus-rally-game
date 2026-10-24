@@ -18,13 +18,14 @@ var weather := "RANDOM"  # menu choice, see Conditions.WEATHERS
 # kept for restarts)
 var race_rain := false
 var retro_look := true  # banded light, hard shadows, depth fog (F2, RetroLook)
+var manual_gears := false  # shift with Up / Down (or the bumpers) instead of the automatic box
 
 var _records := {}
 
 
 func _ready() -> void:
-	_setup_input()
 	_load_records()
+	_setup_input()
 
 
 func _setup_input() -> void:
@@ -35,9 +36,32 @@ func _setup_input() -> void:
 	_bind("handbrake", [KEY_SPACE], [JOY_BUTTON_B], [])
 	_bind("camera", [KEY_C], [JOY_BUTTON_Y], [])
 	_bind("reset", [KEY_R], [JOY_BUTTON_BACK], [])
-	_bind("repair", [KEY_T], [], [])
+	_bind("restart", [KEY_T], [], [])
+	_bind("shift_up", [KEY_UP], [JOY_BUTTON_RIGHT_SHOULDER], [])
+	_bind("shift_down", [KEY_DOWN], [JOY_BUTTON_LEFT_SHOULDER], [])
 	_bind("look", [KEY_F2], [], [])
 	_bind("quit", [KEY_ESCAPE], [JOY_BUTTON_START], [])
+	_apply_gearbox_keys()
+
+
+## With the manual box the Up / Down arrows shift gears, so they come off
+## throttle and brake (W / S and the triggers still work).
+func set_manual_gears(on: bool) -> void:
+	manual_gears = on
+	_apply_gearbox_keys()
+	_records["manual_gears"] = on
+	_save_records()
+
+
+func _apply_gearbox_keys() -> void:
+	for pair in [["accelerate", KEY_UP], ["brake", KEY_DOWN]]:
+		var action: String = pair[0]
+		var e := InputEventKey.new()
+		e.physical_keycode = pair[1]
+		if manual_gears:
+			InputMap.action_erase_event(action, e)
+		elif not InputMap.action_has_event(action, e):
+			InputMap.action_add_event(action, e)
 
 
 ## Input actions are registered in code so the project needs no input map
@@ -129,6 +153,7 @@ func _load_records() -> void:
 	if data is Dictionary:
 		_records = data
 		last_initials = _records.get("last_initials", "AAA")
+		manual_gears = _records.get("manual_gears", false)
 
 
 func _save_records() -> void:

@@ -64,6 +64,7 @@ func _ready() -> void:
 	car.place(track.get_spawn_transform(track.count() - 4))
 	car.impact.connect(_on_impact)
 	car.rain = Game.race_rain
+	car.manual_gears = Game.manual_gears
 	var marks := SkidMarks.new()
 	marks.name = "SkidMarks"
 	add_child(marks)
@@ -194,9 +195,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		cam.cycle()
 	elif event.is_action_pressed("reset"):
 		reset_car()
-	elif event.is_action_pressed("repair"):
-		car.repair()
-		_flash("REPAIRED", 1.2)
+	elif event.is_action_pressed("restart"):
+		restart()
 
 
 func reset_car() -> void:

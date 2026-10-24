@@ -1,8 +1,8 @@
 class_name Hud
 extends Control
 ## Arcade HUD drawn with _draw in a 640x360 virtual screen: Sega-style time
-## readouts, analogue tach with gear box and big italic speed, a minimap,
-## surface readout and a damage diagram.
+## readouts with a lap plate, analogue tach with a gear plate and big italic
+## speed, a minimap, surface readout and a damage diagram.
 
 var car: RallyCar
 var track: TrackBuilder
@@ -14,6 +14,11 @@ var _map_points := PackedVector2Array()
 var _map_colors := PackedColorArray()
 var _map_center := Vector2.ZERO
 var _map_scale := 1.0
+# plates punch out briefly when the gear or lap changes
+var _shown_gear := 1
+var _gear_pop := 0.0
+var _shown_lap := 1
+var _lap_pop := 0.0
 
 const YELLOW := RetroUI.YELLOW
 const RED := RetroUI.RED
@@ -41,12 +46,55 @@ func setup_map() -> void:
 		_map_colors.append(Surfaces.get_surface(track.surfaces[i])["hud"])
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if car and car.gear != _shown_gear:
+		_shown_gear = car.gear
+		_gear_pop = 1.0
+	if race and race.lap != _shown_lap:
+		_shown_lap = race.lap
+		_lap_pop = 1.0
+	_gear_pop = maxf(_gear_pop - delta * 5.0, 0.0)
+	_lap_pop = maxf(_lap_pop - delta * 3.0, 0.0)
 	queue_redraw()
 
 
-## Outlined text. Unlike RetroUI.text, outline 0 still draws a hairline edge
-## (the lap and gear digits rely on it).
+func _blink(period_ms: float) -> bool:
+	return Time.get_ticks_msec() % int(period_ms * 2.0) < int(period_ms)
+
+
+## Chamfered arcade plate: ink edge, coloured rim, a face shaded from `top`
+## to `bottom` and a gloss line.
+func _plate(r: Rect2, rim: Color, top: Color, bottom: Color, cut := 5.0) -> void:
+	draw_colored_polygon(_octagon(r.grow(3.0), cut + 2.0), INK)
+	draw_colored_polygon(_octagon(r.grow(1.0), cut + 1.0), rim)
+	var face := _octagon(r, cut)
+	var cols := PackedColorArray()
+	for p in face:
+		cols.append(top.lerp(bottom, (p.y - r.position.y) / r.size.y))
+	draw_polygon(face, cols)
+	draw_rect(Rect2(r.position.x + cut, r.position.y + 2.0, r.size.x - cut * 2.0, 2.0), Color(1, 1, 1, 0.3))
+
+
+static func _octagon(r: Rect2, c: float) -> PackedVector2Array:
+	var a := r.position
+	var b := r.end
+	return PackedVector2Array([Vector2(a.x + c, a.y), Vector2(b.x - c, a.y), Vector2(b.x, a.y + c), Vector2(b.x, b.y - c),
+		Vector2(b.x - c, b.y), Vector2(a.x + c, b.y), Vector2(a.x, b.y - c), Vector2(a.x, a.y + c)])
+
+
+## Big italic glyphs centred on `mid` with a drop shadow, scaled about the
+## centre for the change pop.
+func _plate_digit(mid: Vector2, s: String, size: int, col: Color, scale := 1.0, outline := 5) -> void:
+	var w := _font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var p := Vector2(-w * 0.5, size * 0.36)
+	draw_set_transform_matrix(Transform2D(Vector2(scale, 0), Vector2(-0.22 * scale, scale), mid))
+	draw_string_outline(_font, p + Vector2(2, 2), s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, outline, INK)
+	draw_string_outline(_font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, outline, INK)
+	draw_string(_font, p, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
+## Outlined text. Unlike RetroUI.text, outline 0 still draws a hairline edge.
 func _text(pos: Vector2, s: String, size: int, col: Color, outline := 4) -> void:
 	draw_string_outline(_font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, outline, INK)
 	draw_string(_font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, size, col)
@@ -82,14 +130,12 @@ func _draw() -> void:
 	_text(Vector2(14, 44), "TOTAL TIME", 13, YELLOW, 3)
 	_italic(Vector2(16, 70), fmt_time(race.race_time), 26, Color.WHITE)
 	_text(Vector2(14, 88), "LAP TIME", 13, RED, 3)
-	draw_rect(Rect2(14, 92, 14, 20), Color.WHITE)
-	_text(Vector2(17, 108), str(race.lap), 16, RED, 0)
-	_italic(Vector2(34, 110), fmt_time(race.lap_time), 22, Color.WHITE)
+	_draw_lap_plate(Rect2(17, 93, 24, 22))
+	_italic(Vector2(52, 112), fmt_time(race.lap_time), 22, Color.WHITE)
 	_text(Vector2(484, 44), "BEST LAP", 13, GREEN, 3)
 	_italic(Vector2(486, 68), fmt_time(race.best_lap), 20, Color.WHITE)
 	_text(Vector2(484, 86), "LAST", 11, YELLOW, 3)
 	_text(Vector2(520, 86), fmt_time(race.last_lap), 11, Color.WHITE, 3)
-	_text(Vector2(90, 88), "%d / %d" % [mini(race.lap, race.total_laps), race.total_laps], 13, Color.WHITE, 3)
 	if race.ghost_time < INF:
 		_text(Vector2(484, 102), "GHOST", 11, Color(0.6, 0.9, 1.0), 3)
 		_text(Vector2(520, 102), fmt_time(race.ghost_time), 11, Color.WHITE, 3)
@@ -136,18 +182,56 @@ func _draw_tach(c: Vector2) -> void:
 	draw_circle(c, 4.0, Color(0.7, 0.7, 0.72))
 	draw_string(_font, c + Vector2(-14, 24), "x1000", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.8, 0.8, 0.8))
 
-	# gear box
-	var g := Rect2(c + Vector2(r + 6, -6), Vector2(30, 34))
-	draw_rect(g.grow(2), INK)
-	draw_rect(g, Color(0.12, 0.02, 0.02))
-	var gear_s := "R" if car.gear == -1 else str(car.gear)
-	_text(g.position + Vector2(7, 28), gear_s, 28, Color(1.0, 0.18, 0.12), 0)
-	_text(g.position + Vector2(0, 46), "SHIFT", 9, Color.WHITE, 2)
+	_draw_gear_plate(Rect2(c + Vector2(r + 9, -20), Vector2(32, 40)))
 
 	# speed
 	var kmh := int(round(car.speed * 3.6))
-	_italic(c + Vector2(r + 44, 24), "%3d" % kmh, 40, Color.WHITE, 6)
-	_text(c + Vector2(r + 124, 24), "km/h", 14, Color.WHITE, 3)
+	_italic(c + Vector2(r + 52, 24), "%3d" % kmh, 40, Color.WHITE, 6)
+	_text(c + Vector2(r + 132, 24), "km/h", 14, Color.WHITE, 3)
+
+
+## Lap number on a yellow plate with the lap count tabbed on its corner; the
+## plate flashes red on the final lap.
+func _draw_lap_plate(p: Rect2) -> void:
+	var lap: int = mini(race.lap, race.total_laps)
+	var final: bool = lap == race.total_laps and race.total_laps > 1 and not race.finished
+	var hot := final and _blink(250.0)
+	var rim := Color.WHITE.lerp(YELLOW, _lap_pop)
+	if hot:
+		_plate(p, rim, Color(1.0, 0.45, 0.3), Color(0.75, 0.05, 0.02), 4.0)
+	else:
+		_plate(p, rim, Color(1.0, 0.95, 0.45), Color(0.98, 0.5, 0.05), 4.0)
+	_plate_digit(p.get_center() + Vector2(-1, -1), str(lap), 20, Color.WHITE if hot else RED, 1.0 + 0.5 * _lap_pop, 4)
+	var tab := Rect2(p.end + Vector2(-3, -9), Vector2(16, 11))
+	draw_rect(tab, INK)
+	_text(tab.position + Vector2(2, 9), "/%d" % race.total_laps, 10, YELLOW, 0)
+	if final:
+		_italic(Vector2(92, 88), "FINAL LAP", 13, YELLOW if _blink(250.0) else Color.WHITE, 3)
+
+
+## Gear on a dark red plate under a GEAR tab. The manual box adds a row of
+## shift lights that run up the rev range and flash at the limiter.
+func _draw_gear_plate(g: Rect2) -> void:
+	var limiter := car.rpm > 7400.0 and car.gear >= 1 and car.gear < RallyCar.GEAR_RATIOS.size()
+	var rim := YELLOW.lerp(Color.WHITE, _gear_pop)
+	if car.manual_gears and limiter and _blink(70.0):
+		rim = RED
+	_plate(g, rim, Color(0.55, 0.06, 0.03), Color(0.07, 0.0, 0.02), 6.0)
+	var tab := Rect2(g.position + Vector2(2, -13), Vector2(g.size.x - 4, 10))
+	draw_rect(tab.grow(1), INK)
+	_text(tab.position + Vector2(3, 9), "GEAR", 9, YELLOW, 0)
+	var gear_s := "R" if car.gear == -1 else str(car.gear)
+	var col := YELLOW if car.gear == -1 else Color(1.0, 0.32, 0.14)
+	_plate_digit(g.get_center() + Vector2(1, -1), gear_s, 30, col.lerp(Color.WHITE, _gear_pop * 0.8), 1.0 + 0.45 * _gear_pop, 5)
+	if car.manual_gears:
+		var lights := [[5600.0, GREEN], [6400.0, GREEN], [7000.0, YELLOW], [7400.0, RED]]
+		for i in lights.size():
+			var on: bool = car.rpm >= (lights[i][0] as float) and not (limiter and not _blink(70.0))
+			var led := Rect2(g.position.x + i * 8.5, g.end.y + 5, 6, 5)
+			draw_rect(led.grow(1), INK)
+			var lc: Color = lights[i][1]
+			draw_rect(led, lc if on else lc.darkened(0.75))
+	_text(Vector2(g.position.x + (2.0 if car.manual_gears else 4.0), g.end.y + 22), "MANUAL" if car.manual_gears else "AUTO", 9, Color(0.8, 0.85, 1.0), 2)
 
 
 func _draw_map(c: Vector2) -> void:
