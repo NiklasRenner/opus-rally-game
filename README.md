@@ -61,6 +61,7 @@ race from the menu (a restart keeps the same weather).
 | Pleiad 555 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
 | Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
 | Veloce F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
+| Swamp King | Lime monster truck on huge knobbly tyres, tube frame and roll cage | Class X: bouncy long-travel suspension, rolls a lot, soaks up rough ground, big jumps |
 | KPz Pardel | Boxy German-style tank in NATO camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
@@ -78,8 +79,8 @@ their old names.
 
 The cars come from `art/cars/build_cars.py`: run it in Blender's Scripting
 tab (with `build_all("<path to this folder>")`) to rebuild their .blend files
-and re-export `models/martello.glb`, `models/pleiad.glb`, `models/balear.glb`
-and `models/veloce.glb` (the F1 car).
+and re-export `models/martello.glb`, `models/pleiad.glb`, `models/balear.glb`,
+`models/veloce.glb` (the F1 car) and `models/swamp.glb` (the monster truck).
 
 They all wear a skin painted in separate panel pieces (each side, top, front,
 back, windscreen) in `art/cars/<car>_pieces/`, combined into

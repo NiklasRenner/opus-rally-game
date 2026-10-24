@@ -701,6 +701,24 @@ static func _make_rim(col: Color, spokes: int, ring: Color) -> ImageTexture:
 	return _tex(img)
 
 
+## Monster truck tread: deep chevron lugs either side of the centre line.
+static func chevron_tread() -> ImageTexture:
+	return cached("chevron", _make_chevron_tread)
+
+
+static func _make_chevron_tread() -> ImageTexture:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGB8)
+	for y in 16:
+		for x in 16:
+			var lug := fposmod(x + absf(y - 7.5) * 0.7, 8.0) < 4.5 and y > 0 and y < 15
+			var edge := fposmod(x + absf(y - 7.5) * 0.7, 8.0) < 1.0
+			var c := Color(0.13, 0.13, 0.12) if lug else Color(0.03, 0.03, 0.03)
+			if lug and edge:
+				c = Color(0.2, 0.2, 0.19)  # lit leading edge of each lug
+			img.set_pixel(x, y, c)
+	return _tex(img)
+
+
 ## Tyre tread: blocks round the tyre.
 static func tread() -> ImageTexture:
 	return cached("tread", _make_tread)

@@ -27,6 +27,23 @@ var spec: Dictionary = Cars.LIST[0]
 var _deformables: Array[Dictionary] = []
 var _parts := {}
 var _body_mat: StandardMaterial3D
+## Solid axles (monster truck): they follow their two wheels up and down.
+var _axles: Array = [null, null]
+var _axle_y: Array = [0.0, 0.0]
+
+
+## Tilt and drop each solid axle to match its wheels: tilt is the left wheel's
+## drop minus the right's, sink how far the pair has dropped from rest.
+func place_axles(tilt_f: float, tilt_r: float, sink_f: float, sink_r: float) -> void:
+	var half: float = Cars.wheels(spec)["x"]
+	for i in 2:
+		var axle: Node3D = _axles[i]
+		if axle == null or not is_instance_valid(axle):
+			continue
+		axle.position.y = _axle_y[i] - (sink_f if i == 0 else sink_r)
+		axle.rotation.z = atan2(tilt_f if i == 0 else tilt_r, 2.0 * half)
+
+
 ## Set once the car has taken the model's wheels onto its suspension, so a
 ## rebuilt (repaired) model drops its own copies.
 var _wheels_taken := false
@@ -72,9 +89,15 @@ func front_z() -> float:
 ## knocked off.
 func _build_mesh() -> void:
 	var root: Node3D = (load(spec["mesh"]) as PackedScene).instantiate()
-	root.position.y = MESH_Y
+	root.position.y = spec.get("ground_y", MESH_Y)
+	_axles = [root.find_child("Axle_F", true, false), root.find_child("Axle_R", true, false)]
+	_axle_y = [_axles[0].position.y if _axles[0] else 0.0, _axles[1].position.y if _axles[1] else 0.0]
 	add_child(root)
 	var mats := _tank_materials() if is_tank() else _car_materials()
+	for m in mats.values():
+		var bm := m as BaseMaterial3D
+		if bm and bm.shading_mode != BaseMaterial3D.SHADING_MODE_UNSHADED:
+			bm.vertex_color_use_as_albedo = true  # light baked into the model (art/cars/build_cars.py)
 	for mi in root.find_children("*", "MeshInstance3D", true, false):
 		var mesh: Mesh = (mi as MeshInstance3D).mesh
 		for s in mesh.get_surface_count():
@@ -123,10 +146,28 @@ func _car_materials() -> Dictionary:
 		"Chrome": chrome,
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"Flap": TexGen.flat_material(spec["flaps"], 0.9),
-		"Tyre": TexGen.material(TexGen.tread(), 0.95),
+		"Tyre": TexGen.material(TexGen.chevron_tread() if spec.get("tread") == "chevron" else TexGen.tread(), 0.95),
 		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5), spec.get("rim_ring", Color(0, 0, 0, 0))), 0.4),
 		"Tail": TexGen.flat_material(Color(1.0, 0.12, 0.08), 0.3, true),
+		"Frame": _frame_mat(),
+		"Steel": _steel_mat(),
 	}
+
+
+## Tube frame paint: the light baked into the model's vertex colours shades
+## each tube round.
+func _frame_mat() -> StandardMaterial3D:
+	var m := TexGen.flat_material(spec.get("frame", Color(0.8, 0.08, 0.06)), 0.45)
+	m.vertex_color_use_as_albedo = true
+	return m
+
+
+## Darker, duller than chrome: cast metal like the truck's diff housings.
+func _steel_mat() -> StandardMaterial3D:
+	var m := TexGen.flat_material(Color(0.24, 0.25, 0.27), 0.5)
+	m.metallic = 0.4
+	m.vertex_color_use_as_albedo = true  # light baked into the model, like the frame
+	return m
 
 
 func _tank_materials() -> Dictionary:
@@ -239,25 +280,30 @@ func _make_dentable(mi: MeshInstance3D) -> void:
 			idx.resize(v.size())
 			for i in v.size():
 				idx[i] = i
+		# light baked into the model, if any, is where the dent scuffs start from
+		var baked: PackedColorArray = arr[Mesh.ARRAY_COLOR] if arr[Mesh.ARRAY_COLOR] != null else PackedColorArray()
 		var verts := PackedVector3Array()
 		var uvs := PackedVector2Array()
+		var colors := PackedColorArray()
 		for i in idx:
 			verts.append(v[i])
 			uvs.append(uv[i])
+			colors.append(baked[i] if not baked.is_empty() else Color.WHITE)
 		var mat := mi.get_surface_override_material(s)
-		_add_deformable(mi, verts, uvs, mat if mat else mesh.surface_get_material(s))
+		_add_deformable(mi, verts, uvs, mat if mat else mesh.surface_get_material(s), colors)
 	mi.mesh = null
 
 
-## A dentable triangle soup. Its vertex colours (white, scuffed darker by
-## dents) tint the material's texture.
-func _add_deformable(parent: Node3D, verts: PackedVector3Array, uvs: PackedVector2Array, mat: Material) -> void:
+## A dentable triangle soup. Its vertex colours (the model's baked light, or
+## white, scuffed darker by dents) tint the material's texture.
+func _add_deformable(parent: Node3D, verts: PackedVector3Array, uvs: PackedVector2Array, mat: Material,
+		colors := PackedColorArray()) -> void:
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	var colors := PackedColorArray()
-	colors.resize(verts.size())
-	colors.fill(Color.WHITE)
+	if colors.is_empty():
+		colors.resize(verts.size())
+		colors.fill(Color.WHITE)
 	var mi := MeshInstance3D.new()
 	mi.mesh = ArrayMesh.new()
 	parent.add_child(mi)
