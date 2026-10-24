@@ -546,6 +546,17 @@ def delta_wing(g, body):
         g.box((sx * 0.45, y - 0.08, z - 0.01), (0.05, 0.12, 0.04), "Trim")
 
 
+def ibiza_wing(g, body):
+    # big roof spoiler off the back edge of the roof, on endplates
+    y = -1.22
+    z = body.heights(y)[5]
+    g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.66, 0.04, -0.01), (0.66, 0.04, 0.03), (0.68, -0.4, -0.05), (0.68, -0.4, -0.01)]], "Livery")
+    for sx in (-1, 1):
+        g.hull([(sx * x, y + dy, z + dz) for x in (0.66, 0.69) for (dy, dz) in [
+            (0.04, -0.03), (0.04, 0.05), (-0.42, -0.1), (-0.42, 0.0), (-0.2, -0.12)]], "Livery")
+
+
 def rod(g, a, b, t, key):
     """A thin square bar from a to b."""
     a, b = Vector(a), Vector(b)
@@ -668,6 +679,16 @@ CARS = [
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=4, wing_y=-1.43,
          body_extras=[delta_extras, delta_lamps], wing=delta_wing,
          screen=((0.88, 0.86), (0.25, 1.36))),
+    dict(name="Balear", file="balear", paint=(1.0, 0.82, 0.05), flaps=(0.08, 0.2, 0.62), rims=(0.95, 0.95, 0.93),
+         hw=0.84, roof_hw=0.65, flare=0.09, bottom=0.2, nose_round=0.86,
+         # compact three-door kit car: short bonnet, raked screen, short roof
+         # falling into a hatch, wide arches
+         profile=[(1.98, 0.55, 0.51), (1.92, 0.7, 0.66), (1.5, 0.76, 0.72), (1.0, 0.82, 0.78), (0.3, 1.34, 0.86),
+                  (-1.15, 1.33, 0.9), (-1.65, 0.98, 0.92), (-1.85, 0.62, 0.58)],
+         glass_y=(0.95, -1.3), pillars=[-0.62], b_pillar=-0.62, mirror_y=0.8,
+         wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
+         bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
+         wing=ibiza_wing, screen=((1.0, 0.82), (0.3, 1.34))),
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
          wheel_y=(1.72, -1.42), wheel_x=0.84, wheel_r=(0.32, 0.35), wheel_w=(0.3, 0.42)),

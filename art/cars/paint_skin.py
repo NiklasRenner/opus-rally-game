@@ -145,7 +145,7 @@ class Skin:
     def top_box(self, x0, x1, y0, y1, col, mask="body"):
         self.box(self.px("top", (x0, y0, 0)), self.px("top", (x1, y1, 0)), col, mask)
 
-    def text(self, s, centre, height, col, mask="body", rotate=0, bold=False):
+    def text(self, s, centre, height, col, mask="body", rotate=0, bold=False, italic=False):
         """Pixel-font text about `height` pixels tall (whole multiples of 7)."""
         k = max(1, round(height / 7.0))
         tmp = Image.new("L", ((len(s) * 6 - 1) * k + (1 if bold else 0), 7 * k), 0)
@@ -157,6 +157,10 @@ class Skin:
                     if g[row * 5 + c] == "#":
                         x = (i * 6 + c) * k
                         d.rectangle((x, row * k, x + k - 1 + (1 if bold else 0), row * k + k - 1), fill=255)
+        if italic:  # lean the top of the letters forward
+            lean = round(0.3 * tmp.height)
+            tmp = tmp.transform((tmp.width + lean, tmp.height), Image.AFFINE, (1, 0.3, -lean, 0, 1, 0),
+                                resample=Image.NEAREST)
         if rotate:
             tmp = tmp.rotate(rotate, expand=True)
         layer = Image.new("RGBA", tmp.size, col)
@@ -458,6 +462,87 @@ def paint_pleiad(sk):
     finish(sk)
 
 
+# --------------------------------------------------------------------------- the Ibiza
+
+def paint_balear(sk):
+    """Kit car in works yellow: big blue italic name on the doors, a red and
+    blue fuel-company stripe over the bonnet and screen, a blue phone-company
+    panel on the bonnet and bumper (made-up PETROPIX and MOVIPIX), number 15."""
+    yellow = rgb(1.0, 0.82, 0.05)
+    blue = rgb(0.08, 0.2, 0.62)
+    base(sk, yellow)
+    for side in (-1, 1):
+        # shut lines, handle, fuel cap
+        sk.side_box(side, 0.95, 0.937, 0.3, 0.86, rgb(0.62, 0.5, 0.05))
+        sk.side_box(side, -0.62, -0.633, 0.3, 0.86, rgb(0.62, 0.5, 0.05))
+        sk.side_box(side, -0.42, -0.54, 0.78, 0.8, BLACK)
+        sk.side_box(side, -1.25, -1.35, 0.78, 0.84, rgb(0.85, 0.7, 0.05))
+        # number panel, the name in big blue italics with the trim above it
+        sk.side_box(side, -0.17, -0.56, 0.62, 0.84, BLACK)
+        sk.side_box(side, -0.18, -0.55, 0.63, 0.83, WHITE)
+        sk.text("15", sk.side_pt(side, -0.365, 0.73), 14, BLACK, bold=True)
+        sk.text("BALEAR", sk.side_pt(side, 0.2, 0.47), 21, blue, bold=True, italic=True)
+        sk.text("KIT CAR", sk.side_pt(side, 0.42, 0.72), 7, blue, bold=True, italic=True)
+        sk.text("SPORT", sk.side_pt(side, -0.4, 0.4), 7, RED, italic=True)
+        # stickers on the rear quarter and behind the front wheel
+        for i, col in enumerate((blue, RED, WHITE)):
+            yy = -0.8 - i * 0.14
+            sk.side_box(side, yy, yy - 0.12, 0.62, 0.67, col)
+        sk.text("PIXELLI", sk.side_pt(side, 1.32, 0.78), 7, BLACK)
+
+    # top: phone-company panel across the bonnet front, fuel stripe at the
+    # base of the screen, roof number, the name along the spoiler
+    sk.top_box(-1.0, 1.0, 1.55, 1.9, blue)
+    sk.text("MOVIPIX", sk.px("top", (0.0, 1.72, 0)), 14, WHITE, rotate=90, bold=True)
+    sk.top_box(-1.0, 1.0, 1.0, 1.1, RED)
+    sk.top_box(-1.0, 1.0, 1.1, 1.18, blue)
+    c = sk.px("top", (0.0, -0.4, 0))
+    sk.box((c[0] - 10, c[1] - 12), (c[0] + 10, c[1] + 12), BLACK)
+    sk.box((c[0] - 9, c[1] - 11), (c[0] + 9, c[1] + 11), WHITE)
+    sk.text("15", c, 7, BLACK, rotate=-90, bold=True)
+    sk.text("BALEAR", sk.px("top", (0.0, -1.42, 0)), 14, blue, "any", rotate=-90, bold=True, italic=True)
+
+    # front: slim lamps either side of a small grille, deep bumper with a
+    # black intake, square fog lamps and tyre stickers on the corners
+    sk.end_box(True, -0.22, 0.22, 0.6, 0.69, BLACK)
+    sk.disc(sk.px("front", (0, 0, 0.645)), 3, RED)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.27, s_ * 0.76, 0.615, 0.69, BLACK)
+        sk.end_box(True, s_ * 0.29, s_ * 0.6, 0.625, 0.68, rgb(1.0, 0.98, 0.86))
+        sk.end_box(True, s_ * 0.62, s_ * 0.74, 0.625, 0.68, AMBER)
+        sk.end_box(True, s_ * 0.6, s_ * 0.8, 0.29, 0.39, BLACK)
+        sk.end_box(True, s_ * 0.62, s_ * 0.78, 0.31, 0.37, rgb(1.0, 0.93, 0.6))
+        sk.text("PIX", sk.px("front", (s_ * 0.72, 0, 0.47)), 7, BLACK)
+    sk.end_box(True, -0.55, 0.55, 0.24, 0.42, BLACK)
+    for i in range(6):
+        z = 0.26 + i * 0.026
+        sk.end_box(True, -0.53, 0.53, z, z + 0.009, GREY)
+    sk.end_box(True, -0.55, 0.55, 0.45, 0.52, blue)
+    sk.text("MOVIPIX", sk.px("front", (0, 0, 0.485)), 7, WHITE)
+
+    # rear: wide red tail lights, black plate panel, blue bumper panel with
+    # the fuel company, stickers on the corners, diffuser
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.36, s_ * 0.87, 0.64, 0.82, BLACK)
+        sk.end_box(False, s_ * 0.48, s_ * 0.85, 0.66, 0.8, RED)
+        sk.end_box(False, s_ * 0.5, s_ * 0.83, 0.77, 0.785, rgb(1.0, 0.45, 0.4))
+        sk.end_box(False, s_ * 0.38, s_ * 0.47, 0.66, 0.8, AMBER)
+        sk.text("PIX", sk.px("rear", (s_ * 0.74, 0, 0.47)), 7, BLACK)
+    sk.end_box(False, -0.34, 0.34, 0.63, 0.84, BLACK)
+    sk.end_box(False, -0.24, 0.24, 0.68, 0.79, YELLOW)
+    sk.text("BK 15", sk.px("rear", (0, 0, 0.735)), 7, BLACK, bold=True)
+    sk.end_box(False, -0.55, 0.55, 0.38, 0.52, blue)
+    sk.text("PETROPIX", sk.px("rear", (0, 0, 0.45)), 7, WHITE, bold=True)
+    sk.end_box(False, -0.95, 0.95, 0.0, 0.34, rgb(0.08, 0.08, 0.09))
+
+    # sun strip: the fuel company in red and blue
+    x0, y0, x1, y1 = sk.rect("screen")
+    sk.box((x0, y0), (x1, y0 + 0.15 * sk.s), RED, "glass")
+    sk.box((x0, y0 + 0.11 * sk.s), (x1, y0 + 0.15 * sk.s), blue, "glass")
+    sk.text("PETROPIX", ((x0 + x1) / 2, y0 + 0.055 * sk.s), 7, WHITE, "glass", bold=True)
+    finish(sk)
+
+
 # --------------------------------------------------------------------------- the F1 car
 
 def paint_veloce(sk):
@@ -542,7 +627,7 @@ def paint_veloce(sk):
     finish(sk, wheels=())
 
 
-PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce}
+PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear}
 
 
 def main():

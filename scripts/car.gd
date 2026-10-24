@@ -191,8 +191,6 @@ func _build_wheels() -> void:
 		w.pivot.add_child(w.spinner)
 		if not modelled.is_empty():
 			w.spinner.add_child(modelled[i])
-		elif not model.is_tank():
-			w.spinner.add_child(CarModel.make_wheel(w.radius, wl["wf"] if w.front else wl["wr"], spec["rims"]))
 		w.fx = _make_particles(puff, 40, 0.9)
 		add_child(w.fx)
 		wheels.append(w)

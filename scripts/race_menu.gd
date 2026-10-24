@@ -243,7 +243,7 @@ func _draw_results(vs: Vector2) -> void:
 			RetroUI.text(self, Vector2(r.position.x + 44, y), e["name"], 13, col, 3)
 			RetroUI.text(self, Vector2(r.position.x + 100, y), Hud.fmt_time(e["time"]), 13, col, 3)
 			if e.has("car"):
-				var car_name: String = Cars.get_car(e["car"])["name"]
+				var car_name: String = Cars.name_of(e["car"])
 				RetroUI.text(self, Vector2(r.position.x + 186, y), car_name.get_slice(" ", 0), 10, col, 2)
 			RetroUI.text(self, Vector2(r.position.x + 286, y), e.get("date", ""), 10, Color(0.75, 0.8, 0.95), 2)
 		else:

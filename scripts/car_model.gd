@@ -1,34 +1,20 @@
 class_name CarModel
 extends Node3D
-## Low-poly rally car lofted from the side profile in its Cars spec: rings of
-## points every few centimetres from nose to tail, with flared arches cut out
-## around the wheels, flat shaded and painted per face with the livery.
+## A vehicle modelled in Blender (art/), imported from models/ and painted
+## with its skin (rally cars, F1) or procedural camouflage (the tank).
 ## Panels dent at runtime: vertices near an impact are pushed inward and
-## scuffed darker; bolt-on parts (bumpers, light pod, wing, mirrors) fall off
-## once their damage zone passes a threshold.
+## scuffed darker; bolt-on parts (bumpers, wings, light pod, mirrors, skirts)
+## fall off once their damage zone passes a threshold.
 
 const MAX_DENT := 0.42
-const BOTTOM := -0.24  # underside of the shell
-const WHEEL_Y := -0.38  # wheel centre at rest
-const WHEEL_Z := [-1.32, 1.28]
-const ARCH_R := 0.47
-const STEP := 0.13  # ring spacing along the car
-const GLASS := Color(0.07, 0.09, 0.15)
-
-## Ring edge -> paint region: 0 rocker, 1 lower door, 2 mid door, 3 stripe
-## band under the belt line, 4 side glass / shoulder, 5 top, -1 underside.
-## Region 6 is the nose and tail caps.
-const EDGE_REGION := [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 4, 3, 2, 1, 0, -1]
-const TOP_X := [0.3, 0.11]  # extra points across the roof/bonnet for stripes
 
 var spec: Dictionary = Cars.LIST[0]
 
 var _deformables: Array[Dictionary] = []
 var _parts := {}
 var _body_mat: StandardMaterial3D
-# karts and F1: driver's head and steering wheel follow the steering
+# F1: the driver's head follows the steering
 var _head: Node3D
-var _steering: Node3D
 # tank only: animated bits
 var _turret: Node3D
 var _gun: Node3D  # mesh tanks: mantlet, kept level by the stabiliser
@@ -45,19 +31,10 @@ func build() -> void:
 	_body_mat.roughness = 0.32
 	_body_mat.metallic_specular = 0.75
 	_head = null
-	_steering = null
 	_gun = null
 	_road_wheels.clear()
 	_wheel_r.clear()
-	if spec.has("mesh"):
-		_build_mesh()
-		return
-	if kind() == "kart":
-		_build_kart()
-		return
-	_build_shell()
-	_build_details()
-	_build_parts()
+	_build_mesh()
 
 
 func kind() -> String:
@@ -68,250 +45,9 @@ func is_tank() -> bool:
 	return kind() == "tank"
 
 
-func _bottom() -> float:
-	return spec.get("bottom", BOTTOM)
-
-
-func _arches() -> bool:
-	return spec.get("arches", true)
-
-
-# --------------------------------------------------------------------------- shell
-
-func _keys() -> Array:
-	return spec["profile"]
-
-
-## (top, belt) at z, linearly interpolated between the profile keys.
-func _profile(z: float) -> Vector2:
-	var keys := _keys()
-	if z <= (keys[0][0] as float):
-		return Vector2(keys[0][1], keys[0][2])
-	for i in range(1, keys.size()):
-		var k: Array = keys[i]
-		if z <= (k[0] as float):
-			var p: Array = keys[i - 1]
-			var t := (z - (p[0] as float)) / ((k[0] as float) - (p[0] as float))
-			return Vector2(lerpf(p[1], k[1], t), lerpf(p[2], k[2], t))
-	var last: Array = keys[keys.size() - 1]
-	return Vector2(last[1], last[2])
-
-
+## z of the nose in car space (headlights in the rain).
 func front_z() -> float:
-	return _front_z()
-
-
-func _front_z() -> float:
-	return _keys()[0][0]
-
-
-func _rear_z() -> float:
-	return _keys()[_keys().size() - 1][0]
-
-
-func _half_width(z: float) -> float:
-	var w: float = (spec["width"] as float) * 0.5
-	if spec.has("plan"):
-		w = _plan(z) * 0.5
-	for wz in (WHEEL_Z if _arches() else []):
-		var dz := absf(z - (wz as float))
-		w += (spec["flare"] as float) * clampf(1.0 - (dz - ARCH_R * 0.75) / 0.3, 0.0, 1.0)
-	# round off the corners in plan view
-	var end := minf(z - _front_z(), _rear_z() - z)
-	return w * lerpf(0.88, 1.0, smoothstep(0.0, 0.3, end))
-
-
-## Body width at z from the optional plan keys.
-func _plan(z: float) -> float:
-	var keys: Array = spec["plan"]
-	if z <= (keys[0][0] as float):
-		return keys[0][1]
-	for i in range(1, keys.size()):
-		var k: Array = keys[i]
-		if z <= (k[0] as float):
-			var p: Array = keys[i - 1]
-			return lerpf(p[1], k[1], (z - (p[0] as float)) / ((k[0] as float) - (p[0] as float)))
-	return keys[keys.size() - 1][1]
-
-
-## Body heights at z: bottom (raised into arches over the wheels), sill,
-## mid door, stripe line, belt line, top.
-func _heights(z: float) -> Array[float]:
-	var pr := _profile(z)
-	var top := pr.x
-	var belt := pr.y
-	var bot := _bottom()
-	for wz in (WHEEL_Z if _arches() else []):
-		var dz := absf(z - (wz as float))
-		if dz < ARCH_R:
-			bot = maxf(bot, WHEEL_Y + sqrt(ARCH_R * ARCH_R - dz * dz))
-	bot = minf(bot, belt - 0.2)
-	var sill := minf(bot + 0.07, belt - 0.14)
-	var stripe := belt - 0.09
-	var out: Array[float] = [bot, sill, lerpf(sill, stripe, 0.5), stripe, belt, maxf(top, belt + 0.03)]
-	return out
-
-
-func _ring(z: float) -> PackedVector3Array:
-	var h := _heights(z)
-	var w := _half_width(z)
-	var cab := smoothstep(0.08, 0.3, h[5] - h[4])
-	var tx := w * lerpf(0.9, spec["taper"], cab)
-	var right := [Vector2(w * 0.86, h[0]), Vector2(w, h[1]), Vector2(w, h[2]), Vector2(w, h[3]),
-		Vector2(w, h[4]), Vector2(tx, h[5])]
-	for x in TOP_X:
-		right.append(Vector2(minf(x, tx * 0.9), h[5] + 0.02 * (1.0 - x / tx)))  # slight crown
-	var ring := PackedVector3Array()
-	for p in right:
-		ring.append(Vector3(p.x, p.y, z))
-	for i in range(right.size() - 1, -1, -1):
-		ring.append(Vector3(-right[i].x, right[i].y, z))
-	return ring
-
-
-func _stations() -> Array[float]:
-	var zs: Array[float] = []
-	for k in _keys():
-		zs.append(k[0])
-	var z := _front_z()
-	while z < _rear_z():
-		zs.append(z)
-		z += STEP
-	for wz in WHEEL_Z:
-		zs.append((wz as float) - ARCH_R)
-		zs.append((wz as float) + ARCH_R)
-	var bp: float = spec["b_pillar"]
-	zs.append(bp - 0.07)
-	zs.append(bp + 0.07)
-	zs.sort()
-	var out: Array[float] = []
-	for s in zs:
-		if s < _front_z() - 0.001 or s > _rear_z() + 0.001:
-			continue
-		if out.is_empty() or s - out[out.size() - 1] > 0.035:
-			out.append(s)
-		elif is_equal_approx(s, _rear_z()):
-			out[out.size() - 1] = s
-	return out
-
-
-func _build_shell() -> void:
-	var verts := PackedVector3Array()
-	var colors := PackedColorArray()
-	var zs := _stations()
-	var rings: Array[PackedVector3Array] = []
-	for z in zs:
-		rings.append(_ring(z))
-	var rn := rings[0].size()
-	for j in zs.size() - 1:
-		var ra := rings[j]
-		var rb := rings[j + 1]
-		var zc := (zs[j] + zs[j + 1]) * 0.5
-		var h := _heights(zc)
-		var axis_y := (h[0] + h[4]) * 0.5
-		for e in rn:
-			var e2 := (e + 1) % rn
-			var cen := (ra[e] + ra[e2] + rb[e] + rb[e2]) * 0.25
-			var outward := cen - Vector3(0, axis_y, cen.z)
-			var col := _paint(EDGE_REGION[e], cen, _quad_normal(ra[e], ra[e2], rb[e], outward), h)
-			_add_quad(verts, colors, ra[e], ra[e2], rb[e2], rb[e], outward, col)
-	# nose and tail caps
-	for cap in [[rings[0], zs[0], Vector3.FORWARD], [rings[rings.size() - 1], zs[zs.size() - 1], Vector3.BACK]]:
-		var ring: PackedVector3Array = cap[0]
-		var h := _heights(cap[1])
-		var c := Vector3(0, (h[0] + h[5]) * 0.5, cap[1])
-		for e in rn:
-			var a := ring[e]
-			var b := ring[(e + 1) % rn]
-			var cen := (a + b + c) / 3.0
-			_add_tri(verts, colors, a, b, c, cap[2], _paint(6, cen, cap[2], h))
-	_add_deformable(self, verts, colors, Vector3.ZERO)
-
-
-func _quad_normal(a: Vector3, b: Vector3, c: Vector3, outward: Vector3) -> Vector3:
-	var n := (b - a).cross(c - a)
-	if n.length_squared() < 1e-10:
-		return outward.normalized()
-	n = n.normalized()
-	return n if n.dot(outward) >= 0.0 else -n
-
-
-func _livery(key: String) -> Variant:
-	return spec["livery"][key]
-
-
-## Colour for one face of the shell.
-func _paint(region: int, c: Vector3, n: Vector3, h: Array[float]) -> Color:
-	var base: Color = _livery("base")
-	var trim: Color = spec["trim"]
-	var cab: bool = h[5] - h[4] > 0.2 and spec.get("glass", true)
-	var bp: float = spec["b_pillar"]
-	if region == -1:
-		return Color(0.1, 0.1, 0.11)
-	if region == 4 and cab:
-		return spec["roof"] if absf(c.z - bp) < 0.07 else GLASS
-	if region == 5 and cab:
-		return GLASS if absf(n.z) > 0.42 else spec["roof"]
-	var kind: String = _livery("kind")
-	var a: Color = _livery("a")
-	var b: Color = _livery("b")
-	var top_or_nose := region == 5 or (region == 6 and c.z < 0.0)
-	match kind:
-		"camo":  # blotchy three-colour camouflage
-			if region in [1, 2, 3, 4, 5, 6]:
-				var k := sin(c.x * 3.1 + c.z * 1.7) + sin(c.z * 2.3 - c.y * 5.0 + c.x * 1.3)
-				if k > 0.7:
-					return a
-				if k < -0.8:
-					return b
-		"bands":  # Martini-style: two bands along the side, stripe over the bonnet
-			if region == 2:
-				return a
-			if region == 3:
-				return b
-			if top_or_nose and absf(c.x) < 0.28:
-				return a
-		"split":  # two-tone with a pinstripe at the waist
-			if region <= 1:
-				return a
-			if region == 3:
-				return b
-		"nose":  # two-tone with a bonnet panel in the stripe colour
-			if region <= 1:
-				return a
-			if region == 3:
-				return b
-			if top_or_nose and c.z < (spec["a_pillar"] as float) and absf(c.x) < 0.32:
-				return a
-		"stripes":  # twin stripes nose to tail, side stripe under the windows
-			if region == 3:
-				return a
-			if top_or_nose and absf(c.x) > 0.1 and absf(c.x) < 0.32:
-				return a
-			if region == 1:
-				return b
-	if region == 0:
-		return trim
-	return base
-
-
-func _add_quad(verts: PackedVector3Array, colors: PackedColorArray, a: Vector3, b: Vector3, c: Vector3,
-		d: Vector3, outward: Vector3, col: Color) -> void:
-	_add_tri(verts, colors, a, b, c, outward, col)
-	_add_tri(verts, colors, a, c, d, outward, col)
-
-
-func _add_tri(verts: PackedVector3Array, colors: PackedColorArray, a: Vector3, b: Vector3, c: Vector3,
-		outward: Vector3, col: Color) -> void:
-	var cr := (b - a).cross(c - a)
-	if cr.length_squared() < 1e-12:
-		return
-	if cr.dot(outward) * winding() < 0.0:
-		var t := b
-		b = c
-		c = t
-	verts.append_array([a, b, c])
-	colors.append_array([col, col, col])
+	return spec["nose"]
 
 
 ## +1 if Godot's front faces have cross(b - a, c - a) pointing outward, else -1.
@@ -339,23 +75,6 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshIns
 	return mi
 
 
-func _lamp(parent: Node3D, radius: float, pos: Vector3, col: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = radius
-	cm.bottom_radius = radius
-	cm.height = 0.05
-	cm.radial_segments = 8
-	cm.rings = 1
-	mi.mesh = cm
-	mi.material_override = TexGen.flat_material(col, 0.2, true)
-	mi.rotation.x = PI * 0.5
-	mi.position = pos
-	parent.add_child(mi)
-
-
-# Orientations for flat decals (QuadMesh faces +Z): text reads left to right
-# for someone looking at that face of the car.
 const FACE_FRONT := Basis(Vector3(-1, 0, 0), Vector3.UP, Vector3(0, 0, -1))
 const FACE_BACK := Basis(Vector3.RIGHT, Vector3.UP, Vector3.BACK)
 const FACE_RIGHT := Basis(Vector3(0, 0, -1), Vector3.UP, Vector3.RIGHT)
@@ -383,189 +102,6 @@ func _decal(tex: Texture2D, size: Vector2, pos: Vector3, bas: Basis, glow := fal
 	return mi
 
 
-## Fixed details that don't dent: grille, lights, plate, mud flaps, exhaust,
-## door numbers and sponsor stickers.
-func _build_details() -> void:
-	var fz := _front_z()
-	var rz := _rear_z()
-	var hf := _heights(fz)
-	var hr := _heights(rz)
-	var dark := TexGen.flat_material(Color(0.06, 0.06, 0.08), 0.6)
-	var ly := lerpf(-0.03, hf[5], 0.5)
-	var hw := _half_width(fz)
-	_decal(TexGen.grille(), Vector2(hw * 0.72, 0.13), Vector3(0, ly, fz - 0.012), FACE_FRONT)
-	var flap_mat := TexGen.flat_material(spec["flaps"], 0.9)
-	var black := Color(0.05, 0.05, 0.07)
-	var white := Color(0.97, 0.97, 0.95)
-	for s in [-1.0, 1.0]:
-		var lx: float = s * hw * 0.68
-		if spec["lights"] == "round":
-			_lamp(self, 0.085, Vector3(lx - s * 0.05, ly, fz - 0.03), Color(1.0, 0.97, 0.82))
-			_lamp(self, 0.07, Vector3(lx + s * 0.11, ly, fz - 0.03), Color(1.0, 0.75, 0.3))
-		else:
-			_decal(TexGen.headlight(), Vector2(0.38, 0.14), Vector3(lx, ly, fz - 0.015), FACE_FRONT, true)
-		var tw := _half_width(rz)
-		_decal(TexGen.taillight(), Vector2(0.38, 0.13), Vector3(s * tw * 0.66, lerpf(-0.03, hr[5], 0.55), rz + 0.012),
-			FACE_BACK, true)
-		# mud flaps behind each wheel
-		for wz in WHEEL_Z:
-			_box(self, Vector3(0.3, 0.3, 0.02), Vector3(s * 0.8, -0.45, (wz as float) + ARCH_R - 0.06), flap_mat)
-		var bas := FACE_RIGHT if s > 0.0 else FACE_LEFT
-		# door number and a sponsor sticker on the rear quarter
-		var dz: float = (spec["b_pillar"] as float) - 0.42
-		var dh := _heights(dz)
-		_decal(TexGen.pixel_text(spec["number"], black, white, black), Vector2(-1, 0.27),
-			Vector3(s * (_half_width(dz) + 0.012), (dh[1] + dh[3]) * 0.5, dz), bas)
-		if spec.has("sponsor"):
-			var sp: Array = spec["sponsor"]
-			var qz: float = lerpf(spec["b_pillar"], WHEEL_Z[1], 0.3)
-			var qh := _heights(qz)
-			_decal(TexGen.pixel_text(sp[0], sp[1], sp[2]), Vector2(-1, 0.08),
-				Vector3(s * (_half_width(qz) + 0.012), lerpf(qh[1], qh[3], 0.65), qz), bas)
-	# rear plate
-	_decal(TexGen.pixel_text(spec.get("plate", "RR 98"), black, Color(1.0, 0.85, 0.1), black), Vector2(0.5, -1),
-		Vector3(0, lerpf(-0.03, hr[5], 0.3), rz + 0.015), FACE_BACK)
-	_build_glass_banner()
-	_build_bonnet_plate()
-	var ex := MeshInstance3D.new()
-	var em := CylinderMesh.new()
-	em.top_radius = 0.05
-	em.bottom_radius = 0.05
-	em.height = 0.2
-	em.radial_segments = 6
-	ex.mesh = em
-	ex.material_override = TexGen.flat_material(Color(0.5, 0.5, 0.52), 0.4)
-	ex.rotation.x = PI * 0.5
-	ex.position = Vector3(-0.5, BOTTOM + 0.02, rz + 0.05)
-	add_child(ex)
-	# bonnet scoop
-	var sz: float = spec["scoop"]
-	if sz != 0.0:
-		var top := _heights(sz)[5]
-		_box(self, Vector3(0.5, 0.08, 0.36), Vector3(0, top + 0.03, sz), TexGen.flat_material(_livery("base"), 0.4))
-		_box(self, Vector3(0.4, 0.05, 0.02), Vector3(0, top + 0.04, sz - 0.18), dark)
-
-
-## Sun strip across the top of the windscreen with the team name.
-func _build_glass_banner() -> void:
-	if not spec.has("banner"):
-		return
-	var keys := _keys()
-	var a_z: float = spec["a_pillar"]
-	var b: Array = []
-	for k in keys:
-		if (k[0] as float) > a_z + 0.01:
-			b = k
-			break
-	var pa := Vector2(a_z, _profile(a_z).x)
-	var pb := Vector2(b[0], b[1])
-	var p := pa.lerp(pb, 0.86)
-	var d := (pb - pa).normalized()  # (dz, dy) up the glass
-	var up := Vector3(0, d.y, d.x)
-	var normal := Vector3(0, d.x, -d.y)
-	var width := _half_width(p.x) * 2.0 * (spec["taper"] as float) * 0.95
-	var bn: Array = spec["banner"]
-	_decal(TexGen.pixel_text(bn[0], bn[1], bn[2]), Vector2(width, 0.12), Vector3(0, p.y, p.x) + normal * 0.035,
-		Basis(Vector3(-1, 0, 0), up, normal))
-
-
-## Classic rally plate on the bonnet, readable from the chase camera.
-func _build_bonnet_plate() -> void:
-	var fz := _front_z() + 0.15
-	var a_z: float = spec["a_pillar"]
-	var z := lerpf(fz, a_z, 0.3)
-	var fwd := Vector3(0, _profile(fz).x - _profile(a_z).x, fz - a_z).normalized()
-	var normal := Vector3.RIGHT.cross(fwd)
-	_decal(TexGen.pixel_text("RETRO RALLY", Color(0.05, 0.05, 0.07), Color(0.97, 0.97, 0.95), Color(0.85, 0.1, 0.08)),
-		Vector2(0.66, -1), Vector3(0, _heights(z)[5] + 0.02, z) + normal * 0.02, Basis(Vector3.RIGHT, fwd, normal))
-
-
-func _build_parts() -> void:
-	var fz := _front_z()
-	var rz := _rear_z()
-	var w: float = (spec["width"] as float) + 0.04
-	var trim: Color = spec["trim"]
-	_add_part("bumper_f", "front", 0.30, Vector3(0, BOTTOM + 0.08, fz - 0.05), Vector3(w, 0.24, 0.26),
-		trim, Vector3i(6, 1, 1))
-	_add_part("bumper_r", "rear", 0.35, Vector3(0, BOTTOM + 0.08, rz + 0.05), Vector3(w, 0.24, 0.26),
-		trim, Vector3i(6, 1, 1))
-
-	var wing: Array = spec["wing"]
-	if not wing.is_empty():
-		var wz: float = wing[0]
-		var lift: float = wing[1]
-		var chord: float = wing[2]
-		var y := _heights(wz)[5] + lift
-		var wing_w := _half_width(wz) * 2.0 * ((spec["taper"] as float) if lift < 0.08 else 0.95)
-		var foil := _add_part("spoiler", "rear", 0.55, Vector3(0, y, wz), Vector3(wing_w, 0.06, chord),
-			_livery("base"), Vector3i(6, 1, 2))
-		if lift >= 0.08:
-			var strut_mat := TexGen.flat_material(trim)
-			var plate_mat := TexGen.flat_material(_livery("a"))
-			for sx in [-0.5, 0.5]:
-				_box(foil, Vector3(0.06, lift, 0.18), Vector3(sx * wing_w * 0.8, -lift * 0.5, 0.0), strut_mat)
-			for sx in [-1.0, 1.0]:
-				_box(foil, Vector3(0.03, 0.14, chord), Vector3(sx * wing_w * 0.5, 0.04, 0.0), plate_mat)
-
-	var lamps: int = spec["pod"]
-	if lamps > 0:
-		var top := _heights(fz)[5]
-		var pod := _add_part("lights", "front", 0.2, Vector3(0, top + 0.06, fz + 0.02),
-			Vector3(lamps * 0.28 + 0.06, 0.2, 0.1), Color(0.1, 0.1, 0.1), Vector3i(4, 1, 1))
-		for i in lamps:
-			_lamp(pod, 0.11, Vector3((i - (lamps - 1) * 0.5) * 0.28, 0, -0.06), Color(1.0, 0.95, 0.65))
-
-	var mz: float = (spec["a_pillar"] as float) + 0.2
-	var mh := _heights(mz)
-	for s in [-1.0, 1.0]:
-		_add_part("mirror_l" if s < 0 else "mirror_r", "left" if s < 0 else "right", 0.2,
-			Vector3(s * (_half_width(mz) + 0.08), mh[4] + 0.1, mz), Vector3(0.16, 0.11, 0.1),
-			spec["roof"], Vector3i(1, 1, 1))
-
-
-## One tyre with its rim, axle along X. With `override` (the ghost) the
-## rim is left out and the tyre uses that material.
-static func make_wheel(radius: float, width: float, rim_color: Color, override: Material = null) -> Node3D:
-	var root := Node3D.new()
-	var tyre := CylinderMesh.new()
-	tyre.top_radius = radius
-	tyre.bottom_radius = radius
-	tyre.height = width
-	tyre.radial_segments = 10 if radius > 0.2 else 8
-	tyre.rings = 1
-	var parts := [[tyre, override if override else TexGen.flat_material(Color(0.08, 0.08, 0.09), 0.9)]]
-	if override == null:
-		var rim := CylinderMesh.new()
-		rim.top_radius = radius * 0.59
-		rim.bottom_radius = radius * 0.59
-		rim.height = width + 0.01
-		rim.radial_segments = 6
-		rim.rings = 1
-		parts.append([rim, TexGen.flat_material(rim_color, 0.4)])
-	for part in parts:
-		var mi := MeshInstance3D.new()
-		mi.mesh = part[0]
-		mi.material_override = part[1]
-		mi.rotation.z = PI * 0.5
-		if override:
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		root.add_child(mi)
-	return root
-
-
-## Wheels for cars that don't drive (the ghost, the menu turntable).
-func add_display_wheels(override: Material = null) -> void:
-	if spec.has("mesh"):
-		return  # wheels, tracks and road wheels are part of the model
-	var wl := Cars.wheels(spec)
-	var pos := Cars.wheel_positions(spec)
-	for i in 4:
-		var r: float = wl["rf"] if i < 2 else wl["rr"]
-		var wheel := make_wheel(r, wl["wf"] if i < 2 else wl["wr"], spec["rims"], override)
-		wheel.position = pos[i] + Vector3(0, WHEEL_Y + 0.05 + r - Cars.WHEEL_RADIUS, 0)
-		add_child(wheel)
-
-
 # --------------------------------------------------------------------------- damage
 
 ## A dentable triangle soup. Textured soups pass their uvs and material; the
@@ -585,37 +121,6 @@ func _add_deformable(parent: Node3D, verts: PackedVector3Array, colors: PackedCo
 	_deformables.append(d)
 	_rebuild(d)
 	return mi
-
-
-## A box as a flat-shaded triangle soup, so it dents like the shell.
-func _box_soup(size: Vector3, sub: Vector3i) -> PackedVector3Array:
-	var bm := BoxMesh.new()
-	bm.size = size
-	bm.subdivide_width = sub.x
-	bm.subdivide_height = sub.y
-	bm.subdivide_depth = sub.z
-	var arr := bm.get_mesh_arrays()
-	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
-	var out := PackedVector3Array()
-	for i in idx:
-		out.append(v[i])
-	return out
-
-
-func _add_part(part_name: String, zone: String, threshold: float, pos: Vector3, size: Vector3,
-		col: Color, sub: Vector3i, parent: Node3D = null) -> Node3D:
-	var root := Node3D.new()
-	root.name = part_name
-	root.position = pos
-	(parent if parent else self).add_child(root)
-	var verts := _box_soup(size, sub)
-	var colors := PackedColorArray()
-	colors.resize(verts.size())
-	colors.fill(col)
-	_add_deformable(root, verts, colors, Vector3.ZERO)
-	_parts[part_name] = {"node": root, "zone": zone, "threshold": threshold, "size": size, "detached": false}
-	return root
 
 
 ## Flat normals for a triangle soup wound so that front faces point outward.
@@ -726,15 +231,7 @@ func _detach(part_name: String, car_velocity: Vector3) -> void:
 	get_tree().create_timer(30.0).timeout.connect(rb.queue_free)
 
 
-# --------------------------------------------------------------------------- open wheelers
-
-## A box stretched from a to b (frame tubes, suspension arms, limbs).
-func _rod(parent: Node3D, a: Vector3, b: Vector3, thick: float, mat: Material) -> MeshInstance3D:
-	var mi := _box(parent, Vector3(thick, thick, a.distance_to(b)), (a + b) * 0.5, mat)
-	var d := (b - a).normalized()
-	mi.basis = Basis.looking_at(d, Vector3.FORWARD if absf(d.y) > 0.95 else Vector3.UP)
-	return mi
-
+# --------------------------------------------------------------------------- driver
 
 ## Driver's helmet with a dark visor; turns with the steering in animate().
 func _helmet(pos: Vector3, col: Color, r: float) -> void:
@@ -752,84 +249,6 @@ func _helmet(pos: Vector3, col: Color, r: float) -> void:
 	_head.add_child(mi)
 	_box(_head, Vector3(r * 1.45, r * 0.42, r * 0.7), Vector3(0, r * 0.08, -r * 0.68),
 		TexGen.flat_material(Color(0.05, 0.06, 0.1), 0.1))
-
-
-## Wheel centre height in model space for a tyre of radius r.
-func _hub_y(r: float) -> float:
-	return WHEEL_Y + r - Cars.WHEEL_RADIUS
-
-
-## Go-kart: tube frame, floor tray, plastic nose and side pods (these dent and
-## fall off), seat, side engine and a driver sitting out in the open.
-func _build_kart() -> void:
-	var base: Color = _livery("base")
-	var suit: Color = _livery("b")
-	var tube := TexGen.flat_material(Color(0.6, 0.6, 0.63), 0.4)
-	var dark := TexGen.flat_material(Color(0.06, 0.06, 0.08), 0.7)
-	var suit_mat := TexGen.flat_material(suit, 0.8)
-	var wl := Cars.wheels(spec)
-	var zf: float = wl["zf"]
-	var zr: float = wl["zr"]
-	var x: float = wl["x"]
-	var y := -0.6
-	for s in [-1.0, 1.0]:
-		_rod(self, Vector3(s * 0.26, y, zf - 0.2), Vector3(s * 0.3, y, zr + 0.12), 0.04, tube)
-		_rod(self, Vector3(s * 0.26, y, zf), Vector3(s * (x - 0.07), _hub_y(wl["rf"]), zf), 0.035, tube)
-	_rod(self, Vector3(-x + 0.1, _hub_y(wl["rr"]), zr), Vector3(x - 0.1, _hub_y(wl["rr"]), zr), 0.045, tube)
-	_box(self, Vector3(0.6, 0.03, 1.0), Vector3(0, -0.63, -0.08), dark)
-
-	# bodywork
-	_add_part("nose", "front", 0.3, Vector3(0, -0.56, zf - 0.33), Vector3(1.0, 0.15, 0.3), base, Vector3i(4, 1, 1))
-	var board := _box(self, Vector3(0.36, 0.26, 0.03), Vector3(0, -0.45, zf - 0.06), TexGen.flat_material(base, 0.5))
-	board.rotation.x = 0.45
-	var tilt := Basis(Vector3.RIGHT, 0.45)
-	_decal(TexGen.pixel_text(spec["number"], Color(0.05, 0.05, 0.07), Color(0.97, 0.97, 0.95), Color(0.05, 0.05, 0.07)),
-		Vector2(-1, 0.17), board.position + tilt * Vector3(0, 0, -0.02), tilt * FACE_FRONT)
-	for s in [-1.0, 1.0]:
-		var pod := _add_part("pod_l" if s < 0 else "pod_r", "left" if s < 0 else "right", 0.4,
-			Vector3(s * 0.5, -0.57, -0.1), Vector3(0.2, 0.15, 0.5), _livery("a"), Vector3i(1, 1, 2))
-		var sp: Array = spec["sponsor"]
-		_decal(TexGen.pixel_text(sp[0], sp[1], sp[2]), Vector2(0.4, -1), Vector3(s * 0.102, 0, 0),
-			FACE_RIGHT if s > 0 else FACE_LEFT, false, pod)
-	_add_part("bumper_r", "rear", 0.35, Vector3(0, -0.56, zr + 0.3), Vector3(1.15, 0.08, 0.08), spec["trim"],
-		Vector3i(4, 1, 1))
-
-	# seat, engine, steering
-	_box(self, Vector3(0.4, 0.06, 0.36), Vector3(0, -0.58, 0.12), dark)
-	var back := _box(self, Vector3(0.4, 0.42, 0.06), Vector3(0, -0.4, 0.32), dark)
-	back.rotation.x = 0.35
-	var metal := TexGen.flat_material(Color(0.35, 0.35, 0.38), 0.4)
-	_box(self, Vector3(0.2, 0.24, 0.26), Vector3(0.43, -0.48, 0.3), metal)
-	_box(self, Vector3(0.24, 0.06, 0.2), Vector3(0.43, -0.34, 0.3), dark)
-	_rod(self, Vector3(0.43, -0.42, 0.42), Vector3(0.3, -0.45, 0.72), 0.05, metal)
-	_box(self, Vector3(0.12, 0.12, 0.3), Vector3(0.3, -0.45, 0.82), metal)
-	_rod(self, Vector3(0, -0.57, -0.55), Vector3(0, -0.36, -0.29), 0.035, dark)
-	_steering = Node3D.new()
-	_steering.position = Vector3(0, -0.35, -0.28)
-	_steering.rotation.x = -0.65
-	add_child(_steering)
-	var rim := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.13
-	cm.bottom_radius = 0.13
-	cm.height = 0.025
-	cm.radial_segments = 8
-	cm.rings = 1
-	rim.mesh = cm
-	rim.material_override = dark
-	rim.rotation.x = PI * 0.5
-	_steering.add_child(rim)
-	_box(_steering, Vector3(0.24, 0.035, 0.03), Vector3(0, 0, 0.02), TexGen.flat_material(base, 0.5))
-
-	# driver
-	var torso := _box(self, Vector3(0.38, 0.42, 0.22), Vector3(0, -0.3, 0.22), suit_mat)
-	torso.rotation.x = 0.3
-	_box(self, Vector3(0.39, 0.06, 0.23), Vector3(0, -0.36, 0.2), TexGen.flat_material(Color(0.97, 0.97, 0.95), 0.8)).rotation.x = 0.3
-	for s in [-1.0, 1.0]:
-		_rod(self, Vector3(s * 0.1, -0.53, 0.08), Vector3(s * 0.1, -0.55, -0.48), 0.12, suit_mat)
-		_box(self, Vector3(0.1, 0.12, 0.08), Vector3(s * 0.1, -0.53, -0.53), dark)
-		_rod(self, Vector3(s * 0.2, -0.14, 0.18), Vector3(s * 0.12, -0.33, -0.26), 0.09, suit_mat)
-	_helmet(Vector3(0, 0.02, 0.27), spec.get("helmet", base), 0.15)
 
 
 # --------------------------------------------------------------------------- modelled in Blender
@@ -1014,14 +433,12 @@ func _add_mesh_part(node: Node3D, zone: String, threshold: float) -> void:
 		"size": box.size.max(Vector3(0.05, 0.05, 0.05)), "offset": box.get_center(), "detached": false}
 
 
-## Per-frame animation: the driver looks into the corner and turns the wheel
-## (kart, F1); the tank's tracks and road wheels roll with the ground speed and
-## the turret leans into the steering.
+## Per-frame animation: the F1 driver looks into the corner; the tank's tracks
+## and road wheels roll with the ground speed and the turret leans into the
+## steering.
 func animate(delta: float, forward_speed: float, steer: float) -> void:
 	if _head:
 		_head.rotation.y = lerpf(_head.rotation.y, -steer * 0.45, clampf(delta * 6.0, 0.0, 1.0))
-	if _steering:
-		_steering.rotation.z = -steer * 1.4
 	if not is_tank() or _turret == null:
 		return
 	_track_mat.uv1_offset.x = fmod(_track_mat.uv1_offset.x + forward_speed * delta / LINK, 1.0)
