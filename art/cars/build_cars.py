@@ -626,7 +626,7 @@ def truck_parts(B, c, root, M):
     for wy, n in ((c["wheel_y"][0], "F"), (c["wheel_y"][1], "R")):
         g = G()
         rod(g, (-0.8, wy, r), (0.8, wy, r), 0.14, "Trim", 8)
-        g.cyl((0.12, wy, r), "Y", 0.2, 0.3, "Chrome", segs=10)
+        g.cyl((0.12, wy, r), "Y", 0.2, 0.3, "Frame", segs=10)  # diff housing in chassis red
         g.cyl((0.12, wy - 0.16 * (1 if n == "F" else -1), r + 0.02), "Y", 0.08, 0.2, "Trim", segs=8)
         for sx in (-1, 1):
             for dy in (-0.16, 0.16):
