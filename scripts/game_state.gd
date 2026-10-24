@@ -18,6 +18,7 @@ var weather := "RANDOM"  # menu choice, see Conditions.WEATHERS
 # kept for restarts)
 var race_rain := false
 var race_time_of_day := "DAY"  # dusk and night are switched off for now
+var retro_look := true  # banded light, hard shadows, 15-bit colour (F2, RetroLook)
 
 var _records := {}
 
@@ -36,6 +37,7 @@ func _setup_input() -> void:
 	_bind("camera", [KEY_C], [JOY_BUTTON_Y], [])
 	_bind("reset", [KEY_R], [JOY_BUTTON_BACK], [])
 	_bind("repair", [KEY_T], [], [])
+	_bind("look", [KEY_F2], [], [])
 	_bind("quit", [KEY_ESCAPE], [JOY_BUTTON_START], [])
 
 
