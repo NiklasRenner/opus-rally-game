@@ -56,6 +56,15 @@ const PROFILES := {
 		"body": [1000.0, 2400.0, 0.75], "jitter": [0.07, 0.18], "gain": 1.0,
 		"turbo": 0.0, "whistle": [0.0, 0.0], "bov": 0.0, "flutter": 0.0,
 		"crackle": 0.25, "antilag": 0.1, "shift_pop": 0.3, "whine": 0.0},
+	# quad-turbo W16: sixteen small pulses blur into a deep, smooth roar with a
+	# big turbo whoosh and chuffing wastegates on lift, almost no crackle
+	"bellatrix": {"cyl": 16, "offsets": [0.0, 0.02, -0.02, 0.01, -0.01, 0.03, -0.02, 0.0, 0.02, -0.03, 0.01, 0.0, -0.01, 0.02, -0.02, 0.01],
+		"amps": [1.0, 0.9, 1.05, 0.92, 1.02, 0.88, 1.06, 0.94, 1.0, 0.9, 1.04, 0.92, 1.03, 0.89, 1.05, 0.93],
+		"idle": 900.0, "red": 6800.0, "on": [0.12, 2.3], "off": [0.2, 1.7], "knock": 0.0, "top": 2600.0,
+		"r1": [95.0, 2.0, 1.2], "r2": [330.0, 2.0, 0.6], "intake": [1100.0, 1.6, 0.4],
+		"body": [450.0, 1400.0, 0.7], "jitter": [0.04, 0.16], "gain": 1.05,
+		"turbo": 0.009, "whistle": [1200.0, 2600.0], "bov": 0.6, "flutter": 0.2,
+		"crackle": 0.15, "antilag": 0.0, "shift_pop": 0.2, "whine": 0.0},
 	# twin-turbo V12 diesel: deep and slow, the banks firing unevenly for a
 	# lumpy throb, heavy track rumble and a clank per track link
 	"tank": {"cyl": 12, "offsets": [0.0, 0.03, -0.02, 0.05, 0.0, -0.04, 0.02, 0.0, -0.03, 0.04, 0.01, -0.02],

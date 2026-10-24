@@ -61,11 +61,12 @@ race from the menu (a restart keeps the same weather).
 | Pleiad 555 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
 | Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
 | Veloce F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
+| Bellatrix 16 | Low, wide mid-engined hypercar: bright blue nose and gunmetal tail split by a chrome C on each flank, horseshoe grille, full-width red light bar, louvred engine cover | Class S with the F1: a touch slower off the line, faster flat out (about 240 km/h), heavier and with less downforce, so it slides more in fast corners but shrugs off knocks better |
 | Swamp King | Lime monster truck on huge knobbly tyres, tube frame and roll cage | Class X: bouncy long-travel suspension, rolls a lot, soaks up rough ground, big jumps |
 | KPz Pardel | Boxy Leopard-style tank in Danish angular three-tone camo, wedge turret, stabilised gun | Just for fun: slow, grippy, pivots on the spot, shrugs off most damage; skirts, lights and the turret basket get knocked off |
 
 The rally cars are kept close (a few percent) so times stay comparable; the
-F1 and tank are the odd ones out. The menu bars compare acceleration,
+F1, the hypercar and the tank are the odd ones out. The menu bars compare acceleration,
 top speed, grip and turn-in across the whole garage.
 Chassis forces (springs, brakes, steering assists) scale with each vehicle's
 mass so an 800 kg F1 car and an 1800 kg tank both ride and turn sensibly; engine
@@ -80,7 +81,8 @@ their old names.
 The cars come from `art/cars/build_cars.py`: run it in Blender's Scripting
 tab (with `build_all("<path to this folder>")`) to rebuild their .blend files
 and re-export `models/martello.glb`, `models/pleiad.glb`, `models/balear.glb`,
-`models/veloce.glb` (the F1 car) and `models/swamp.glb` (the monster truck).
+`models/veloce.glb` (the F1 car), `models/bellatrix.glb` (the hypercar) and
+`models/swamp.glb` (the monster truck).
 
 They all wear a skin painted in separate panel pieces (each side, top, front,
 back, windscreen) in `art/cars/<car>_pieces/`, combined into
