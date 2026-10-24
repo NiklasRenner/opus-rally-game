@@ -54,6 +54,7 @@ var spec: Dictionary = Cars.LIST[0]  # set before adding to the tree
 var control_enabled := false
 var manual_gears := false  # Up / Down shift; the automatic box takes over once control ends
 var rain := false  # wet weather: less grip, spray off every tyre
+var gravity := 9.81  # the stage's gravity (the Moon's is low); the assists scale with it
 var marks: SkidMarks  # set by the race scene; tyre marks are left here
 var model: CarModel
 var wheels: Array[Wheel] = []
@@ -381,7 +382,7 @@ func _arcade_assists(b3: Basis, max_steer: float) -> void:
 	var up := b3.y
 	var yaw := angular_velocity.dot(up)
 	# downforce beyond a saloon's lets winged cars corner harder at speed
-	var aero := 1.0 + DOWNFORCE * maxf(stat("downforce") - 1.0, 0.0) * speed * speed / (Cars.REF_MASS * 9.81)
+	var aero := 1.0 + DOWNFORCE * maxf(stat("downforce") - 1.0, 0.0) * speed * speed / (Cars.REF_MASS * gravity)
 	var grip: float = Surfaces.get_surface(surface)["grip"] * stat("grip") * aero
 	var fwd := -b3.z
 	var vel := linear_velocity - up * linear_velocity.dot(up)
@@ -394,7 +395,7 @@ func _arcade_assists(b3: Basis, max_steer: float) -> void:
 		# yaw rate the driver is asking for: kinematic at low speed, capped by
 		# a bit more than the surface's grip at high speed
 		var kinematic := speed * tan(max_steer) / 2.6
-		var grip_yaw := grip * 9.81 * 1.4 / maxf(speed, 3.0)
+		var grip_yaw := grip * gravity * 1.4 / maxf(speed, 3.0)
 		var target := -steer * minf(kinematic, grip_yaw)
 		var gain := YAW_ASSIST * clampf(grip / 1.3, 0.2, 1.0)
 		if absf(steer) < 0.05:

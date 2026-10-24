@@ -90,6 +90,8 @@ func _bind(action: String, keys: Array, buttons: Array, axes: Array) -> void:
 ## Resolve RANDOM weather for the next race.
 func roll_conditions() -> void:
 	race_rain = weather == "RAIN" or (weather == "RANDOM" and randf() < 0.35)
+	if Maps.get_map(map_id).get("no_rain", false):
+		race_rain = false  # no weather on the Moon
 
 
 ## Class of the chosen car; records and ghosts are only compared within one.

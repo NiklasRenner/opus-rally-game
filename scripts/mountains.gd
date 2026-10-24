@@ -16,6 +16,8 @@ const STYLES := {
 		"detail": "ash"},  # ash, not snow
 	"jungle": {"low": Color(0.18, 0.32, 0.20), "rock": Color(0.24, 0.38, 0.27), "top": Color(0.32, 0.46, 0.32),
 		"detail": "forest"},  # forest right to the top
+	"moon": {"low": Color(0.40, 0.40, 0.40), "rock": Color(0.52, 0.52, 0.51), "top": Color(0.70, 0.70, 0.68),
+		"detail": "ash"},  # bare grey highlands, layered dust
 }
 const TILE := 110.0  # metres of mountainside per repeat of the detail map
 const LIGHT := Vector3(-0.55, 0.65, 0.5)
