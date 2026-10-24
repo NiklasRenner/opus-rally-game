@@ -142,11 +142,19 @@ func _car_materials() -> Dictionary:
 		"Chrome": chrome,
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"Flap": TexGen.flat_material(spec["flaps"], 0.9),
-		"Tyre": TexGen.material(TexGen.tread(), 0.95),
+		"Tyre": TexGen.material(TexGen.chevron_tread() if spec.get("tread") == "chevron" else TexGen.tread(), 0.95),
 		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5), spec.get("rim_ring", Color(0, 0, 0, 0))), 0.4),
 		"Tail": TexGen.flat_material(Color(1.0, 0.12, 0.08), 0.3, true),
-		"Frame": TexGen.flat_material(spec.get("frame", Color(0.8, 0.08, 0.06)), 0.5),
+		"Frame": _frame_mat(),
 	}
+
+
+## Tube frame paint: the light baked into the model's vertex colours shades
+## each tube round.
+func _frame_mat() -> StandardMaterial3D:
+	var m := TexGen.flat_material(spec.get("frame", Color(0.8, 0.08, 0.06)), 0.45)
+	m.vertex_color_use_as_albedo = true
+	return m
 
 
 func _tank_materials() -> Dictionary:
