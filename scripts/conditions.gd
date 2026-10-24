@@ -96,7 +96,7 @@ static func sky(p: Dictionary) -> ImageTexture:
 
 
 ## Where the Earth hangs in the Moon's sky, as a direction.
-const EARTH_DIR := Vector3(0.3, 0.17, -0.94)  # low over the first straight
+const EARTH_DIR := Vector3(0.1, 0.28, -0.96)  # low over the first straight
 
 
 ## The Moon's sky: black, stars of a few brightnesses, the Milky Way as a
