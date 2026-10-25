@@ -19,7 +19,9 @@ const BANK_WIDTH := 44.0  # how far the banks along the road reach out from its 
 ## Rings of a bank's cross-section, as fractions of the way out from the verge.
 const BANK_RINGS := [0.0, 0.07, 0.17, 0.32, 0.5, 0.72, 1.0]
 const WALL_DROP := 6.0  # ground this far below the verge 3 m out gets a retaining wall instead of a bank
-const BUCKET := 8.0  # spatial hash for height queries on the banks
+const BUCKET := 4.0  # spatial hash for height queries on the banks
+const BUILT_FORMAT := 1  # bump when what save_built() writes changes
+const SOURCES := ["res://scripts/geo_stage.gd", "res://scripts/track_builder.gd"]  # the code the built ground comes from
 
 var track: TrackBuilder
 var data: Dictionary
@@ -49,6 +51,9 @@ var _tris := PackedVector3Array()
 var _hash := {}
 var _on_road := PackedByteArray()  # per triangle: 1 the road's, 0 a bank's
 var _tri_at := PackedInt32Array()  # per triangle: the road sample it belongs to
+var _box := PackedFloat32Array()  # per triangle: min x, max x, min z, max z (a little over)
+var _bank_arrays: Array = []  # the banks' mesh
+var _id := ""
 
 static var _cache := {}
 
@@ -57,6 +62,7 @@ static var _cache := {}
 static func open(id: String) -> GeoStage:
 	if not _cache.has(id):
 		var g := GeoStage.new()
+		g._id = id
 		g._load("res://data/stages/" + id)
 		_cache[id] = g
 	return _cache[id]
@@ -188,6 +194,12 @@ func _bilinear(grid: PackedFloat32Array, x: float, z: float) -> float:
 ## part of the road passes close by, so neighbouring banks never fold over.
 ## Builds the mesh and its collision (see also fit_grid()).
 func build_banks() -> void:
+	# (the stage is shared between loads: start from nothing each time)
+	_tris.clear()
+	_hash.clear()
+	_on_road.clear()
+	_tri_at.clear()
+	_box.clear()
 	var n := track.count()
 	var pts := track.points
 	var caps := [_bank_caps(-1.0), _bank_caps(1.0)]
@@ -270,11 +282,74 @@ func build_banks() -> void:
 		_add_tri(lift.call(la[0], ya), lift.call(ra2[0], ya), lift.call(rb2[0], yb), i, true)
 		_add_tri(lift.call(la[0], ya), lift.call(rb2[0], yb), lift.call(lb[0], yb), i, true)
 	st.generate_normals()
+	_bank_arrays = st.commit_to_arrays()
+	_add_banks()
+
+
+func _add_banks() -> void:
 	var mat := TexGen.material(TexGen.grass(), 1.0, Color(0.8, 0.84, 0.82) if track.rain else Color.WHITE)
 	mat.vertex_color_use_as_albedo = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var arrays := st.commit_to_arrays()
-	track._add_static(arrays, mat, "grass", "Banks")
+	track._add_static(_bank_arrays, mat, "grass", "Banks")
+
+
+# --------------------------------------------------------------------------- the built terrain, baked
+
+## Building the ground round the road (the banks, the grid fitted to them)
+## takes seconds, so it's baked to data/stages/<id>.built by
+## tools/bake_terrain.gd and read back instead. The bake remembers what it
+## was built from (the SOURCES, the stage data and the map entry); if any of that has changed since, it's out of date and
+## the ground is built afresh (and a warning says to bake again).
+
+## What the built ground depends on, as one string. Without the scripts'
+## source (an exported game may not carry it) only the data and the map.
+func built_key(with_source := true) -> String:
+	var parts := PackedStringArray([str(BUILT_FORMAT), _id, var_to_str(track.map)])
+	parts.append(FileAccess.get_md5("res://data/stages/%s.bin" % _id))
+	var texts := ["res://data/stages/%s.json" % _id]
+	if with_source:
+		texts.append_array(SOURCES)
+	for f in texts:
+		# (line endings vary with the checkout)
+		parts.append(FileAccess.get_file_as_string(f).replace("\r", "").md5_text())
+	return "|".join(parts).md5_text()
+
+
+## The baked ground if there is one and it's up to date, else {}.
+func load_built() -> Dictionary:
+	var path := "res://data/stages/%s.built" % _id
+	if not FileAccess.file_exists(path):
+		return {}
+	var f := FileAccess.open_compressed(path, FileAccess.READ, FileAccess.COMPRESSION_ZSTD)
+	if f == null:
+		return {}
+	var built: Variant = f.get_var()
+	if not (built is Dictionary):
+		return {}
+	var source := SOURCES.all(func(src): return FileAccess.file_exists(src))
+	if built.get("key" if source else "data_key", "") != built_key(source):
+		push_warning("%s is out of date: building the ground afresh (bake it again with tools/bake_terrain.gd)" % path)
+		return {}
+	_bank_arrays = built["banks"]
+	_tris = built["tris"]
+	_hash = built["hash"]
+	_on_road = built["on_road"]
+	_tri_at = built["tri_at"]
+	_box = built["box"]
+	_add_banks()
+	return built
+
+
+## Write the ground just built (the grid's heights and its mesh) out for
+## load_built().
+func save_built(heights: PackedFloat32Array, terrain: Array) -> Error:
+	var path := ProjectSettings.globalize_path("res://data/stages/%s.built" % _id)
+	var f := FileAccess.open_compressed(path, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+	if f == null:
+		return FileAccess.get_open_error()
+	f.store_var({"key": built_key(), "data_key": built_key(false), "heights": heights, "terrain": terrain, "banks": _bank_arrays, "tris": _tris,
+		"hash": _hash, "on_road": _on_road, "tri_at": _tri_at, "box": _box})
+	return OK
 
 
 ## Fit TrackBuilder's grid to the banks (its heights, in place): a grid
@@ -301,44 +376,56 @@ func fit_grid(heights: PackedFloat32Array) -> PackedByteArray:
 	# a cell part on the road and part off it can still rise through the road
 	# from a corner up a cut bank or on another leg of the road: pull those
 	# corners down until it stays under the road wherever the road covers it
+	# (what covers each cell's sample points doesn't change from pass to
+	# pass, so it's looked up once, and only for cells the road reaches)
+	var road_cells := PackedInt32Array()
+	var road_covers: Array[PackedVector3Array] = []
+	for gz in gn - 1:
+		for gx in gn - 1:
+			var k := gz * gn + gx
+			if not (under[k] or under[k + 1] or under[k + gn] or under[k + gn + 1]):
+				continue
+			# no road within reach of any corner, none in the cell (half its
+			# diagonal, the widest road's half and half a sample apart)
+			if minf(minf(track._dist[k], track._dist[k + 1]), minf(track._dist[k + gn], track._dist[k + gn + 1])) > 16.0:
+				continue
+			var covers := PackedVector3Array()
+			covers.resize(25)
+			var any_road := false
+			for oi in 25:
+				var c := _cover(near_x0 + (gx + 0.1 + 0.2 * (oi % 5)) * cell, near_z0 + (gz + 0.1 + 0.2 * (oi / 5)) * cell)
+				covers[oi] = c
+				any_road = any_road or c.x > 0.5
+			if any_road:
+				road_cells.append(k)
+				road_covers.append(covers)
 	for _pass in 3:
-		for gz in gn - 1:
-			for gx in gn - 1:
-				var k := gz * gn + gx
-				var corners := [k, k + 1, k + gn, k + gn + 1]
-				if not (under[k] or under[k + 1] or under[k + gn] or under[k + gn + 1]):
+		for ci in road_cells.size():
+			var k := road_cells[ci]
+			var covers := road_covers[ci]
+			var corners := [k, k + 1, k + gn, k + gn + 1]
+			# (only corners under the banks: one out on the open hillside
+			# would leave a dip in it, and under a bank it doesn't show)
+			var free: Array = corners.filter(func(c): return under[c] and not on_road[c])
+			if free.is_empty():
+				free = corners.filter(func(c): return on_road[c])  # two legs of the road at different heights
+			for oi in 25:
+				var c := covers[oi]
+				if c.x < 0.5:
 					continue
-				# (only corners under the banks: one out on the open hillside
-				# would leave a dip in it, and under a bank it doesn't show)
-				var free: Array = corners.filter(func(c): return under[c] and not on_road[c])
-				if free.is_empty():
-					free = corners.filter(func(c): return on_road[c])  # two legs of the road at different heights
-				var covers: Array[Vector3] = []
-				var pokes := false
-				for oi in 25:
-					var o := Vector2(0.1 + 0.2 * (oi % 5), 0.1 + 0.2 * (oi / 5))
-					var c := _cover(near_x0 + (gx + o.x) * cell, near_z0 + (gz + o.y) * cell)
-					covers.append(c)
-					pokes = pokes or (c.x > 0.5 and _cell_height(heights, k, o.x, o.y) > c.y - 0.3)
-				if not pokes:
+				var o := Vector2(0.1 + 0.2 * (oi % 5), 0.1 + 0.2 * (oi / 5))
+				var over := _cell_height(heights, k, o.x, o.y) - (c.y - 0.3)
+				if over <= 0.0:
 					continue
-				for oi in 25:
-					var o := Vector2(0.1 + 0.2 * (oi % 5), 0.1 + 0.2 * (oi / 5))
-					var c := covers[oi]
-					if c.x < 0.5:
-						continue
-					var over := _cell_height(heights, k, o.x, o.y) - (c.y - 0.3)
-					if over <= 0.0:
-						continue
-					# the free corners carry part of the point's height each; lower
-					# them all by enough to bring it under
-					var w := 0.0
-					for f in free:
-						w += _corner_weight(corners.find(f), o.x, o.y)
-					if w < 0.5:
-						continue
-					for f in free:
-						heights[f] -= over / w
+				# the free corners carry part of the point's height each; lower
+				# them all by enough to bring it under
+				var w := 0.0
+				for f in free:
+					w += _corner_weight(corners.find(f), o.x, o.y)
+				if w < 0.5:
+					continue
+				for f in free:
+					heights[f] -= over / w
 	var hidden := PackedByteArray()
 	hidden.resize(gn * gn)
 	for gz in gn - 1:
@@ -494,6 +581,8 @@ func _add_tri(a: Vector3, b: Vector3, c: Vector3, at: int, road := false) -> voi
 	_tris.append_array(PackedVector3Array([a, b, c]))
 	_on_road.append(1 if road else 0)
 	_tri_at.append(at)
+	_box.append_array(PackedFloat32Array([minf(a.x, minf(b.x, c.x)) - 0.05, maxf(a.x, maxf(b.x, c.x)) + 0.05,
+		minf(a.z, minf(b.z, c.z)) - 0.05, maxf(a.z, maxf(b.z, c.z)) + 0.05]))
 	var x0 := floori(minf(a.x, minf(b.x, c.x)) / BUCKET)
 	var x1 := floori(maxf(a.x, maxf(b.x, c.x)) / BUCKET)
 	var z0 := floori(minf(a.z, minf(b.z, c.z)) / BUCKET)
@@ -518,6 +607,9 @@ func surface_height(x: float, z: float) -> float:
 func _cover(x: float, z: float) -> Vector3:
 	var best := Vector3(-1.0, -INF, 0.0)
 	for t in _hash.get(Vector2i(floori(x / BUCKET), floori(z / BUCKET)), PackedInt32Array()):
+		var bi: int = t * 4
+		if x < _box[bi] or x > _box[bi + 1] or z < _box[bi + 2] or z > _box[bi + 3]:
+			continue
 		var a := _tris[t * 3]
 		var b := _tris[t * 3 + 1]
 		var c := _tris[t * 3 + 2]

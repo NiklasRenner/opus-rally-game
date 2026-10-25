@@ -17,6 +17,7 @@ const WIDTH := {"asphalt": 10.0, "gravel": 8.5, "wet": 10.0, "ice": 9.0, "grass"
 ## Current map definition (see maps.gd), set before build().
 var map: Dictionary = Maps.LIST[0]
 var rain := false  # wet weather: shiny dark roads, darker grass
+var bake := false  # a geo stage: build its ground afresh and bake it (see GeoStage.load_built)
 var _control_points: Array = []
 var _sections: Array = []
 var _elevation_keys: Array = []
@@ -438,6 +439,12 @@ func _build_terrain() -> void:
 	noise.frequency = 0.007
 	noise.fractal_octaves = 3
 	_heights.resize(gn * gn)
+	if _geo and not bake:
+		var built := _geo.load_built()
+		if not built.is_empty():
+			_heights = built["heights"]
+			_add_static(built["terrain"], _terrain_material(), _offroad(), "Terrain")
+			return
 	var alpine := _geo.heights() if _geo else PackedFloat32Array()
 	for z in gn:
 		for x in gn:
@@ -476,27 +483,44 @@ func _build_terrain() -> void:
 		hidden = _geo.fit_grid(_heights)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var cols := PackedColorArray()  # per grid point, worked out the first time it's drawn
+	cols.resize(gn * gn)
+	var have := PackedByteArray()
+	have.resize(gn * gn)
+	var ids := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 0), Vector2i(1, 1), Vector2i(0, 1)]
 	for z in gn - 1:
 		for x in gn - 1:
 			if _geo and not _geo.cell_drawn(x, z):
 				continue  # out past the band round the road: the distant mesh
 			if _geo and hidden[z * gn + x]:
 				continue  # under the banks
-			var ids := [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x + 1, z + 1),
-				Vector2i(x, z), Vector2i(x + 1, z + 1), Vector2i(x, z + 1)]
-			for g in ids:
-				var k: int = g.y * gn + g.x
+			for o in ids:
+				var gx: int = x + o.x
+				var gz: int = z + o.y
+				var k := gz * gn + gx
 				var h := _heights[k]
-				var wp := Vector3(origin.x + g.x * CELL, h, origin.y + g.y * CELL)
-				st.set_color(_alpine_color(g.x, g.y) if _geo else _terrain_color(h - _road_h[k] * 0.7, k))
+				if not have[k]:
+					cols[k] = _alpine_color(gx, gz) if _geo else _terrain_color(h - _road_h[k] * 0.7, k)
+					have[k] = 1
+				var wp := Vector3(origin.x + gx * CELL, h, origin.y + gz * CELL)
+				st.set_color(cols[k])
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
+	var arrays := st.commit_to_arrays()
+	_add_static(arrays, _terrain_material(), _offroad(), "Terrain")
+	if _geo and bake:
+		var err := _geo.save_built(_heights, arrays)
+		if err != OK:
+			push_error("couldn't bake the terrain: %s" % error_string(err))
+
+
+func _terrain_material() -> StandardMaterial3D:
 	var ground_tex: Texture2D = {"moon": TexGen.road("dust"), "city": TexGen.concrete()}.get(_theme(), TexGen.grass())
 	var mat := TexGen.material(ground_tex, 1.0, Color(0.8, 0.84, 0.82) if rain else Color.WHITE)
 	mat.vertex_color_use_as_albedo = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_add_static(st.commit_to_arrays(), mat, _offroad(), "Terrain")
+	return mat
 
 
 ## Is the ground beside this part of the lap (a fraction) kept level? The
