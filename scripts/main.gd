@@ -14,6 +14,9 @@ const SPLITS := 3  # split times on the way along a point-to-point stage
 const FALL_DEPTH := 7.0  # this far below the road it last drove on, a car has gone over the edge
 const FALL_TIME := 1.3  # seconds of falling to watch before it's put back on the road
 const BLOW_UP_TIME := 0.35  # seconds of the car blowing up to watch before the flag closes on a restart
+const ROAD_MARGIN := 1.0  # beyond the road edge, the car still counts as on the road
+const RESET_BACK := 2  # road samples behind where the car left the road that a reset puts it
+const RESET_HOLD := 3.0  # seconds a reset car sits parked on the handbrake, race clock running
 
 var track: TrackBuilder
 var car: RallyCar
@@ -47,7 +50,8 @@ var _next_gate := 0
 var _halfway := false  # been half way round this lap, the rule while checkpoints are off
 var _last_pos := Vector3.ZERO
 var _cliffs := false  # the stage has drops a car can go over (see _check_fall)
-var _on_road := -1  # road sample the car was last on, where a fall puts it back
+var _on_road := -1  # road sample the car was last on, where a reset or a fall puts it back
+var _reset_hold := 0.0  # seconds left parked after a reset
 var _fall_timer := -1.0
 var _message_timer := 0.0
 var _split_timer := 0.0
@@ -88,7 +92,8 @@ func _ready() -> void:
 	car.name = "Car"
 	car.spec = Cars.get_car(Game.car_id)
 	add_child(car)
-	car.place(track.get_spawn_transform(track.wrap_index(track.start_index - 4)))
+	_on_road = track.wrap_index(track.start_index - 4)
+	car.place(track.get_spawn_transform(_on_road))
 	car.impact.connect(_on_impact)
 	car.rain = Game.race_rain
 	car.gravity = gravity
@@ -242,9 +247,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		restart()
 
 
-## Put the car back on the road: where it is, or at road sample `at`.
+## Put the car back on the road a little behind where it last left it (or at
+## road sample `at`), stopped, and hold it there on the handbrake for RESET_HOLD
+## seconds with the clock running. Coming back where it left the road, not
+## where it is now, means a reset can't be used to cut a corner.
 func reset_car(at := -1) -> void:
-	var idx := at if at >= 0 else track.nearest_index(car.global_position, _progress_index)
+	if not _racing or finished or _reset_hold > 0.0:
+		return
+	var idx := at
+	if idx < 0:
+		idx = track.wrap_index(_on_road - RESET_BACK) if _on_road >= 0 else track.nearest_index(car.global_position, _progress_index)
 	# never past a checkpoint the car hasn't been through, so a reset can't skip one
 	if _gate_missed(idx) >= 0:
 		idx = track.wrap_index(_gates[_next_gate] - 3)
@@ -253,7 +265,12 @@ func reset_car(at := -1) -> void:
 		idx = clampi(idx, track.start_index, track.finish_index - 3)
 	var xf := track.get_spawn_transform(idx)
 	car.place(xf)
+	car.control_enabled = false
+	_reset_hold = RESET_HOLD
 	_last_pos = xf.origin
+	_progress_index = idx
+	_on_road = idx
+	_fall_timer = -1.0
 	cam.snap()
 
 
@@ -307,8 +324,18 @@ func _physics_process(delta: float) -> void:
 	_record(delta)
 	_update_ghost()
 
+	if _reset_hold > 0.0:
+		_reset_hold -= delta
+		if _reset_hold > 0.0:
+			_flash("RESET %d" % ceili(_reset_hold), 0.1)
+		else:
+			car.control_enabled = true
+			_flash("GO!", 0.8)
+
 	var pos := car.global_position
 	var idx := track.nearest_index(pos, _progress_index)
+	if _fall_timer < 0.0 and _on_the_road(pos, idx):
+		_on_road = idx
 	if track.frac_of(idx) > 0.45 and track.frac_of(idx) < 0.55:
 		_halfway = true
 	# laps count only through every checkpoint in order and then the finish gate
@@ -409,9 +436,6 @@ func _split() -> void:
 func _check_fall(delta: float, idx: int) -> void:
 	var pos := car.global_position
 	if _fall_timer < 0.0:
-		if track.distance_to_road(pos, idx) < track.widths[idx] * 0.5 + TrackBuilder.VERGE + 1.0 \
-				and absf(pos.y - track.points[idx].y) < 3.0:
-			_on_road = idx
 		if _on_road >= 0 and pos.y < track.points[_on_road].y - FALL_DEPTH:
 			_fall_timer = FALL_TIME
 			_flash("OFF THE CLIFF!", FALL_TIME + 0.4)
@@ -419,7 +443,20 @@ func _check_fall(delta: float, idx: int) -> void:
 		_fall_timer -= delta
 		if _fall_timer <= 0.0:
 			_fall_timer = -1.0
-			reset_car(_on_road)
+			reset_car()
+
+
+## Is the car on the road at road sample `idx`: over the tarmac (or gravel), not
+## out on the verge, with a wheel down on it rather than flying over it?
+func _on_the_road(pos: Vector3, idx: int) -> bool:
+	if track.distance_to_road(pos, idx) > track.widths[idx] * 0.5 + ROAD_MARGIN:
+		return false
+	if absf(pos.y - track.points[idx].y) > 3.0:
+		return false
+	for w in car.wheels:
+		if w.grounded:
+			return true
+	return false
 
 
 func _finish() -> void:
