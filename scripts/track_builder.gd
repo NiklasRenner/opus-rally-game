@@ -44,7 +44,9 @@ var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
 var _crater_list: Array = []  # [x, z, radius, depth] on the Moon
 var _road_i := PackedInt32Array()  # per terrain cell: the nearest road sample
 var _rng := RandomNumberGenerator.new()
-var _sample_cells := {}  # road samples by 16 m cell, for clear_of_road()
+var _sample_cells := {}  # road samples by 16 m cell, for clear_of_road() and nearest_index()
+var _last_near_pos := Vector3(INF, INF, INF)  # nearest_index()'s last answer
+var _last_near := 0
 var _geo: GeoStage  # a stage built from a real road and its terrain ("geo" maps)
 
 
@@ -184,15 +186,36 @@ func get_spawn_transform(i: int) -> Transform3D:
 ## Nearest centreline sample. Searches a window around `hint` first and
 ## falls back to a full scan when the car is far away (off-road, reset).
 func nearest_index(pos: Vector3, hint: int) -> int:
+	if pos == _last_near_pos:
+		return _last_near  # scenery placement asks twice running for the same point
+	_last_near_pos = pos
+	_last_near = _nearest_index(pos, hint)
+	return _last_near
+
+
+func _nearest_index(pos: Vector3, hint: int) -> int:
 	var n := points.size()
-	var best := hint
-	var best_d := INF
-	for o in range(-25, 26):
-		var i := wrap_index(hint + o)
-		var d := Vector2(points[i].x - pos.x, points[i].z - pos.z).length_squared()
-		if d < best_d:
-			best_d = d
-			best = i
+	var best := _nearest_around(pos, hint)
+	var best_d := _flat_d2(pos, best)
+	if best_d > 30.0 * 30.0 and not _dist.is_empty():
+		# far from the hint: the nearest sample is no further than the one
+		# nearest the terrain cell's centre, so only look that far round
+		var k := _grid_index(pos.x, pos.z)
+		var origin := _grid_origin()
+		var c := Vector2(origin.x + (k % _grid_n) * CELL, origin.y + (k / _grid_n) * CELL)
+		var reach := _dist[k] + c.distance_to(Vector2(pos.x, pos.z))
+		if reach < 1e8:
+			_sample_hash()
+			var key := Vector2i(floori(pos.x / 16.0), floori(pos.z / 16.0))
+			var r := int(ceil(reach / 16.0))
+			for dz in range(-r, r + 1):
+				for dx in range(-r, r + 1):
+					for j in _sample_cells.get(key + Vector2i(dx, dz), PackedInt32Array()):
+						var d := _flat_d2(pos, j)
+						if d < best_d:
+							best_d = d
+							best = j
+			return best
 	if best_d > 30.0 * 30.0:
 		for i in n:
 			var d := Vector2(points[i].x - pos.x, points[i].z - pos.z).length_squared()
@@ -200,6 +223,22 @@ func nearest_index(pos: Vector3, hint: int) -> int:
 				best_d = d
 				best = i
 	return best
+
+
+func _nearest_around(pos: Vector3, hint: int) -> int:
+	var best := hint
+	var best_d := INF
+	for o in range(-25, 26):
+		var i := wrap_index(hint + o)
+		var d := _flat_d2(pos, i)
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+func _flat_d2(pos: Vector3, i: int) -> float:
+	return Vector2(points[i].x - pos.x, points[i].z - pos.z).length_squared()
 
 
 func distance_to_road(pos: Vector3, idx: int) -> float:
@@ -794,12 +833,7 @@ func _build_barriers() -> void:
 ## Is p (horizontally) at least `margin` metres off the road, every part
 ## of it, not just the nearest stretch?
 func clear_of_road(p: Vector3, margin: float) -> bool:
-	if _sample_cells.is_empty():
-		for j in points.size():
-			var key := Vector2i(floori(points[j].x / 16.0), floori(points[j].z / 16.0))
-			if not _sample_cells.has(key):
-				_sample_cells[key] = PackedInt32Array()
-			_sample_cells[key].append(j)
+	_sample_hash()
 	var key := Vector2i(floori(p.x / 16.0), floori(p.z / 16.0))
 	for dz in range(-1, 2):
 		for dx in range(-1, 2):
@@ -808,6 +842,15 @@ func clear_of_road(p: Vector3, margin: float) -> bool:
 				if d < widths[j] * 0.5 + margin:
 					return false
 	return true
+
+
+func _sample_hash() -> void:
+	if _sample_cells.is_empty():
+		for j in points.size():
+			var key := Vector2i(floori(points[j].x / 16.0), floori(points[j].z / 16.0))
+			if not _sample_cells.has(key):
+				_sample_cells[key] = PackedInt32Array()
+			_sample_cells[key].append(j)
 
 
 ## Lowest ground under a box at xf (its footprint's corners and middle).
@@ -1313,10 +1356,14 @@ func _build_trees() -> void:
 
 ## Queue a placed scenery mesh for batching (and free the temporary node).
 func _scatter_add(mi: MeshInstance3D) -> void:
-	if not _scatter.has(mi.mesh):
-		_scatter[mi.mesh] = []
-	_scatter[mi.mesh].append(mi.transform)
+	_scatter_xf(mi.mesh, mi.transform)
 	mi.free()
+
+
+func _scatter_xf(mesh: Mesh, xf: Transform3D) -> void:
+	if not _scatter.has(mesh):
+		_scatter[mesh] = []
+	_scatter[mesh].append(xf)
 
 
 func _scatter_flush(parent: Node3D) -> void:
