@@ -254,7 +254,7 @@ class Body:
         return self.keys()[-1][0]
 
     def arch_r(self):
-        return self.c["wheel_r"] + 0.07
+        return self.c["wheel_r"] + self.c.get("arch_gap", 0.07)
 
     def half_width(self, y, flares=True):
         c = self.c
@@ -435,17 +435,18 @@ def saloon_parts(B, c, root, M):
     hwf, hwr = body.half_width(fy - 0.15), body.half_width(ry + 0.15)
     # bumpers: chamfered blocks wrapping the nose and tail
     bt = c["bumper_top"]
+    lo = c.get("bumper_lift", 0.0)  # raised cars carry their bumpers higher off the road
     g = G()
     g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
-        (hwf + 0.015, fy - 0.42, 0.2), (hwf + 0.015, fy - 0.42, bt[0]), (hwf * 0.9, fy + 0.03, 0.22),
-        (hwf * 0.9, fy + 0.03, bt[0] - 0.02), (hwf * 0.98, fy - 0.12, bt[0]), (hwf * 0.95, fy - 0.05, 0.19)]], "Livery")
-    g.box((0, fy + 0.035, 0.27), (hwf * 1.3, 0.02, 0.08), "Trim")  # splitter lip
-    B.make("Bumper_F", g, (0, fy - 0.15, 0.36), hull, M)
+        (hwf + 0.015, fy - 0.42, 0.2 + lo), (hwf + 0.015, fy - 0.42, bt[0]), (hwf * 0.9, fy + 0.03, 0.22 + lo),
+        (hwf * 0.9, fy + 0.03, bt[0] - 0.02), (hwf * 0.98, fy - 0.12, bt[0]), (hwf * 0.95, fy - 0.05, 0.19 + lo)]], "Livery")
+    g.box((0, fy + 0.035, 0.27 + lo), (hwf * 1.3, 0.02, 0.08), "Trim")  # splitter lip
+    B.make("Bumper_F", g, (0, fy - 0.15, 0.36 + lo), hull, M)
     g = G()
     g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
-        (hwr + 0.015, ry + 0.38, 0.27), (hwr + 0.015, ry + 0.38, bt[1]), (hwr * 0.92, ry - 0.03, 0.33),
-        (hwr * 0.92, ry - 0.03, bt[1] - 0.02), (hwr * 0.98, ry + 0.1, bt[1]), (hwr * 0.95, ry + 0.05, 0.3)]], "Livery")
-    B.make("Bumper_R", g, (0, ry + 0.15, 0.36), hull, M)
+        (hwr + 0.015, ry + 0.38, 0.27 + lo), (hwr + 0.015, ry + 0.38, bt[1]), (hwr * 0.92, ry - 0.03, 0.33 + lo),
+        (hwr * 0.92, ry - 0.03, bt[1] - 0.02), (hwr * 0.98, ry + 0.1, bt[1]), (hwr * 0.95, ry + 0.05, 0.3 + lo)]], "Livery")
+    B.make("Bumper_R", g, (0, ry + 0.15, 0.36 + lo), hull, M)
 
     # mirrors on the doors just behind the A-pillar
     my = c["mirror_y"]
@@ -777,6 +778,74 @@ def ibiza_wing(g, body):
     for sx in (-1, 1):
         g.hull([(sx * x, y + dy, z + dz) for x in (0.66, 0.69) for (dy, dz) in [
             (0.04, -0.03), (0.04, 0.05), (-0.42, -0.1), (-0.42, 0.0), (-0.2, -0.12)]], "Livery")
+
+
+def niva_lamps(g, body):
+    # round headlamps either side of the grille on the flat nose
+    y = body.front() - 0.005
+    for sx in (-1, 1):
+        g.cyl((sx * 0.57, y, 0.82), "Y", 0.1, 0.03, "Chrome", segs=10)
+        g.cyl((sx * 0.57, y + 0.016, 0.82), "Y", 0.085, 0.012, "Lamp", segs=10)
+
+
+def niva_details(g, body):
+    """Tail lamp clusters standing proud of the tail, a chrome tailgate
+    handle and plate lamp, a tow hook, wipers front and back and chrome
+    door handles."""
+    ry = body.rear()
+    for sx in (-1, 1):
+        # chrome-rimmed cluster: red tail and brake lamp outboard, amber
+        # indicator and a white reversing lamp inboard
+        g.box((sx * 0.63, ry - 0.01, 0.68), (0.34, 0.03, 0.15), "Chrome")
+        g.box((sx * 0.7, ry - 0.025, 0.68), (0.17, 0.02, 0.12), "Tail")
+        g.box((sx * 0.555, ry - 0.025, 0.68), (0.1, 0.02, 0.12), "Lamp")
+        # reflector on the bumper corner
+        g.box((sx * 0.68, ry - 0.06, 0.5), (0.1, 0.02, 0.04), "Tail")
+    g.box((0, ry - 0.015, 0.765), (0.16, 0.03, 0.03), "Chrome")  # tailgate handle over the plate
+    g.box((0, ry - 0.02, 0.6), (0.08, 0.03, 0.02), "Lamp")  # plate lamp
+    rod(g, (0, ry + 0.05, 0.36), (0, ry - 0.16, 0.36), 0.05, "Steel")  # tow hook
+    g.cyl((0, ry - 0.16, 0.39), "Z", 0.04, 0.06, "Steel", segs=8)
+
+    def gate(z):  # tailgate glass surface, a hair outside it
+        return lerp(-1.84, -1.76, (z - 1.04) / 0.56) - 0.012
+    rod(g, (0.0, gate(1.1), 1.1), (-0.32, gate(1.44), 1.44), 0.02, "Trim")
+    (y0, z0), (y1, z1) = body.c["screen"]
+    for x in (-0.38, 0.22):
+        t = 0.08
+        a = (x, lerp(y0, y1, t) + 0.01, lerp(z0, z1, t) + 0.012)
+        b = (x + 0.42, lerp(y0, y1, 0.16) + 0.01, lerp(z0, z1, 0.16) + 0.012)
+        rod(g, a, b, 0.02, "Trim")
+    for sx in (-1, 1):
+        x = body_x(body, -0.36, 0.95)
+        g.box((sx * (x + 0.012), -0.36, 0.95), (0.025, 0.13, 0.035), "Chrome")
+
+
+def niva_wing(g, body):
+    # rally wedge on the back of the roof, kicking up over the tailgate
+    y = -1.3
+    z = body.heights(y)[5]
+    g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.6, 0.0, -0.01), (0.6, 0.0, 0.02), (0.66, -0.66, 0.22), (0.66, -0.62, 0.0), (0.66, -0.68, 0.18)]], "Livery")
+
+
+def niva_aux_lamps(g, body):
+    # two big round spot lamps on a bar across the front bumper
+    y = body.front() + 0.1
+    z = body.c["bumper_top"][0] + 0.07
+    g.box((0, y - 0.06, z - 0.06), (0.9, 0.04, 0.03), "Trim")
+    for sx in (-1, 1):
+        g.cyl((sx * 0.37, y, z), "Y", 0.1, 0.07, "Trim", segs=12)
+        g.cyl((sx * 0.37, y + 0.04, z), "Y", 0.09, 0.012, "Lamp", segs=12)
+    return (0, y, z)
+
+
+def niva_antenna(g, body):
+    # tall whip antenna on the roof
+    y = -1.05
+    z = body.heights(y)[5]
+    g.box((0.3, y, z + 0.02), (0.06, 0.08, 0.04), "Trim")
+    rod(g, (0.3, y, z + 0.03), (0.3, y - 0.06, z + 0.8), 0.016, "Trim")
+    return (0.3, y, z + 0.3)
 
 
 def celica_extras(g, body):
@@ -1216,22 +1285,41 @@ def raid_parts(B, c, root, M):
         g.box((s * (x + 0.11), my - 0.065, mh + 0.105), (0.11, 0.01, 0.07), "Chrome")
         B.make("Mirror_" + n, g, (s * (x + 0.1), my, mh + 0.1), hull, M)
 
-    # spare wheel lying flat on a low rack on the roof, two straps over it
+    # spare wheel, the same size as the road wheels, lying flat on a low
+    # rack on the roof with two straps over it
     sy = c["spare_y"]
     sz = body.heights(sy)[5] + 0.06
+    r, w = c["wheel_r"], c["wheel_w"]
     g = G()
     for sx in (-1, 1):
         g.box((sx * 0.42, sy, sz - 0.03), (0.04, 0.9, 0.04), "Trim")
     for dy in (-0.32, 0.32):
         g.box((0, sy + dy, sz - 0.03), (0.88, 0.04, 0.04), "Trim")
-    g.cyl((0, sy, sz + 0.11), "Z", 0.37, 0.22, "Trim", segs=16)
-    g.cyl((0, sy, sz + 0.11), "Z", 0.22, 0.225, "Steel", segs=12)
+    top = sz + w + 0.006
     for sx in (-1, 1):
         x = sx * 0.13
-        g.box((x, sy, sz + 0.23), (0.06, 0.74, 0.012), "Livery")
+        g.box((x, sy, top), (0.06, 2 * r + 0.02, 0.012), "Livery")
         for s in (-1, 1):
-            g.box((x, sy + s * 0.375, sz + 0.11), (0.06, 0.012, 0.26), "Livery")
-    B.make("RoofSpare", g, (0, sy, sz + 0.11), hull, M)
+            g.box((x, sy + s * (r + 0.006), sz + w / 2), (0.06, 0.012, w + 0.02), "Livery")
+    spare = B.make("RoofSpare", g, (0, sy, sz + w / 2), hull, M)
+    # built like a road wheel with its rim face outwards (+X), then laid on
+    # its side so the rim faces up
+    g = G()
+    segs = c.get("tyre_segs", 14)
+    verts, faces, keys = [], [], []
+    for i in range(segs):
+        a = math.tau * i / segs
+        for dx in (-w / 2, w / 2):
+            verts.append((dx, sy + r * math.cos(a), sz + w / 2 + r * math.sin(a)))
+    for i in range(segs):
+        j = (i + 1) % segs
+        faces.append((2 * i, 2 * j, 2 * j + 1, 2 * i + 1))
+        keys.append("Tyre")
+    faces += [tuple(2 * i + 1 for i in range(segs)), tuple(reversed([2 * i for i in range(segs)]))]
+    keys += ["Rim", "Trim"]
+    g.faces(verts, faces, keys)
+    wheel = B.make("SpareWheel", g, (0, sy, sz + w / 2), spare, M)
+    wheel.rotation_euler = (0.0, -math.pi / 2, 0.0)
 
     # rear wing: a black plane up on tall end plates that rise from the boot
     # lid towards the back; the plates carry the sponsor disc (painted)
@@ -1303,6 +1391,19 @@ CARS = [
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
          wing=ibiza_wing, screen=((0.95, 0.88), (0.3, 1.32))),
+    dict(name="Niva", file="niva", paint=(0.62, 0.07, 0.06), flaps=(0.06, 0.06, 0.06), rims=(0.95, 0.95, 0.93),
+         hw=0.79, roof_hw=0.66, flare=0.06, box_flare=True, bottom=0.42, nose_round=0.95, arch_gap=0.1,
+         z_span=1.85,  # tall enough for the roof wedge
+         # short Soviet 4x4: high flat bonnet, upright screen, tall flat roof
+         # and a sheer tailgate, perched high over chunky tyres
+         profile=[(1.87, 0.6, 0.56), (1.86, 0.95, 0.91), (1.8, 0.99, 0.95), (0.6, 1.04, 1.0), (0.22, 1.56, 1.03),
+                  (-1.6, 1.62, 1.05), (-1.76, 1.6, 1.05), (-1.84, 1.04, 1.02), (-1.87, 0.6, 0.56)],
+         glass_y=(0.58, -1.45), pillars=[-0.48], b_pillar=-0.48, mirror_y=0.5,
+         wheel_y=(1.12, -1.08), wheel_x=0.74, wheel_r=0.36, wheel_w=0.25,
+         bumper_top=(0.56, 0.58), bumper_lift=0.16, exhaust_x=-0.5, pod=0, wing_y=-1.3,
+         body_extras=[niva_lamps, niva_details], wing=niva_wing,
+         bolt_ons=[("AuxLamps", niva_aux_lamps), ("Antenna", niva_antenna)],
+         screen=((0.6, 1.04), (0.22, 1.56))),
     dict(name="Celica", file="celica", paint=(0.95, 0.95, 0.93), flaps=(0.8, 0.1, 0.08), rims=(0.95, 0.95, 0.93),
          hw=0.84, roof_hw=0.6, flare=0.07, bottom=0.19, nose_round=0.82,
          # '92 four-wheel-drive liftback coupe: short low nose, raked screen,
@@ -1363,7 +1464,7 @@ CARS = [
                   (-0.8, 1.5, 1.02), (-1.55, 1.13, 1.05), (-2.05, 1.12, 1.06), (-2.2, 0.98, 0.92)],
          glass_y=(0.95, -1.35), pillars=[-0.2, -0.95], b_pillar=-0.2, mirror_y=0.85,
          wheel_y=(1.38, -1.32), wheel_x=0.84, wheel_r=0.37, wheel_w=0.3,
-         bumper_top=(0.62, 0.7), flap_z=(0.06, 0.62), spare_y=-0.3, wing_y=-1.9,
+         bumper_top=(0.62, 0.7), flap_z=(0.06, 0.62), spare_y=-0.3, wing_y=-1.9, back_screen=(-0.8, -1.55),
          wing=raid_wing, screen=((1.0, 0.97), (0.15, 1.5))),
 ]
 
