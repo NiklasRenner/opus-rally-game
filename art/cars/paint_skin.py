@@ -885,12 +885,117 @@ def paint_cavalier(sk):
     finish(sk, wheels=(1.45, -1.4))
 
 
+# --------------------------------------------------------------------------- the raid car
+
+def paint_degaulle(sk):
+    """Works desert-raid yellow: red, white and blue tricolour stripes running
+    diagonally down from the A-pillar across the front door into a blue sill
+    stripe, white 203 number panels, big blue cigarette-style lettering on the
+    rear doors and bonnet, a red oil-company panel on the nose and a sponsor
+    disc on each wing end plate (made-up DROMA, ORPIX, PIXELIN, PIXTRONIC)."""
+    yellow = rgb(1.0, 0.8, 0.05)
+    shut = rgb(0.62, 0.48, 0.04)
+    blue = rgb(0.08, 0.2, 0.62)
+    navy = rgb(0.06, 0.12, 0.4)
+    base(sk, yellow)
+
+    for side in (-1, 1):
+        # tricolour: three slanted bands from the screen base down across the
+        # front door, the blue one running on back along the sill
+        for i, col in enumerate((RED, WHITE, blue)):
+            ya, yb = 1.0 - i * 0.085, 0.92 - i * 0.085  # band edges at the top
+            drop = 0.56  # how far back each band runs on its way down
+            pts = [sk.side_pt(side, ya, 0.97), sk.side_pt(side, yb, 0.97),
+                   sk.side_pt(side, yb - drop, 0.4), sk.side_pt(side, ya - drop, 0.4)]
+            sk.paint(lambda d, pts=pts, col=col: d.polygon(pts, fill=col))
+        sk.side_box(side, 0.3, -0.92, 0.4, 0.475, blue)
+        # shut lines, fuel cap
+        for dy in (0.96, -0.2, -0.95):
+            sk.side_box(side, dy, dy - 0.013, 0.4, 1.0, shut)
+        sk.side_box(side, -1.62, -1.72, 0.92, 0.98, shut)
+        # number panel across the front door shut line, under a black sponsor header
+        sk.side_box(side, 0.19, -0.39, 0.55, 0.95, BLACK)
+        sk.side_box(side, 0.18, -0.38, 0.56, 0.94, WHITE)
+        sk.side_box(side, 0.18, -0.38, 0.84, 0.94, BLACK)
+        sk.text("PIXTRON", sk.side_pt(side, -0.1, 0.89), 7, WHITE)
+        sk.text("203", sk.side_pt(side, -0.1, 0.7), 14, BLACK, bold=True)
+        # the big name over the rear door, clear of the arch, stickers under it
+        sk.text("DROMA", sk.side_pt(side, -0.87, 0.86), 14, navy, bold=True)
+        for i, col in enumerate((RED, WHITE, blue, BLACK)):
+            yy = -0.5 - i * 0.13
+            sk.side_box(side, yy, yy - 0.11, 0.6, 0.65, col)
+        sk.text("PIXELIN", sk.side_pt(side, -1.75, 1.0), 7, navy, bold=True)
+        sk.text("ORPIX", sk.side_pt(side, 1.75, 0.75), 7, RED, bold=True)
+        # wing end plates: black, with the oil company's disc
+        sk.side_box(side, -1.6, -2.26, 1.14, 1.8, BLACK)
+        c = sk.side_pt(side, -2.02, 1.55)
+        sk.disc(c, 0.13 * sk.s, blue)
+        sk.disc(c, 0.115 * sk.s, WHITE)
+        sk.text("ORPIX", c, 7, RED, bold=True)
+        # crew names on the rear side windows
+        sk.text("J PIX", sk.side_pt(side, -0.55, 1.28), 7, WHITE, "glass")
+
+    # top: oil panel across the nose, the name on the bonnet reading from in
+    # front, tricolour over the screen base, name on the boot under the wing
+    sk.top_box(-0.5, 0.5, 1.92, 2.14, RED)
+    sk.text("ORPIX", sk.px("top", (0.0, 2.03, 0)), 7, WHITE, rotate=90, bold=True)
+    sk.text("DROMA", sk.px("top", (0.0, 1.5, 0)), 14, navy, rotate=90, bold=True)
+    sk.top_box(-0.24, 0.24, 1.18, 1.0, WHITE)
+    sk.text("203", sk.px("top", (0.0, 1.09, 0)), 7, BLACK, rotate=90, bold=True)
+    for sx in (-1, 1):
+        for i, col in enumerate((RED, WHITE, blue)):
+            x = sx * (0.6 + i * 0.07)
+            sk.top_box(x, x + sx * 0.07, 1.06, 0.9, col)
+    sk.text("DROMA", sk.px("top", (0.0, -1.9, 0)), 7, navy, rotate=-90, bold=True)
+
+    # front: rectangular headlamps and a slim grille under the bonnet edge,
+    # amber corners, black intake and the plate on the lifted bumper
+    sk.end_box(True, -0.26, 0.26, 0.7, 0.77, BLACK)
+    for i in range(3):
+        z = 0.715 + i * 0.02
+        sk.end_box(True, -0.24, 0.24, z, z + 0.007, GREY)
+    sk.disc(sk.px("front", (0, 0, 0.735)), 3, rgb(0.78, 0.8, 0.83))
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.29, s_ * 0.71, 0.68, 0.8, BLACK)
+        sk.end_box(True, s_ * 0.31, s_ * 0.6, 0.69, 0.79, rgb(1.0, 0.98, 0.86))
+        sk.end_box(True, s_ * 0.62, s_ * 0.69, 0.69, 0.79, AMBER)
+        sk.text("PIX", sk.px("front", (s_ * 0.72, 0, 0.57)), 7, navy)
+    sk.end_box(True, -0.55, 0.55, 0.36, 0.5, BLACK)
+    for i in range(5):
+        z = 0.38 + i * 0.024
+        sk.end_box(True, -0.53, 0.53, z, z + 0.008, GREY)
+    sk.end_box(True, -0.24, 0.24, 0.53, 0.61, WHITE)
+    sk.text("DG 203", sk.px("front", (0, 0, 0.57)), 7, BLACK, bold=True)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.78, s_ * 0.86, 1.15, 1.8, BLACK)
+
+    # rear: black panel between the tail lights, yellow plate on the bumper,
+    # end plate edges black
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.5, s_ * 0.88, 0.74, 0.94, BLACK)
+        sk.end_box(False, s_ * 0.52, s_ * 0.86, 0.82, 0.92, RED)
+        sk.end_box(False, s_ * 0.54, s_ * 0.84, 0.895, 0.91, rgb(1.0, 0.45, 0.4))
+        sk.end_box(False, s_ * 0.52, s_ * 0.86, 0.76, 0.81, AMBER)
+        sk.text("PIX", sk.px("rear", (s_ * 0.72, 0, 0.6)), 7, navy)
+    sk.end_box(False, -0.5, 0.5, 0.74, 0.94, BLACK)
+    sk.text("DE GAULLE", sk.px("rear", (0, 0, 0.84)), 7, rgb(0.78, 0.8, 0.83), bold=True)
+    sk.end_box(False, -0.26, 0.26, 0.52, 0.62, BLACK)
+    sk.end_box(False, -0.24, 0.24, 0.53, 0.61, YELLOW)
+    sk.text("DG 203", sk.px("rear", (0, 0, 0.57)), 7, BLACK, bold=True)
+    sk.end_box(False, -0.95, 0.95, 0.0, 0.46, rgb(0.08, 0.08, 0.09))
+    sk.end_box(False, -1.0, 1.0, 1.13, 1.8, BLACK)
+
+    sun_strip(sk, "DROMA  203", blue, YELLOW)
+    finish(sk, wheels=(1.38, -1.32))
+
+
 def lerp(a, b, t):
     return a + (b - a) * t
 
 
 PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp,
-            "bellatrix": paint_bellatrix, "cavalier": paint_cavalier}
+            "bellatrix": paint_bellatrix, "cavalier": paint_cavalier,
+            "degaulle": paint_degaulle}
 
 
 def main():

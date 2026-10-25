@@ -13,6 +13,9 @@ extends RefCounted
 ## mark  : what sliding tyres leave behind: rubber, wet, rut, mud, turf, scrape or none
 ##         (see SkidMarks.KINDS)
 
+## Loose ground, where a car's "loose" stat (raid tyres and suspension) applies.
+const LOOSE := ["gravel", "grass", "mud", "ford", "regolith", "dust"]
+
 const ORDER := ["asphalt", "gravel", "wet", "ice", "grass", "mud", "ford", "wood", "regolith", "dust", "cobbles"]
 
 const DATA := {
