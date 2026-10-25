@@ -354,7 +354,12 @@ class Body:
                     p = [Vector(verts[i]) for i in (a, b, c, d)]
                     # across the diagonals, so a bent quad reads the same on both sides
                     nr = (p[2] - p[0]).cross(p[3] - p[1]).normalized()
-                    if abs(nr.y) > 0.3 and (cab > 0.3 or self.in_screen(yc)):
+                    back = self.c.get("back_screen")
+                    if back and back[1] - 0.01 < yc < back[0]:
+                        # back window down to the boot lid, between thick C-pillars
+                        if nr.y < -0.3 and e not in (5, n - 7):
+                            key = "Glass"
+                    elif abs(nr.y) > 0.3 and (cab > 0.3 or self.in_screen(yc)):
                         key = "Glass"
                 faces.append((a, b, c, d))
                 keys.append(key)
@@ -391,6 +396,8 @@ def build_car(c):
         "Tail": material("Tail." + name, (0.9, 0.08, 0.05), 0.3, emit=True),
         "Frame": material("Frame." + name, c.get("frame", (0.8, 0.08, 0.06)), 0.5),
         "Steel": material("Steel." + name, (0.2, 0.21, 0.23), 0.5, 0.4),
+        "BeaconBlue": material("BeaconBlue." + name, (0.1, 0.25, 1.0), 0.2, emit=True),
+        "BeaconRed": material("BeaconRed." + name, (1.0, 0.08, 0.06), 0.2, emit=True),
     }
     B = Builder(coll, c)
     root = B.empty(name, (0, 0, 0))
@@ -400,6 +407,8 @@ def build_car(c):
         truck_parts(B, c, root, M)
     elif c.get("kind") == "hyper":
         hyper_parts(B, c, root, M)
+    elif c.get("kind") == "police":
+        police_parts(B, c, root, M)
     else:
         saloon_parts(B, c, root, M)
     make_wheels(B, c, root, M)
@@ -857,6 +866,7 @@ def rod(g, a, b, t, key, sides=4):
 SPINNING = ("Wheel_", "RoadWheel_", "Sprocket_", "Idler_", "ReturnRoller_")  # baked light would turn with them
 TUBES = ("Frame", "Steel")  # round metal: the strongest top-to-bottom gradient
 PAINTED = ("Livery", "Glass", "Paint_Green", "Paint_DarkGreen")  # skins carry their own shading
+GLOWING = ("Lamp", "Tail", "BeaconBlue", "BeaconRed")
 
 
 def bake_light(coll, wheels=(), ground=0.0):
@@ -880,7 +890,7 @@ def bake_light(coll, wheels=(), ground=0.0):
             key = keys[poly.material_index] if keys else ""
             n = (rot @ poly.normal).normalized()
             up = max(min(n.z * 0.8 + n.y * 0.2 + 0.25, 1.0), 0.0)
-            if key in ("Lamp", "Tail", "Glass"):
+            if key in GLOWING + ("Glass",):
                 face = 1.0  # lights glow, glass keeps its painted glints
             elif key in TUBES:
                 face = 0.6 + 0.4 * up
@@ -898,7 +908,7 @@ def bake_light(coll, wheels=(), ground=0.0):
                     d = math.hypot(p.y - wy, p.z - wz)
                     if d < wr + 0.35:
                         occ *= 0.78 + 0.22 * smoothstep(wr - 0.05, wr + 0.35, d)
-                lit = face * occ if key not in ("Lamp", "Tail") else 1.0
+                lit = face * occ if key not in GLOWING else 1.0
                 attr.data[li].color = (lit, lit, lit, 1.0)
         me.color_attributes.active_color = attr
 
@@ -991,6 +1001,115 @@ def f1_parts(B, c, root, M):
     B.make("RearWing", g, (0, -2.08, 0.75), hull, M)
 
 
+# --------------------------------------------------------------------------- the police car
+
+def nova_front(g, body):
+    """Chrome grille across the flat nose, round headlamps in chrome bezels
+    at its ends."""
+    y = body.front()
+    g.box((0, y + 0.012, 0.635), (0.98, 0.024, 0.25), "Trim")
+    for z in (0.52, 0.75):
+        g.box((0, y + 0.03, z), (1.02, 0.03, 0.03), "Chrome")
+    for sx in (-1, 1):
+        g.box((sx * 0.5, y + 0.03, 0.635), (0.03, 0.03, 0.26), "Chrome")
+    for i in range(5):  # thin chrome bars across the dark mesh
+        g.box((0, y + 0.026, 0.56 + i * 0.038), (0.96, 0.012, 0.01), "Chrome")
+    for i in range(1, 8):
+        g.box(((i - 4) * 0.12, y + 0.026, 0.635), (0.01, 0.012, 0.22), "Chrome")
+    for sx in (-1, 1):
+        g.cyl((sx * 0.66, y + 0.015, 0.635), "Y", 0.105, 0.03, "Chrome", segs=12)
+        g.cyl((sx * 0.66, y + 0.03, 0.635), "Y", 0.085, 0.012, "Lamp", segs=12)
+
+
+def police_parts(B, c, root, M):
+    """Late-70s American police sedan: the lofted body with a chrome grille
+    and round lamps, chrome blade bumpers, a black push bar on the nose,
+    the light bar on the roof (blue end, red end, white in the middle), a
+    spotlight by the driver's A-pillar, chrome mirrors and one exhaust."""
+    body = Body(c)
+    g = G()
+    body.build(g)
+    for extra in c.get("body_extras", []):
+        extra(g, body)
+    hull = B.make("Body", g, (0, 0, 0.6), root, M)
+
+    fy, ry = body.front(), body.rear()
+    hwf, hwr = body.half_width(fy - 0.1), body.half_width(ry + 0.1)
+
+    def blade(y_end, out, z0, z1):
+        """Chrome bumper wrapping round the corners of one end of the car."""
+        hw = hwf if out > 0 else hwr
+        g.hull([(sx * x, y_end + out * dy, z) for sx in (-1, 1) for z in (z0, z1)
+                for x, dy in ((hw + 0.03, -0.3), (hw * 0.98, 0.07), (0.45, 0.12))], "Chrome")
+
+    g = G()
+    blade(fy, 1, 0.3, 0.46)
+    g.box((0, fy + 0.09, 0.3), (1.0, 0.06, 0.03), "Trim")  # rubber strip along the bottom
+    B.make("Bumper_F", g, (0, fy + 0.05, 0.38), hull, M)
+    g = G()
+    blade(ry, -1, 0.32, 0.48)
+    B.make("Bumper_R", g, (0, ry - 0.05, 0.4), hull, M)
+
+    # black push bar: two uprights ahead of the grille, two cross bars, stays
+    # back through the bumper
+    g = G()
+    py = fy + 0.24
+    for sx in (-1, 1):
+        rod(g, (sx * 0.3, py, 0.24), (sx * 0.3, py, 0.86), 0.065, "Trim")
+        rod(g, (sx * 0.3, py, 0.38), (sx * 0.3, fy, 0.38), 0.05, "Trim")
+        rod(g, (sx * 0.3, py, 0.62), (sx * 0.3, fy + 0.04, 0.55), 0.04, "Trim")
+    for z in (0.44, 0.76):
+        rod(g, (-0.38, py + 0.01, z), (0.38, py + 0.01, z), 0.055, "Trim")
+    rod(g, (-0.3, py, 0.86), (0.3, py, 0.86), 0.05, "Trim")
+    B.make("PushBar", g, (0, py, 0.55), hull, M)
+
+    # light bar across the roof over the front doors: a black base on two
+    # feet, the blue lens on the right, red on the left, white between
+    g = G()
+    ly = c["lightbar_y"]
+    lz = body.heights(ly)[5]
+    g.box((0, ly, lz + 0.03), (1.32, 0.3, 0.04), "Trim")
+    for sx in (-1, 1):
+        g.box((sx * 0.45, ly, lz + 0.005), (0.08, 0.2, 0.03), "Trim")
+
+    def lens(x0, x1, key):
+        g.hull([(x, ly + dy, lz + dz) for x in (x0, x1) for (dy, dz) in (
+            (0.13, 0.05), (-0.13, 0.05), (0.09, 0.17), (-0.09, 0.17))], key)
+    lens(0.2, 0.64, "BeaconBlue")
+    lens(-0.64, -0.2, "BeaconRed")
+    lens(-0.19, 0.19, "Lamp")
+    for x in (-0.195, 0.195):  # chrome bands between the lenses
+        g.box((x, ly, lz + 0.11), (0.012, 0.25, 0.12), "Chrome")
+    B.make("LightBar", g, (0, ly, lz + 0.1), hull, M)
+
+    # spotlight on a post by the driver's A-pillar, looking ahead
+    g = G()
+    sy = c["mirror_y"] + 0.12
+    sz = body.heights(sy)[4]
+    x = body_x(body, sy, sz - 0.02)
+    rod(g, (-(x - 0.02), sy, sz - 0.05), (-(x + 0.08), sy, sz + 0.12), 0.03, "Chrome")
+    g.cyl((-(x + 0.09), sy, sz + 0.17), "Y", 0.07, 0.16, "Chrome", segs=10)
+    g.cyl((-(x + 0.09), sy + 0.085, sz + 0.17), "Y", 0.058, 0.012, "Lamp", segs=10)
+    B.make("Spotlight", g, (-(x + 0.09), sy, sz + 0.15), hull, M)
+
+    # little chrome mirrors on the doors
+    my = c["mirror_y"]
+    mh = body.heights(my)[4]
+    for s, n in ((-1, "L"), (1, "R")):
+        g = G()
+        x = body.half_width(my)
+        rod(g, (s * (x - 0.02), my, mh + 0.03), (s * (x + 0.08), my - 0.03, mh + 0.09), 0.025, "Chrome")
+        g.cyl((s * (x + 0.1), my - 0.03, mh + 0.11), "Y", 0.065, 0.05, "Chrome", segs=10)
+        g.cyl((s * (x + 0.1), my - 0.056, mh + 0.11), "Y", 0.055, 0.006, "Trim", segs=10)
+        B.make("Mirror_" + n, g, (s * (x + 0.1), my, mh + 0.1), hull, M)
+
+    # one tailpipe poking out under the rear bumper
+    g = G()
+    g.cyl((c["exhaust_x"], ry - 0.02, 0.22), "Y", 0.035, 0.26, "Chrome", segs=8)
+    g.cyl((c["exhaust_x"], ry - 0.152, 0.22), "Y", 0.026, 0.01, "Trim", segs=8)
+    B.make("Exhaust", g, (c["exhaust_x"], ry, 0.22), hull, M)
+
+
 CARS = [
     dict(name="Pleiad", file="pleiad", paint=(0.1, 0.22, 0.66), flaps=(0.95, 0.95, 0.95), rims=(0.85, 0.68, 0.22),
          hw=0.865, roof_hw=0.62, flare=0.075, bottom=0.2, nose_round=0.84,
@@ -1051,6 +1170,17 @@ CARS = [
     dict(name="Veloce", file="veloce", kind="f1", paint=(0.09, 0.11, 0.24), flaps=(0.1, 0.1, 0.1),
          rims=(0.08, 0.08, 0.09), half_len=2.45, px_m=70.0,
          wheel_y=(1.72, -1.42), wheel_x=0.84, wheel_r=(0.32, 0.35), wheel_w=(0.3, 0.42)),
+    dict(name="Cavalier", file="cavalier", kind="police", paint=(0.95, 0.95, 0.93), flaps=(0.1, 0.1, 0.1),
+         rims=(0.06, 0.06, 0.07), half_len=2.45, px_m=72.0,
+         hw=0.9, roof_hw=0.7, flare=0.02, bottom=0.22, nose_round=0.97,
+         # late-70s four-door: flat nose, long level bonnet, upright screen,
+         # squared-off roof, sloping back window onto a long flat boot
+         profile=[(2.42, 0.8, 0.76), (2.38, 0.84, 0.8), (1.6, 0.87, 0.83), (0.92, 0.9, 0.86), (0.2, 1.36, 0.88),
+                  (-0.9, 1.36, 0.9), (-1.45, 0.96, 0.91), (-2.3, 0.95, 0.91), (-2.4, 0.86, 0.82)],
+         glass_y=(0.85, -1.02), pillars=[-0.36], b_pillar=-0.36, mirror_y=0.68,
+         wheel_y=(1.45, -1.4), wheel_x=0.8, wheel_r=0.34, wheel_w=0.24,
+         exhaust_x=0.5, lightbar_y=-0.15, back_screen=(-0.9, -1.45),
+         body_extras=[nova_front], screen=((0.92, 0.9), (0.2, 1.36))),
 ]
 
 
