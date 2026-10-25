@@ -65,6 +65,24 @@ const LIST := [
 		"stats": {"power": 0.97, "grip": 1.04, "steer": 0.98, "mass": 1230.0},
 	},
 	{
+		"id": "lancer",
+		"class": "A",
+		"name": "LANCER EVO",
+		"blurb": "Turbo 4x4 saloon, pulls hard out of corners",
+		"number": "2",
+		"plate": "LE 2",
+		"mesh": "res://models/lancer.glb",
+		"nose": -2.2,
+		"skin": "res://models/lancer_skin.png",
+		"spokes": 10,
+		"rims": Color(0.95, 0.95, 0.93),
+		"flaps": Color(0.8, 0.08, 0.08),
+		# strong mid-range turbo but heavier than the Martello: quicker out of
+		# slow corners, a touch lazier on turn-in
+		"gears": [3.3, 2.52, 2.04, 1.73, 1.5, 1.32],
+		"stats": {"power": 1.03, "grip": 1.02, "steer": 0.97, "mass": 1250.0},
+	},
+	{
 		"id": "balear",
 		"class": "A",
 		"name": "BALEAR KIT",

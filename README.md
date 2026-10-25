@@ -62,6 +62,7 @@ race from the menu (a restart keeps the same weather). Each launch starts on
 |---|---|---|
 | Martello HF | Boxy Delta-style hatch with flared arches, Martini-style stripes | All-rounder |
 | Saksen 777 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
+| Lancer Evo | Red Evo VI-style four-door: big white chevron over the bonnet, number 2 panels, two-tier wing on tall end plates, vented bonnet, roof scoop, yellow fog lamps, white wheels, red mud flaps | Strongest turbo of the regular rally cars and a little heavier: quickest out of slow corners, slightly lazier turn-in |
 | Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
 | De Gaulle 405 | Yellow 405-style desert raid saloon up on long-travel suspension: tricolour stripes, 203 number panels, bull bar with two spotlights, spare wheel strapped to the roof, tall rear wing, red mud flaps, chunky tyres on white wheels | Heaviest and most powerful rally car: a few percent more grip on loose ground (gravel, grass, mud) and a little less on tarmac; soft long-travel springs soak up ruts and land jumps flat |
 | Cavalier Nova | Late-70s black-and-white sheriff's sedan: gold star on the doors, push bar, chrome bumpers and grille, steel wheels, a light bar that flashes blue and red | Class A for fun: heavy and soft, leans and floats, lazy V8 through a three-speed auto; a few percent slower than the rally cars |

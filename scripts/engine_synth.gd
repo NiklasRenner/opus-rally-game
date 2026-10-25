@@ -41,6 +41,13 @@ const PROFILES := {
 		"body": [500.0, 1600.0, 0.65], "jitter": [0.06, 0.26], "gain": 1.0,
 		"turbo": 0.005, "whistle": [1300.0, 2800.0], "bov": 0.35, "flutter": 0.35,
 		"crackle": 0.85, "antilag": 0.8, "shift_pop": 0.7, "whine": 0.004},
+	# Evo-style 2.0 turbo four: deep bark, big turbo, banging anti-lag
+	"lancer": {"cyl": 4, "offsets": [0.0, 0.03, -0.02, 0.02], "amps": [1.0, 0.88, 1.08, 0.92],
+		"idle": 900.0, "red": 7500.0, "on": [0.13, 2.1], "off": [0.23, 1.5], "knock": 0.0, "top": 3000.0,
+		"r1": [135.0, 2.2, 1.1], "r2": [480.0, 2.0, 0.5], "intake": [1400.0, 1.6, 0.38],
+		"body": [550.0, 1700.0, 0.62], "jitter": [0.05, 0.24], "gain": 1.0,
+		"turbo": 0.007, "whistle": [1300.0, 2900.0], "bov": 0.5, "flutter": 0.6,
+		"crackle": 1.0, "antilag": 1.0, "shift_pop": 0.85, "whine": 0.005},
 	# kit car: no turbo, revs higher, bright induction howl, the odd pop
 	"balear": {"cyl": 4, "offsets": [0.0, 0.01, 0.0, -0.01], "amps": [1.0, 0.96, 1.03, 0.97],
 		"idle": 1100.0, "red": 9000.0, "on": [0.11, 2.4], "off": [0.2, 1.7], "knock": 0.0, "top": 3600.0,
