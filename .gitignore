@@ -34,3 +34,4 @@ $RECYCLE.BIN/
 
 # Note: *.import and *.uid files are NOT ignored on purpose. Godot 4 keeps
 # import settings and resource IDs in them, so they belong in git.
+tools/real_stage/cache/

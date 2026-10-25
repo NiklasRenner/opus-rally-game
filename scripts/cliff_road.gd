@@ -141,28 +141,9 @@ func heights() -> PackedFloat32Array:
 	return out
 
 
-## Height of the terrain mesh itself at a point (the grid's triangles
-## interpolated, not the nearest grid point), for things that stand on
-## steep ground.
+## Height of the terrain mesh itself at a point (see TrackBuilder.ground_height).
 func ground(x: float, z: float) -> float:
-	var gn := track._grid_n
-	var cell := TrackBuilder.CELL
-	var origin := track._grid_origin()
-	var fx := clampf((x - origin.x) / cell, 0.0, gn - 1.001)
-	var fz := clampf((z - origin.y) / cell, 0.0, gn - 1.001)
-	var gx := int(fx)
-	var gz := int(fz)
-	fx -= gx
-	fz -= gz
-	var hs := track._heights
-	var h00 := hs[gz * gn + gx]
-	var h10 := hs[gz * gn + gx + 1]
-	var h01 := hs[(gz + 1) * gn + gx]
-	var h11 := hs[(gz + 1) * gn + gx + 1]
-	# the same diagonal split as TrackBuilder's terrain triangles
-	if fx >= fz:
-		return h00 + fx * (h10 - h00) + fz * (h11 - h10)
-	return h00 + fz * (h01 - h00) + fx * (h11 - h01)
+	return track.ground_height(x, z)
 
 
 ## Rock: grey-brown with darker strata, cracks and lichen.
@@ -213,7 +194,7 @@ func build() -> void:
 			j += 1
 		_wall(i, j, -side[i])
 		_cliff_face(i, j, side[i])
-		_guard_posts(i, j, side[i])
+		guard_posts(track, i, j, side[i])
 		i = j + 1
 	if track.map.has("waterfall"):
 		_waterfall(track.index_at(track.map["waterfall"] as float))
@@ -348,8 +329,8 @@ func _add(st: SurfaceTool, faces: PackedVector3Array, node_name: String) -> void
 
 ## White stone posts with a black band along the drop, every 15 m; enough to
 ## knock a panel off, not enough to stop a car going over. The sharper
-## corners get armco instead (TrackBuilder's barriers).
-func _guard_posts(i0: int, i1: int, s: float) -> void:
+## corners get armco instead (TrackBuilder's barriers). GeoStage uses them too.
+static func guard_posts(track: TrackBuilder, i0: int, i1: int, s: float) -> void:
 	var body := StaticBody3D.new()
 	body.name = "GuardPosts"
 	body.set_meta("surface", "grass")

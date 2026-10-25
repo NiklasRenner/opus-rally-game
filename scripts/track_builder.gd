@@ -44,16 +44,21 @@ var _crater_list: Array = []  # [x, z, radius, depth] on the Moon
 var _road_i := PackedInt32Array()  # per terrain cell: the nearest road sample
 var _rng := RandomNumberGenerator.new()
 var _cliff: CliffRoad  # the mountain pass's drops and rock walls ("alpine" theme)
+var _geo: GeoStage  # a stage built from a real road and its terrain ("geo" maps)
 
 
 func build() -> void:
 	prepare()
-	if _theme() == "alpine":
+	if _geo:
+		_geo.track = self
+	elif _theme() == "alpine":
 		_cliff = CliffRoad.new(self)
 	_build_road()
 	_build_terrain()
 	if _cliff:
 		_cliff.build()
+	if _geo:
+		_geo.find_drops()
 	_build_barriers()
 	if not loop:
 		_build_road_ends()
@@ -67,10 +72,12 @@ func build() -> void:
 		"city":
 			CityScenery.new(self).build()
 		_:
+			if _geo:
+				_geo.build()  # before the trees, which draw its forest too
 			_build_trees()
 	_build_cones()
-	if _theme() != "city":
-		_build_mountains()  # the city has its skyline instead
+	if _theme() != "city" and not _geo:
+		_build_mountains()  # the city has its skyline instead, a real stage the real mountains
 	_build_water()
 	_build_bridges()
 	if _theme() in ["circuit", "city"]:
@@ -86,10 +93,11 @@ func build() -> void:
 ## Reads the map and samples the route only (no geometry). The menu uses
 ## this for its track preview.
 func prepare() -> void:
-	_control_points = map["points"]
+	_geo = GeoStage.open(map["geo"]) if map.has("geo") else null
+	_control_points = _geo.points if _geo else map["points"]
 	_sections = map["sections"]
-	_elevation_keys = map["elevation"]
-	_jumps = map["jumps"]
+	_elevation_keys = map.get("elevation", [])
+	_jumps = map.get("jumps", [])
 	_rng.seed = map["seed"]
 	loop = not map.get("point_to_point", false)
 	# centre the terrain grid on the route
@@ -100,6 +108,10 @@ func prepare() -> void:
 		mx = mx.max(p)
 	_center = (mn + mx) * 0.5
 	_world_half = maxf(560.0, maxf(mx.x - mn.x, mx.y - mn.y) * 0.5 + 170.0)
+	if _geo:
+		# the baked terrain's own grid
+		_world_half = (_geo.near_n - 1) * CELL * 0.5
+		_center = Vector2(_geo.near_x0, _geo.near_z0) + Vector2(_world_half, _world_half)
 	points.clear()
 	tangents.clear()
 	surfaces.clear()
@@ -230,7 +242,13 @@ func _elevation(frac: float) -> float:
 
 func _sample_spline() -> void:
 	var cp: Array = _control_points.duplicate()
-	if not loop:
+	# control points before the start line and after the finish
+	var lead := 1
+	var tail := 1
+	if _geo:
+		lead = _geo.lead  # the real road carries on past both ends
+		tail = _geo.tail
+	elif not loop:
 		# straight lead-in behind the start line and a run-out past the finish
 		var m0 := cp.size()
 		cp.push_front((cp[0] as Vector2) - ((cp[1] as Vector2) - (cp[0] as Vector2)).normalized() * LEAD_IN)
@@ -252,8 +270,8 @@ func _sample_spline() -> void:
 		lengths.append(lengths[i - 1] + dense[i - 1].distance_to(dense[i % dense.size()]))
 	total_length = lengths[lengths.size() - 1]
 	# the start and finish lines sit on the first and last of the map's points
-	var s_start := 0.0 if loop else lengths[40]
-	var s_finish := total_length if loop else lengths[(n - 2) * 40]
+	var s_start := 0.0 if loop else lengths[40 * lead]
+	var s_finish := total_length if loop else lengths[(n - 1 - tail) * 40]
 	stage_length = s_finish - s_start
 	var count_pts := int(total_length / SPACING)
 	var step := total_length / count_pts
@@ -269,7 +287,7 @@ func _sample_spline() -> void:
 		var t := clampf((s - lengths[j]) / maxf(lengths[j + 1] - lengths[j], 0.0001), 0.0, 1.0)
 		var p := dense[j].lerp(dense[(j + 1) % dense.size()], t)
 		var frac := (s - s_start) / stage_length
-		points.append(Vector3(p.x, _elevation(frac), p.y))
+		points.append(Vector3(p.x, _geo.road_height(s / total_length, total_length) if _geo else _elevation(frac), p.y))
 		var surf: String = _sections[0][1]
 		for sec in _sections:
 			if frac >= sec[0]:
@@ -283,6 +301,17 @@ func _sample_spline() -> void:
 		for o in range(-6, 7):
 			acc += WIDTH[surfaces[wrap_index(i + o)]]
 		widths.append(acc / 13.0 * (map.get("width", 1.0) as float))
+	if _geo:
+		# real mountain roads are widened round their hairpins (a car needs
+		# the room); ease it in over the corner
+		var widen := PackedFloat32Array()
+		for i in count_pts:
+			widen.append(smoothstep(1.0, 2.0, absf(_turn(i, 4))))
+		for i in count_pts:
+			var m := 0.0
+			for o in range(-5, 6):
+				m = maxf(m, widen[wrap_index(i + o)] * (1.0 - absf(o) / 6.0))
+			widths[i] *= 1.0 + 0.5 * m
 
 
 func _side(i: int) -> Vector3:
@@ -413,7 +442,7 @@ func _build_terrain() -> void:
 	noise.frequency = 0.007
 	noise.fractal_octaves = 3
 	_heights.resize(gn * gn)
-	var alpine := _cliff.heights() if _cliff else PackedFloat32Array()
+	var alpine := _cliff.heights() if _cliff else (_geo.heights() if _geo else PackedFloat32Array())
 	for z in gn:
 		for x in gn:
 			var k := z * gn + x
@@ -430,7 +459,9 @@ func _build_terrain() -> void:
 				hills *= 0.35  # the mare is flat; the craters make the relief
 			var rim := smoothstep(_world_half - 110.0, _world_half, maxf(absf(wx - _center.x), absf(wz - _center.y)))
 			_heights[k] = lerpf(base - 0.3, far_base + hills + 3.0, edge) + rim * 60.0
-			if _cliff:
+			if _geo:
+				_heights[k] = alpine[k]  # the real mountains carry on beyond the grid
+			elif _cliff:
 				_heights[k] = alpine[k] + rim * 60.0
 			elif _theme() == "city":
 				# flat streets and plazas between the blocks
@@ -447,13 +478,15 @@ func _build_terrain() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for z in gn - 1:
 		for x in gn - 1:
+			if _geo and not _geo.cell_drawn(x, z):
+				continue  # out past the band round the road: the distant mesh
 			var ids := [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x + 1, z + 1),
 				Vector2i(x, z), Vector2i(x + 1, z + 1), Vector2i(x, z + 1)]
 			for g in ids:
 				var k: int = g.y * gn + g.x
 				var h := _heights[k]
 				var wp := Vector3(origin.x + g.x * CELL, h, origin.y + g.y * CELL)
-				st.set_color(_alpine_color(g.x, g.y) if _cliff else _terrain_color(h - _road_h[k] * 0.7, k))
+				st.set_color(_alpine_color(g.x, g.y) if _cliff or _geo else _terrain_color(h - _road_h[k] * 0.7, k))
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
@@ -568,10 +601,40 @@ func city_park(gx: int, gz: int) -> bool:
 
 
 func terrain_height(x: float, z: float) -> float:
-	if _cliff:
-		return _cliff.ground(x, z)  # the mountainside is too steep for the nearest grid point
+	if _cliff or _geo:
+		return ground_height(x, z)  # the mountainside is too steep for the nearest grid point
 	var k := _grid_index(x, z)
 	return _heights[k]
+
+
+## Height of the terrain mesh itself at a point (the grid's triangles
+## interpolated, not the nearest grid point), for things that stand on
+## steep ground.
+func ground_height(x: float, z: float) -> float:
+	var gn := _grid_n
+	var origin := _grid_origin()
+	var fx := clampf((x - origin.x) / CELL, 0.0, gn - 1.001)
+	var fz := clampf((z - origin.y) / CELL, 0.0, gn - 1.001)
+	var gx := int(fx)
+	var gz := int(fz)
+	fx -= gx
+	fz -= gz
+	var h00 := _heights[gz * gn + gx]
+	var h10 := _heights[gz * gn + gx + 1]
+	var h01 := _heights[(gz + 1) * gn + gx]
+	var h11 := _heights[(gz + 1) * gn + gx + 1]
+	# the same diagonal split as the terrain triangles
+	if fx >= fz:
+		return h00 + fx * (h10 - h00) + fz * (h11 - h10)
+	return h00 + fz * (h01 - h00) + fx * (h11 - h01)
+
+
+## No room for a tree, a fan or a house at p (a rock wall, over a drop, a
+## bank too steep)? `hint` is a road sample near p.
+func _blocked(p: Vector3, hint: int) -> bool:
+	if _cliff:
+		return _cliff.blocked(p, hint)
+	return _geo != null and _geo.blocked(p, hint)
 
 
 func _road_dist(x: float, z: float) -> float:
@@ -637,9 +700,10 @@ func _build_barriers() -> void:
 		# positive turn = turning left, so the outside is the right (+side)
 		var out_sign := 1.0 if turn > 0.0 else -1.0
 		var edge := widths[i] * 0.5 + VERGE + 0.4
-		var drop := _cliff != null and _cliff.side[i] != 0.0
+		var drop_side := _cliff.side[i] if _cliff else (_geo.side[i] if _geo else 0.0)
+		var drop := drop_side != 0.0
 		if drop:
-			if out_sign != _cliff.side[i]:
+			if out_sign != drop_side:
 				continue  # the outside of the corner is the rock wall
 			if absf(turn) < CLIFF_ARMCO_TURN:
 				continue  # guard posts (CliffRoad) on the gentler bends
@@ -839,7 +903,7 @@ func _build_village() -> void:
 				# keep clear of other parts of the route and of the water
 				if _road_dist(pos.x, pos.z) < off - 1.0 or _in_water(pos.x, pos.z, size.x * 0.6 + 2.0) or _near_start(pos):
 					continue
-				if _cliff and _cliff.blocked(pos, i):
+				if _blocked(pos, i):
 					continue
 				var bas := frame(i).basis
 				var house := Node3D.new()
@@ -1058,12 +1122,12 @@ func _build_spectators() -> void:
 			var k := wrap_index(i + _rng.randi_range(-6, 6))
 			var off := widths[k] * 0.5 + VERGE + _rng.randf_range(4.0, 8.0)
 			var pos := points[k] + _side(k) * inside * off
-			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 or _cliff else points[k].y - 0.45
+			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 or _cliff or _geo else points[k].y - 0.45
 			var face := points[k] + Vector3(0, pos.y - points[k].y, 0)
 			var hop := _rng.randi() % 3 == 0
 			# inside a tight corner another part of the road can pass close by
 			var near := nearest_index(pos, k)
-			if distance_to_road(pos, near) < widths[near] * 0.5 + VERGE + 1.5 or (_cliff and _cliff.blocked(pos, near)):
+			if distance_to_road(pos, near) < widths[near] * 0.5 + VERGE + 1.5 or _blocked(pos, near):
 				continue
 			crowd.person(Transform3D(Basis.looking_at(face - pos, Vector3.UP), pos), hop)
 	var mi := crowd.make()
@@ -1104,7 +1168,7 @@ func _build_trees() -> void:
 		var nearest := nearest_index(p, i)
 		if distance_to_road(p, nearest) < min_clear:
 			continue
-		if _cliff and _cliff.blocked(p, nearest):
+		if _blocked(p, nearest):
 			continue  # inside a rock wall or over the edge
 		p.y = terrain_height(p.x, p.z) - 0.2
 		var mi := MeshInstance3D.new()
@@ -1139,7 +1203,7 @@ func _build_trees() -> void:
 		var p := points[i] + _side(i) * side * off
 		if _road_dist(p.x, p.z) < widths[i] * 0.5 + VERGE + 2.0 or _in_water(p.x, p.z) or _near_start(p):
 			continue
-		if _cliff and _cliff.blocked(p, nearest_index(p, i)):
+		if _blocked(p, nearest_index(p, i)):
 			continue
 		p.y = terrain_height(p.x, p.z) - 0.1
 		var mi := MeshInstance3D.new()
