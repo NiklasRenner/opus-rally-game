@@ -3,7 +3,7 @@ extends Node
 ## The arcade look for a race, switched with F2: sunlight falls off across a
 ## surface in a few soft steps instead of a smooth ramp (Saturn / PS1 era
 ## shading), the sun casts hard-edged shadows, the car's windows reflect a
-## low-res fake sky and skyline that slides as the car turns, and the fog is a depth fog that closes in on the distance.
+## blocky fake skyline and sky that slides as the car turns, and the fog is a depth fog that closes in on the distance.
 ## It works by swapping every lit StandardMaterial3D in the scene for a shader
 ## copy with its own light(), and swapping them back when it's switched off.
 ## Unshaded, see-through and billboard materials are left alone.
@@ -33,21 +33,15 @@ uniform float alpha_scissor = 0.5;
 uniform float bands = 3.0;
 uniform float softness = 0.2;
 uniform float wrap = 0.25;
-// the car's windows reflect a fake sky instead of the real one, like the
-// environment maps of the time; curve: how far each flat pane is bent round
+// the car's windows reflect a fake world instead of the real one, like the
+// reflections painted on in the games of the time
 uniform float mirror = 0.0;
-uniform float curve = 0.5;
 uniform vec3 sky_hi : source_color = vec3(0.5, 0.6, 0.8);
 uniform vec3 sky_lo : source_color = vec3(0.7, 0.8, 0.9);
 uniform vec3 ground_col : source_color = vec3(0.3, 0.3, 0.3);
 
-// the glass's direction out from the middle of the car, in view space: bent
-// into the normal it curves each flat pane like a bit of a chrome ball
-varying vec3 bulge;
-
 void vertex() {
 	UV = UV * uv1_scale.xy + uv1_offset.xy;
-	bulge = (MODELVIEW_MATRIX * vec4(VERTEX - vec3(0.0, 0.5, 0.0), 0.0)).xyz;
 }
 
 void fragment() {
@@ -65,35 +59,50 @@ void fragment() {
 	SPECULAR = mirror > 0.0 ? 0.0 : spec;
 	EMISSION = emission;
 	if (mirror > 0.0) {
-		// the windows reflect a fake environment, like the chrome maps of the
-		// time: a stepped sky over a blocky skyline over the ground, looked up
-		// by the reflected view direction so it slides as the car turns and the
-		// camera moves. The direction is snapped to a coarse grid first, which
-		// is what a small environment texture would give.
-		// tilted up a little: from the usual chase camera the side windows
-		// would only ever show the road, and the skyline is the interesting part
-		vec3 r = normalize((INV_VIEW_MATRIX * vec4(reflect(-VIEW, normalize(NORMAL + curve * normalize(bulge))), 0.0)).xyz + vec3(0.0, 0.3, 0.0));
-		float az = floor(atan(r.z, r.x) / TAU * 32.0 + 0.5);  // 32 columns round
-		float el = floor(asin(clamp(r.y, -1.0, 1.0)) / (PI * 0.5) * 24.0 + 0.5) / 24.0;  // 24 rows each way
-		// hills and treetops: two waves round the horizon, blocky per column
-		float sky_line = 0.04 + 0.05 * abs(sin(az * 0.59) + 0.5 * sin(az * 1.57 + 1.7));
+		// the windows reflect a fake world laid out on each pane, like the
+		// painted-on reflections of the time: a skyline bowed across the glass
+		// with banded sky above and road below, and two sheen stripes. Where the
+		// skyline sits and how far the stripes and hills have slid along come
+		// from the reflected view direction, so it all moves as the car turns
+		// and the camera swings. Worked out on a coarse grid (5 cm across, 1/20
+		// of the pane up) for the blocky look of a small texture.
+		vec3 r = normalize((INV_VIEW_MATRIX * vec4(reflect(-VIEW, NORMAL), 0.0)).xyz);
+		float up_angle = asin(clamp(r.y, -1.0, 1.0));
+		float turn = atan(r.z, r.x);
+		// UV2 from CarModel._pane_uvs: whole part the pane's width in dm, the
+		// fraction how far across it; glass without one counts as a 1 m pane
+		float w = UV2.x >= 1.0 ? floor(UV2.x) * 0.1 : 1.0;
+		float across = UV2.x >= 1.0 ? fract(UV2.x) : 0.5;
+		float x = floor((across - 0.5) * w / 0.05 + 0.5) * 0.05;  // metres from the middle
+		float y = UV2.x >= 1.0 ? (floor(UV2.y * 20.0) + 0.5) / 20.0 : 0.5;
+		float xn = x / max(w * 0.5, 0.01);  // -1..1 edge to edge
+		// the skyline: lower on the pane the more the glass looks up at the
+		// sky, arched like a curved window, hills sliding by as the car turns
+		float horizon = 0.45 - 0.9 * up_angle - 0.12 * xn * xn;
+		float hill_col = floor(x * 5.0 + turn * 8.0);
+		float hills = 0.05 + 0.07 * abs(sin(hill_col * 0.37) + 0.4 * sin(hill_col * 0.91 + 1.7));
 		vec3 env;
-		if (el > sky_line) {
-			// banded sky, the palest band just over the skyline
-			float t = floor(clamp((el - sky_line) / 0.5, 0.0, 1.0) * 4.0 + 0.5) / 4.0;
-			env = t < 0.1 ? min(sky_lo * 1.5, vec3(1.0)) : mix(sky_lo, sky_hi, t);
-			// blocky clouds in rows, wider the higher they are
-			float row = floor(el * 8.0);
-			float cell = floor(az / (2.0 + row));
-			if (row >= 1.0 && row <= 6.0 && fract(sin(cell * 12.9898 + row * 78.233) * 43758.5453) > 0.6) {
-				env = mix(env, vec3(1.0), 0.75);
-			}
-		} else if (el > -0.04) {
-			env = mix(ground_col, sky_hi, 0.3) * 0.45;  // the skyline, a dark silhouette
+		if (y > horizon + hills) {
+			// banded sky, a pale band just over the hills
+			float t = clamp((y - horizon - hills) / 0.6, 0.0, 1.0);
+			env = t < 0.12 ? min(sky_lo * 1.45, vec3(1.0)) : mix(sky_lo, sky_hi, floor(t * 3.0 + 0.5) / 3.0);
+		} else if (y > horizon) {
+			env = mix(ground_col, sky_hi, 0.3) * 0.45;  // the hills, a dark silhouette
 		} else {
-			env = ground_col * (el > -0.3 ? 0.8 : 0.5);  // the road, darker straight down
+			env = ground_col * (y > horizon - 0.2 ? 0.8 : 0.55);  // the road, darker nearer
 		}
-		// glass reflects more at a glancing angle, about a third face on;
+		// two sheen stripes, a broad one and a thin one, leaning across the
+		// glass and sliding along it with the view
+		float s = fract(x * 0.9 + y * 0.45 - turn * 0.7);
+		if (s < 0.14 || (s > 0.22 && s < 0.26)) {
+			env = mix(env, vec3(1.0), 0.5);
+		}
+		// a darker rim at the top and bottom of the pane (the sides are cut by
+		// the pillars painted on the glass), so the glass seems to curve away
+		if (y < 0.08 || y > 0.92) {
+			env *= 0.7;
+		}
+		// glass reflects more at a glancing angle, half as much face on;
 		// banners and lettering on the glass take less of it so they stay readable
 		float fres = 0.5 + 0.5 * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
 		float paint = smoothstep(0.2, 0.6, dot(c.rgb, vec3(0.3, 0.5, 0.2)));
