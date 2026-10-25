@@ -165,6 +165,7 @@ func _controls() -> Array:
 		rows.append(["SHIFT UP / DOWN", "UP / DOWN", "RB / LB"])
 	rows.append_array([
 		["CAMERA", "C", "Y"],
+		["LOOK BACK (HOLD)", "F", "R-STICK"],
 		["RESET TO ROAD", "R", "BACK"],
 		["RESTART STAGE", "T", ""],
 		["ARCADE / MODERN LOOK", "F2", ""],
@@ -215,7 +216,7 @@ func _draw() -> void:
 
 
 func _draw_controls(vs: Vector2) -> void:
-	var r := Rect2(vs.x * 0.5 - 200, 40, 400, 270)
+	var r := Rect2(vs.x * 0.5 - 200, 30, 400, 296)
 	RetroUI.panel(self, r)
 	RetroUI.italic(self, r.position + Vector2(18, 34), "CONTROLS", 26, RetroUI.YELLOW)
 	RetroUI.text(self, r.position + Vector2(200, 58), "KEYBOARD", 11, RetroUI.CYAN, 3)
@@ -227,7 +228,7 @@ func _draw_controls(vs: Vector2) -> void:
 		RetroUI.text(self, Vector2(r.position.x + 20, y), row[0], 13, Color.WHITE, 3)
 		RetroUI.text(self, Vector2(r.position.x + 200, y), row[1], 13, RetroUI.YELLOW, 3)
 		RetroUI.text(self, Vector2(r.position.x + 300, y), row[2], 13, RetroUI.YELLOW, 3)
-	RetroUI.text(self, r.position + Vector2(20, 260), "ENTER / ESC  back", 10, Color(0.8, 0.85, 1.0), 2)
+	RetroUI.text(self, r.position + Vector2(20, 284), "ENTER / ESC  back", 10, Color(0.8, 0.85, 1.0), 2)
 
 
 func _draw_options(at: Vector2) -> void:
