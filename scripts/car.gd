@@ -540,6 +540,8 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 	if not w.front:
 		peak *= 0.9  # rears peak a touch earlier: the car wants to rotate
 	var drag_k: float = sd["drag"]
+	if w.surface in Surfaces.LOOSE:
+		drag_k *= stat("loose_drag")  # big soft tyres float over it, small low ones dig in
 	var bump: float = sd["bump"]
 
 	w.dist = origin.distance_to(contact)
