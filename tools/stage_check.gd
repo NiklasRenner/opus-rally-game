@@ -2,8 +2,9 @@ extends SceneTree
 ## Scans a built stage's ground for flaws you'd otherwise only find by
 ## driving round: holes (no ground mesh under a point near the road), spikes
 ## (a point standing far proud of, or sunk far below, the ground either side
-## of it) and inside-out faces (a ground triangle facing down, which renders
-## dark). Looks along the whole route, out to REACH metres either side.
+## of it), inside-out faces (a ground triangle facing down, which renders
+## dark), terrain or banks poking up through the road, and props standing
+## on it. Looks along the whole route, out to REACH metres either side.
 ##
 ##   godot --headless -s tools/stage_check.gd -- turini [more map ids]
 ##
@@ -18,8 +19,13 @@ const SPIKE := 2.5  # metres a point may stand off the line between its neighbou
 const GROUND := ["Terrain", "Banks", "Verges"]  # plus every Road_*
 const BUCKET := 8.0
 
+const OFF_ROAD := ["Terrain", "Banks"]  # ground that must stay under the road
+const POKE := 0.05  # metres off-road ground may come up to under the road surface
+
 var _tris := PackedVector3Array()
 var _hash := {}
+var _top_off := 0  # what _height() found on top
+var _off := PackedByteArray()  # per triangle: 0 road or verge, else 1 + its index in OFF_ROAD
 
 
 func _initialize() -> void:
@@ -37,6 +43,7 @@ func _run() -> void:
 func _check(id: String) -> int:
 	_tris.clear()
 	_hash.clear()
+	_off.clear()
 	var tb := TrackBuilder.new()
 	tb.map = Maps.get_map(id)
 	get_root().add_child(tb)
@@ -48,6 +55,51 @@ func _check(id: String) -> int:
 		for mi in body.get_children():
 			if mi is MeshInstance3D:
 				_collect(mi.mesh, flipped, str(body.name))
+	# terrain through the road: off-road ground above the road surface
+	var pokes: Array = []
+	for i in tb.count():
+		var p := tb.points[i]
+		var half := tb.widths[i] * 0.5 - 0.2
+		var o := -half
+		while o <= half + 0.01:
+			var q := p + tb._side(i) * o
+			var road := _height(q.x, q.z, 0)
+			var off := _height(q.x, q.z, 1)
+			if road > -INF and off > road + POKE:
+				pokes.append([tb.frac_of(i), o, off - road, OFF_ROAD[_top_off - 1]])
+				break
+			o += 1.0
+	# props on the road: anything else drawn whose middle is over the tarmac
+	var props: Array = []
+	for nd in tb.find_children("*", "GeometryInstance3D", true, false):
+		var top: Node = nd
+		while top.get_parent() != tb:
+			top = top.get_parent()
+		if top.name in GROUND or str(top.name).begins_with("Road_") or top.name in ["Start", "RoadEnds"]:
+			continue
+		if top is RigidBody3D:
+			continue  # cones and the like, there to be knocked over
+		# each thing's footprint: where it stands, its bottom and its top
+		var at: Array[Vector3] = []
+		var tall := 1.0
+		if nd is MultiMeshInstance3D:
+			var mm: MultiMesh = nd.multimesh
+			for k in mm.instance_count:
+				at.append(nd.global_transform * mm.get_instance_transform(k).origin)
+		else:
+			var box: AABB = nd.global_transform * (nd as GeometryInstance3D).get_aabb()
+			at.append(Vector3(box.get_center().x, box.position.y, box.get_center().z))
+			tall = box.size.y
+		for c in at:
+			var i := tb.nearest_index(c, 0)
+			var f := tb.frac_of(i)
+			var rel: Vector3 = c - tb.points[i]
+			var across := rel.dot(tb._side(i))
+			var along := absf(rel.dot(tb.frame(i).basis.z))
+			# (overhead gantries and banners clear the road; the boards across the
+			# road's ends are meant to be there)
+			if f > 0.0 and f < 1.0 and absf(across) < tb.widths[i] * 0.5 - 0.3 and along < 3.0 and rel.y < 2.0 and rel.y + tall > 0.0:
+				props.append([f, across, str(top.name) + "/" + str(nd.name)])
 	var holes: Array = []
 	var spikes: Array = []
 	for i in range(0, tb.count(), 2):
@@ -83,7 +135,12 @@ func _check(id: String) -> int:
 			line += "%+.0f:%.1f " % [o, _height(q.x, q.z) - tb.points[i].y]
 			o += STEP
 		print(line)
-	print("%s: %d holes, %d spikes, %d inside-out faces" % [id, holes.size(), spikes.size(), flipped.size()])
+	print("%s: %d holes, %d spikes, %d inside-out faces, %d road pokes, %d props on the road" % [id, holes.size(), spikes.size(),
+		flipped.size(), pokes.size(), props.size()])
+	for k in pokes.slice(0, 8):
+		print("  poke  at %.3f, %+.1f m: %s %.2f m above the road" % [k[0], k[1], k[3], k[2]])
+	for k in props.slice(0, 8):
+		print("  prop  at %.3f, %+.1f m: %s" % [k[0], k[1], k[2]])
 	for h in holes.slice(0, 8):
 		print("  hole  at %.3f, %+.0f m" % [h[0], h[1]])
 	spikes.sort_custom(func(x, y): return absf(x[2]) > absf(y[2]))
@@ -96,7 +153,7 @@ func _check(id: String) -> int:
 		var i := tb.nearest_index(at, 0)
 		print("  face  at %.3f (%.0f, %.0f, %.0f) in %s" % [tb.frac_of(i), at.x, at.y, at.z, f[1]])
 	tb.queue_free()
-	return holes.size() + spikes.size() + flipped.size()
+	return holes.size() + spikes.size() + flipped.size() + pokes.size() + props.size()
 
 
 ## Add a mesh's triangles to the lookup; note any facing down.
@@ -119,11 +176,12 @@ func _collect(mesh: Mesh, flipped: Array, what: String) -> void:
 			# a face that isn't near vertical but whose normal points down
 			if geo.length() > 0.01 and absf(geo.normalized().y) > 0.3 and nn.y < -0.05:
 				flipped.append([(a + b + c) / 3.0, what])
-			_add(a, b, c)
+			_add(a, b, c, OFF_ROAD.find(what) + 1)
 
 
-func _add(a: Vector3, b: Vector3, c: Vector3) -> void:
+func _add(a: Vector3, b: Vector3, c: Vector3, off: int) -> void:
 	var idx := _tris.size() / 3
+	_off.append(off)
 	_tris.append_array(PackedVector3Array([a, b, c]))
 	for bz in range(floori(minf(a.z, minf(b.z, c.z)) / BUCKET), floori(maxf(a.z, maxf(b.z, c.z)) / BUCKET) + 1):
 		for bx in range(floori(minf(a.x, minf(b.x, c.x)) / BUCKET), floori(maxf(a.x, maxf(b.x, c.x)) / BUCKET) + 1):
@@ -133,10 +191,13 @@ func _add(a: Vector3, b: Vector3, c: Vector3) -> void:
 			_hash[key].append(idx)
 
 
-## Highest ground mesh at a point, -INF if there's none.
-func _height(x: float, z: float) -> float:
+## Highest ground mesh at a point, -INF if there's none. only: -1 any
+## ground, 0 only the road and verges, 1 only off-road ground.
+func _height(x: float, z: float, only := -1) -> float:
 	var best := -INF
 	for t in _hash.get(Vector2i(floori(x / BUCKET), floori(z / BUCKET)), PackedInt32Array()):
+		if only >= 0 and mini(_off[t], 1) != only:
+			continue
 		var a := _tris[t * 3]
 		var b := _tris[t * 3 + 1]
 		var c := _tris[t * 3 + 2]
@@ -150,5 +211,8 @@ func _height(x: float, z: float) -> float:
 		var w := (v0.x * v2.y - v2.x * v0.y) / den
 		if u < -0.001 or w < -0.001 or u + w > 1.002:
 			continue
-		best = maxf(best, a.y + u * (b.y - a.y) + w * (c.y - a.y))
+		var h := a.y + u * (b.y - a.y) + w * (c.y - a.y)
+		if h > best:
+			best = h
+			_top_off = _off[t]
 	return best

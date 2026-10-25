@@ -12,8 +12,7 @@ extends RefCounted
 ## optional  : point_to_point (start and finish in different places, no
 ##             laps; fractions then run from the start to the finish),
 ##             theme ("wasteland", "jungle", "circuit", "moon", "city" or
-##             "alpine": then cliffs [[from, to, side]], valley_floor,
-##             massif [x, slope], waterfall and snow_line, see CliffRoad),
+##             "alpine", the last with a geo stage),
 ##             geo (a stage baked from a real road and its terrain: then no
 ##             points or elevation, see GeoStage; snow_line, forest_band),
 ##             tunnel [from, to], water [[x0, z0, x1, z1], ...] with water_level
@@ -48,44 +47,6 @@ const LIST := [
 		"jumps": [[0.525, 1.1, 14.0]],
 		"village": [0.07, 0.22],
 		"forest": 1.0,
-	},
-	{
-		"id": "aquila_pass",
-		"name": "AQUILA PASS",
-		"blurb": "Point to point. Cliff road, hairpins, 130 m climb",
-		"seed": 1203,
-		# a proper rally stage, from the valley to the col: along the river,
-		# up a road cut into the cliffs over the gorge (a waterfall spills
-		# across it), four gravel hairpins up the face, then the summit road
-		# along the top of the drop and onto the ice below the pass
-		"point_to_point": true,
-		"points": [
-			Vector2(0, 0), Vector2(0, -110), Vector2(12, -170), Vector2(40, -215), Vector2(48, -270), Vector2(35, -330),
-			Vector2(25, -400), Vector2(30, -480), Vector2(15, -550), Vector2(25, -630), Vector2(45, -700), Vector2(38, -770),
-			Vector2(20, -822), Vector2(14, -844), Vector2(0, -852), Vector2(-14, -844), Vector2(-20, -822), Vector2(-22, -760),
-			Vector2(-20, -680), Vector2(-26, -656), Vector2(-40, -648), Vector2(-54, -656), Vector2(-60, -680), Vector2(-62, -770),
-			Vector2(-60, -840), Vector2(-66, -864), Vector2(-80, -872), Vector2(-94, -864), Vector2(-100, -840), Vector2(-102, -740),
-			Vector2(-100, -660), Vector2(-106, -636), Vector2(-120, -628), Vector2(-134, -636), Vector2(-140, -660), Vector2(-142, -760),
-			Vector2(-148, -860), Vector2(-150, -960), Vector2(-132, -1040), Vector2(-150, -1120), Vector2(-185, -1185), Vector2(-182, -1265),
-			Vector2(-205, -1330), Vector2(-245, -1365), Vector2(-290, -1372),
-		],
-		"sections": [[0.00, "asphalt"], [0.255, "wet"], [0.285, "asphalt"], [0.352, "gravel"], [0.72, "asphalt"],
-			[0.885, "ice"], [0.99, "asphalt"]],
-		"elevation": [[0.00, 0.0], [0.05, 1.0], [0.14, 4.0], [0.35, 38.0], [0.378, 41.0], [0.436, 50.0], [0.47, 54.0],
-			[0.535, 65.0], [0.57, 69.0], [0.643, 81.0], [0.678, 85.0], [0.72, 93.0], [0.80, 108.0], [0.87, 116.0],
-			[0.93, 124.0], [0.98, 128.0]],
-		"jumps": [[0.105, 1.0, 13.0]],
-		"village": [[0.0, 0.07]],
-		"forest": 1.3,
-		"theme": "alpine",
-		# [from, to, side the drop is on: 1 right, -1 left]; rock wall on the other
-		"cliffs": [[0.14, 0.352, 1], [0.38, 0.443, -1], [0.472, 0.543, 1], [0.573, 0.650, -1], [0.68, 0.965, 1]],
-		"valley_floor": -32.0,
-		"massif": [0.0, 0.6],  # the mountain rises west of x = 0, 0.6 m per metre
-		"waterfall": 0.27,
-		"snow_line": 112.0,
-		"water": [[100, -1700, 128, 400]],
-		"water_level": -34.5,
 	},
 	{
 		"id": "turini",

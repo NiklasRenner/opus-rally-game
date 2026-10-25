@@ -145,7 +145,7 @@ func _ready() -> void:
 		# split times along the way, against the ghost's at the same points
 		for k in range(1, SPLITS + 1):
 			_split_points.append(track.start_index + k * span / (SPLITS + 1))
-	_cliffs = track.map.has("cliffs") or track.map.has("geo")
+	_cliffs = track.map.has("geo")
 	distance_to_go = track.stage_length
 
 	look = RetroLook.new()

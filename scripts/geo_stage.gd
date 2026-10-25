@@ -285,8 +285,10 @@ func build_banks() -> void:
 func fit_grid(heights: PackedFloat32Array) -> PackedByteArray:
 	var gn := near_n
 	var cell := TrackBuilder.CELL
-	var under := PackedByteArray()
+	var under := PackedByteArray()  # 1 under a bank or the road
 	under.resize(gn * gn)
+	var on_road := PackedByteArray()  # 1 under the road itself
+	on_road.resize(gn * gn)
 	for gz in gn:
 		for gx in gn:
 			var k := gz * gn + gx
@@ -294,7 +296,49 @@ func fit_grid(heights: PackedFloat32Array) -> PackedByteArray:
 			if c.x < 0.0:
 				continue
 			under[k] = 1
+			on_road[k] = 1 if c.x > 0.5 else 0
 			heights[k] = c.y - 2.0 if c.x > 0.5 else c.y - 0.3
+	# a cell part on the road and part off it can still rise through the road
+	# from a corner up a cut bank or on another leg of the road: pull those
+	# corners down until it stays under the road wherever the road covers it
+	for _pass in 3:
+		for gz in gn - 1:
+			for gx in gn - 1:
+				var k := gz * gn + gx
+				var corners := [k, k + 1, k + gn, k + gn + 1]
+				if not (under[k] or under[k + 1] or under[k + gn] or under[k + gn + 1]):
+					continue
+				# (only corners under the banks: one out on the open hillside
+				# would leave a dip in it, and under a bank it doesn't show)
+				var free: Array = corners.filter(func(c): return under[c] and not on_road[c])
+				if free.is_empty():
+					free = corners.filter(func(c): return on_road[c])  # two legs of the road at different heights
+				var covers: Array[Vector3] = []
+				var pokes := false
+				for oi in 25:
+					var o := Vector2(0.1 + 0.2 * (oi % 5), 0.1 + 0.2 * (oi / 5))
+					var c := _cover(near_x0 + (gx + o.x) * cell, near_z0 + (gz + o.y) * cell)
+					covers.append(c)
+					pokes = pokes or (c.x > 0.5 and _cell_height(heights, k, o.x, o.y) > c.y - 0.3)
+				if not pokes:
+					continue
+				for oi in 25:
+					var o := Vector2(0.1 + 0.2 * (oi % 5), 0.1 + 0.2 * (oi / 5))
+					var c := covers[oi]
+					if c.x < 0.5:
+						continue
+					var over := _cell_height(heights, k, o.x, o.y) - (c.y - 0.3)
+					if over <= 0.0:
+						continue
+					# the free corners carry part of the point's height each; lower
+					# them all by enough to bring it under
+					var w := 0.0
+					for f in free:
+						w += _corner_weight(corners.find(f), o.x, o.y)
+					if w < 0.5:
+						continue
+					for f in free:
+						heights[f] -= over / w
 	var hidden := PackedByteArray()
 	hidden.resize(gn * gn)
 	for gz in gn - 1:
@@ -324,6 +368,27 @@ func fit_grid(heights: PackedFloat32Array) -> PackedByteArray:
 	return hidden
 
 
+## The grid's surface in cell k (its corner gz * near_n + gx) at (fx, fz)
+## across it, split along the same diagonal as TrackBuilder's triangles.
+func _cell_height(heights: PackedFloat32Array, k: int, fx: float, fz: float) -> float:
+	var gn := near_n
+	var h00 := heights[k]
+	var h10 := heights[k + 1]
+	var h01 := heights[k + gn]
+	var h11 := heights[k + gn + 1]
+	if fx >= fz:
+		return h00 + fx * (h10 - h00) + fz * (h11 - h10)
+	return h00 + fz * (h01 - h00) + fx * (h11 - h01)
+
+
+## How much corner c (0 = 00, 1 = 10, 2 = 01, 3 = 11) weighs in
+## _cell_height() at (fx, fz).
+func _corner_weight(c: int, fx: float, fz: float) -> float:
+	if fx >= fz:
+		return [1.0 - fx, fx - fz, 0.0, fz][c]
+	return [1.0 - fz, 0.0, fz - fx, fx][c]
+
+
 ## How far out (from the centreline) the banks on side s reach at each
 ## sample: BANK_WIDTH, less on the inside of a tight bend (short of its
 ## centre) and halfway to any other part of the road on that side.
@@ -347,9 +412,11 @@ func _bank_caps(s: float) -> PackedFloat32Array:
 		if turn * s < 0.0:  # turning towards this side (+ turn is left, side -1)
 			c = minf(c, 0.7 * 8.0 * TrackBuilder.SPACING / maxf(absf(turn), 0.01))
 		# a bank only a metre or two wide can't climb or fall without a step,
-		# so the bend gets at least 4 m; another part of the road nearby still
-		# has the last word
-		c = maxf(c, e + 4.0)
+		# so the bend gets at least 4 m where that still keeps it off the road
+		# (round the tightest bends it would fold back over it); another part
+		# of the road nearby still has the last word
+		if c < e + 4.0 and track.clear_of_road(p + sd * (e + 4.0), TrackBuilder.VERGE):
+			c = e + 4.0
 		var key := Vector2i(floori(p.x / 32.0), floori(p.z / 32.0))
 		for dz in range(-2, 3):
 			for dx in range(-2, 3):
@@ -537,7 +604,7 @@ func build() -> void:
 		var j := i
 		while j + 1 < n and side[j + 1] == side[i]:
 			j += 1
-		CliffRoad.guard_posts(track, i, j, side[i])
+		_guard_posts(i, j, side[i])
 		i = j + 1
 	_build_forest()
 
@@ -640,3 +707,40 @@ func _build_forest() -> void:
 		mi.rotation.y = rng.randf() * TAU
 		track._scatter_add(mi)
 		placed += 1
+
+
+## White stone posts with a black band along the drop, every 15 m; enough to
+## knock a panel off, not enough to stop a car going over. The sharper
+## corners get armco instead (TrackBuilder's barriers).
+func _guard_posts(i0: int, i1: int, s: float) -> void:
+	var body := StaticBody3D.new()
+	body.name = "GuardPosts"
+	body.set_meta("surface", "grass")
+	track.add_child(body)
+	var stone := TexGen.flat_material(Color(0.92, 0.91, 0.86), 0.9)
+	var band := TexGen.flat_material(Color(0.1, 0.1, 0.1), 0.9)
+	var post := BoxMesh.new()
+	post.size = Vector3(0.45, 0.8, 0.45)
+	var stripe := BoxMesh.new()
+	stripe.size = Vector3(0.47, 0.16, 0.47)
+	var shape := BoxShape3D.new()
+	shape.size = post.size
+	for i in range(i0 + 2, i1 - 1, 5):
+		if absf(track._turn(i, 4)) >= TrackBuilder.CLIFF_ARMCO_TURN or track.near_line(i, StartArea.REACH + 3):
+			continue
+		var xf := Transform3D(track.frame(i).basis, track.points[i] + track._side(i) * s * (track.widths[i] * 0.5 + TrackBuilder.VERGE - 0.45)
+			+ Vector3(0, -0.5 + 0.4, 0))
+		var mi := MeshInstance3D.new()
+		mi.mesh = post
+		mi.material_override = stone
+		mi.transform = xf
+		body.add_child(mi)
+		var bi := MeshInstance3D.new()
+		bi.mesh = stripe
+		bi.material_override = band
+		bi.transform = xf.translated_local(Vector3(0, 0.22, 0))
+		body.add_child(bi)
+		var cs := CollisionShape3D.new()
+		cs.shape = shape
+		cs.transform = xf
+		body.add_child(cs)
