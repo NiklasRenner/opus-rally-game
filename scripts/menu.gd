@@ -100,7 +100,7 @@ func _refresh() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event.is_pressed() or event.is_echo():
+	if Transition.busy or not event.is_pressed() or event.is_echo():
 		return
 	if event.is_action_pressed("ui_up"):
 		_sel = wrapi(_sel - 1, 0, ROWS.size())
@@ -114,7 +114,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		match ROWS[_sel]:
 			"START RACE":
 				Game.roll_conditions()
-				get_tree().change_scene_to_file("res://main.tscn")
+				Transition.change_scene("res://main.tscn")
 			"QUIT":
 				get_tree().quit()
 			_:

@@ -495,7 +495,14 @@ func update_parts(zones: Dictionary, car_velocity: Vector3) -> Array[String]:
 	return dropped
 
 
-func _detach(part_name: String, car_velocity: Vector3) -> void:
+## Blow every bolt-on still attached off the car, `blast` m/s outwards.
+func explode(car_velocity: Vector3, blast: float) -> void:
+	for part_name in _parts:
+		if not _parts[part_name]["detached"]:
+			_detach(part_name, car_velocity, blast)
+
+
+func _detach(part_name: String, car_velocity: Vector3, blast := 3.0) -> void:
 	var p: Dictionary = _parts[part_name]
 	p["detached"] = true
 	var node: Node3D = p["node"]
@@ -518,7 +525,7 @@ func _detach(part_name: String, car_velocity: Vector3) -> void:
 	rb.global_transform = gt
 	node.reparent(rb, true)
 	var kick := (gt.origin - global_position).normalized()
-	rb.linear_velocity = car_velocity * 0.85 + kick * 3.0 + Vector3.UP * 2.5
+	rb.linear_velocity = car_velocity * 0.85 + kick * blast + Vector3.UP * (blast * 0.8 + 0.1)
 	rb.angular_velocity = Vector3(randf_range(-6, 6), randf_range(-6, 6), randf_range(-6, 6))
 	get_tree().create_timer(30.0).timeout.connect(rb.queue_free)
 

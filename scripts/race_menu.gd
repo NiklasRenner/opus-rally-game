@@ -73,7 +73,7 @@ func _initials_string() -> String:
 
 
 func _input(event: InputEvent) -> void:
-	if mode == Mode.NONE or not event.is_pressed() or event.is_echo():
+	if Transition.busy or mode == Mode.NONE or not event.is_pressed() or event.is_echo():
 		return
 	match mode:
 		Mode.PAUSE, Mode.RESULTS:
