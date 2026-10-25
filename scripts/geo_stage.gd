@@ -674,11 +674,16 @@ func blocked(p: Vector3, hint: int) -> bool:
 	return slope(p.x, p.z) > 1.3
 
 
-## Steepness of the terrain (rise per metre) round a point.
-func slope(x: float, z: float) -> float:
-	var h := surface_height(x, z)
+const SLOPE_TAPS: Array[Vector2] = [Vector2(2, 0), Vector2(-2, 0), Vector2(0, 2), Vector2(0, -2)]
+
+
+## Steepness of the terrain (rise per metre) round a point (`h`: its
+## height, if the caller has it already).
+func slope(x: float, z: float, h := NAN) -> float:
+	if is_nan(h):
+		h = surface_height(x, z)
 	var s := 0.0
-	for o in [Vector2(2, 0), Vector2(-2, 0), Vector2(0, 2), Vector2(0, -2)]:
+	for o in SLOPE_TAPS:
 		s = maxf(s, absf(surface_height(x + o.x, z + o.y) - h) / 2.0)
 	return s
 
@@ -790,14 +795,12 @@ func _build_forest() -> void:
 		if noise.get_noise_2d(x, z) < -0.25:
 			continue  # clearings
 		var y := surface_height(x, z)
-		if slope(x, z) > 1.1 or track._in_water(x, z) or (y > snow_line and rng.randf() < smoothstep(snow_line, snow_line + 60.0, y)):
+		if slope(x, z, y) > 1.1 or track._in_water(x, z) or (y > snow_line and rng.randf() < smoothstep(snow_line, snow_line + 60.0, y)):
 			continue
-		var mi := MeshInstance3D.new()
-		mi.mesh = Trees.pine(rng.randi_range(0, 3))
-		mi.position = Vector3(x, y - 0.3, z)
-		mi.scale = Vector3.ONE * rng.randf_range(1.0, 1.8)
-		mi.rotation.y = rng.randf() * TAU
-		track._scatter_add(mi)
+		var mesh := Trees.pine(rng.randi_range(0, 3))
+		var size := rng.randf_range(1.0, 1.8)
+		var turn := rng.randf() * TAU
+		track._scatter_xf(mesh, Transform3D(Basis(Vector3.UP, turn).scaled(Vector3.ONE * size), Vector3(x, y - 0.3, z)))
 		placed += 1
 
 
