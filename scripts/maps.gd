@@ -14,6 +14,8 @@ extends RefCounted
 ##             theme ("wasteland", "jungle", "circuit", "moon", "city" or
 ##             "alpine": then cliffs [[from, to, side]], valley_floor,
 ##             massif [x, slope], waterfall and snow_line, see CliffRoad),
+##             geo (a stage baked from a real road and its terrain: then no
+##             points or elevation, see GeoStage; snow_line, forest_band),
 ##             tunnel [from, to], water [[x0, z0, x1, z1], ...] with water_level
 ##             (a route section on "ford" dips under it, one on "wood" becomes a
 ##             bridge over it), landmark [x, z, size] (the jungle pyramid),
@@ -84,6 +86,25 @@ const LIST := [
 		"snow_line": 112.0,
 		"water": [[100, -1700, 128, 400]],
 		"water_level": -34.5,
+	},
+	{
+		"id": "turini",
+		"name": "TURINI",
+		"blurb": "Point to point. A real road: 8 hairpins, 500 m climb",
+		"seed": 1973,
+		# the climb from La Bollene-Vesubie towards the Col de Turini in the
+		# Alpes-Maritimes, lifted from OpenStreetMap with the real mountains
+		# round it (data/stages/turini, see tools/real_stage); 1.3x life size.
+		# A wet patch in the shady gully, and ice up near the snow line.
+		"geo": "turini",
+		"point_to_point": true,
+		"sections": [[0.00, "asphalt"], [0.47, "wet"], [0.53, "asphalt"], [0.87, "ice"], [0.95, "asphalt"]],
+		"village": [],
+		"forest": 1.4,
+		"forest_band": 3200,
+		"theme": "alpine",
+		"snow_line": 480.0,
+		"width": 0.8,
 	},
 	{
 		"id": "city",

@@ -110,6 +110,7 @@ its camouflage, crosses and number are painted in code (`TexGen.camo`,
 |---|---|---|
 | Col de Pixel | 2.6 km | Mixed, about 1:45 a lap: tarmac village chicane, a gravel forest run with a tight hairpin and a crest jump, tarmac mountain hairpins climbing to 22 m, then gravel back down. Stone walls on the tarmac corners, hay bales on the gravel |
 | Aquila Pass | 2.4 km, A to B | A point-to-point stage from the valley up to the col, about 2:00. Tarmac along the river, then a road cut into the cliffs over the gorge (a waterfall spills across it and wets the road), four gravel hairpins up the mountain face, the summit road along the top of a 150 m drop and ice below the pass. Rock walls on one side, a sheer drop with stone guard posts on the other; go over and you're put back on the road you fell from (the fall costs you the time) |
+| Turini | 6.4 km, A to B | A real road: the climb from La Bollène-Vésubie towards the Col de Turini in the Alpes-Maritimes, lifted from OpenStreetMap with the real mountains round it (1.3x life size). Eight hairpins and 520 m of climbing up a forested valley side, a wet patch in the shady gully and ice up by the snow line. Banks cut into the hillside, stone guard posts and armco where it drops away; the mountains on the horizon are the real ones. About 5 minutes |
 | Downtown GP | 2.0 km | A walled street circuit through a modern city: wide square corners, a chicane and a cobbled square, office blocks and shops, catch fences, traffic lights and a grandstand at the start |
 | Jungle Temple | 2.1 km | Gravel and mud through dense rainforest (palms, vine-hung giants, ferns), over a plank bridge, through a river ford that slows you right down, past overgrown temples and a stepped pyramid |
 | Monaco Ruins | 3.2 km | The Monaco GP street circuit after a nuclear war: Sainte Devote, Casino Square, the Grand Hotel hairpin, a half-collapsed tunnel, the chicane, the flooded swimming pool section and La Rascasse, past bombed-out blocks, wrecks and a toxic harbour |
@@ -133,6 +134,12 @@ dress the two stages above, "alpine" builds the mountain pass with
 `scripts/cliff_road.gd`), `point_to_point`, a `gravity`, a `tunnel`,
 `water` areas (route sections on "ford" dip under the water, sections on
 "wood" become a bridge over it) and a `landmark` pyramid.
+
+A `geo` stage (Turini) is built from a real road instead: its route, height
+profile and terrain are baked from OpenStreetMap and a satellite elevation
+model by `tools/real_stage/bake_stage.py` into `data/stages/`, and
+`scripts/geo_stage.gd` cuts the road into that ground and draws the distant
+mountains. See `tools/real_stage/README.md` to bake another road.
 
 The surface table (`scripts/surfaces.gd`) has asphalt, gravel, wet, ice,
 grass, mud, river (ford), wooden bridge, regolith, moon dust and cobbles
@@ -211,6 +218,7 @@ the scripts are in `scripts/`:
 | `menu.gd`, `race_menu.gd`, `hud.gd`, `retro_ui.gd` | Main menu, pause / initials / results overlay, race HUD, shared drawing helpers |
 | `main.gd` | The race: builds stage, car, camera and HUD, runs countdown, laps, ghost and finish |
 | `maps.gd`, `track_builder.gd`, `start_area.gd`, `trees.gd` | Stage definitions and the code that turns one into road, terrain, scenery and the start/finish dressing |
+| `geo_stage.gd` | Stages from real roads: the baked route and terrain, the road cut into it, the distant mountains, forest |
 | `cliff_road.gd` | The mountain pass: terrain with drops and rock walls, cliff faces, guard posts, the waterfall |
 | `surfaces.gd`, `conditions.gd` | Surface grip table; weather, lighting and sky |
 | `cars.gd`, `car.gd`, `car_model.gd` | The garage, the raycast car physics, the model with its dents and breakable parts |
@@ -219,8 +227,16 @@ the scripts are in `scripts/`:
 | `retro_look.gd` | The arcade shading (F2) |
 | `tex_gen.gd`, `geo.gd` | Procedural pixel textures and the pixel font; mesh winding helpers |
 
-`tools/audio_preview.gd` renders the sound offline, and `art/` (ignored by
-Godot) holds the Blender sources and skin painter.
+`tools/audio_preview.gd` renders the sound offline, `tools/real_stage/` bakes
+real roads into stages, and `art/` (ignored by Godot) holds the Blender
+sources and skin painter.
+
+## Credits
+
+Turini's road comes from OpenStreetMap: © OpenStreetMap contributors, available
+under the Open Database License (read via Overture Maps). Its terrain is the
+Copernicus GLO-30 elevation model: © DLR e.V. 2010-2014 and © Airbus Defence and
+Space GmbH 2014-2018, provided under COPERNICUS by the European Union and ESA.
 
 ## Tuning tips
 
