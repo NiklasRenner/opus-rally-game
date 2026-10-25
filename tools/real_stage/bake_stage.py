@@ -53,6 +53,24 @@ STAGES = {
 		"scale": 1.3,  # game metres per real metre, across and up alike
 		"spacing": 10.0,  # control points, game metres apart
 	},
+	"ouninpohja": {
+		# Rally Finland's legend, near Jamsa: the gravel of Ouninpohjantie in the
+		# classic direction, from the Mutanen junction west towards Hamepohja
+		"road": "Ouninpohjantie",
+		"bbox": [24.85, 61.72, 25.03, 61.79],
+		"from_m": 3200.0,
+		"to_m": 8200.0,
+		"lead": 60.0,
+		"tail": 150.0,
+		"scale": 1.15,
+		"spacing": 10.0,
+		# the 30 m elevation smooths Ouninpohja's crests away: put them back on
+		# the real ones (sharpest bends of a finer profile), [real metres from
+		# the start, height and half-length in game metres]. The biggest is the
+		# yellow house jump's stand-in
+		"jumps": [[1033, 0.8, 12.0], [1661, 1.4, 15.0], [2147, 0.7, 12.0], [2474, 1.2, 14.0],
+			[2643, 1.7, 16.0], [3136, 1.5, 15.0], [3939, 1.3, 14.0], [4237, 1.2, 14.0]],
+	},
 }
 
 
@@ -117,9 +135,12 @@ class Dem:
 		for la in range(int(math.floor(lat0)), int(math.floor(lat1)) + 1):
 			for lo in range(int(math.floor(lon0)), int(math.floor(lon1)) + 1):
 				with rasterio.open(dem_tile(la, lo)) as src:
-					if src.width != 3600:
-						sys.exit("tiles narrower than 3600 px (north of 50 deg) aren't handled")
 					tile = src.read(1)
+				if tile.shape[1] != 3600:
+					# north of 50 deg the tiles are 2400 (1800 past 60 deg, ...) px
+					# wide: stretch them onto the one arc-second grid
+					rr, cc = np.mgrid[0:3600, 0:3600].astype(np.float32)
+					tile = ndimage.map_coordinates(tile, [rr, cc * tile.shape[1] / 3600.0], order=1, mode="nearest")
 				# tile row r is at latitude la + 1 - r / 3600, column c at lo + c / 3600
 				r0 = round((self.lat1 - la - 1) * 3600)
 				c0 = round((lo - self.lon0) * 3600)
@@ -193,6 +214,10 @@ def bake(stage_id, preview):
 	centre = real.mean(axis=0)
 	road = (real - centre) * sc
 	prof = (zr - base) * sc
+	at = np.arange(len(prof), dtype=float)
+	for m, h, half in cfg.get("jumps", []):
+		d = (at - cfg["lead"] - m) * sc / half
+		prof += np.where(np.abs(d) < 1.0, h * (0.5 + 0.5 * np.cos(d * np.pi)), 0.0)
 	origin_lon = (centre[0]) / kx
 	origin_lat = -(centre[1]) / ky
 

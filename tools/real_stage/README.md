@@ -35,9 +35,14 @@ then add a map in `scripts/maps.gd` with `"geo": "<id>"`, `point_to_point`,
 surface `sections` and the dressing keys (see the Turini entry). Downloads
 are cached in `tools/real_stage/cache/` (ignored by git).
 
-Limits: elevation tiles north of 50 degrees are narrower and aren't handled
-yet; the road has to join into one line; 30 m elevation won't show small
-crests or jumps, so add `jumps` by hand if a stage needs them.
+Elevation tiles north of 50 degrees are narrower (2400 px, 1800 past 60
+degrees); they're stretched onto the one arc-second grid. The road has to
+join into one line. 30 m elevation won't show small crests or jumps: give
+the stage's `STAGES` entry `jumps` ([real metres from the start, height,
+half-length in game metres]) and the bake adds them to the road profile, so
+the banks follow them (see Ouninpohja). A lake can be shown with `"water": []`
+and a `water_level` just above its surface in the map entry; trees and props
+then keep out of the ground below it.
 
 ## Credits
 

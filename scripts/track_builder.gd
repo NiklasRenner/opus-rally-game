@@ -130,6 +130,8 @@ func _offroad() -> String:
 
 ## Inside one of the map's water areas (harbour, sea)?
 func _in_water(x: float, z: float, margin := 0.0) -> bool:
+	if _geo and map.has("water_level") and _geo.natural(x, z) < _water_level() + 0.4:
+		return true  # a real lake: the ground dips under the water plane
 	for r in map.get("water", []):
 		if x > (r[0] as float) - margin and x < (r[2] as float) + margin and z > (r[1] as float) - margin and z < (r[3] as float) + margin:
 			return true

@@ -790,7 +790,7 @@ func _build_forest() -> void:
 		if noise.get_noise_2d(x, z) < -0.25:
 			continue  # clearings
 		var y := surface_height(x, z)
-		if slope(x, z) > 1.1 or (y > snow_line and rng.randf() < smoothstep(snow_line, snow_line + 60.0, y)):
+		if slope(x, z) > 1.1 or track._in_water(x, z) or (y > snow_line and rng.randf() < smoothstep(snow_line, snow_line + 60.0, y)):
 			continue
 		var mi := MeshInstance3D.new()
 		mi.mesh = Trees.pine(rng.randi_range(0, 3))

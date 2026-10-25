@@ -68,6 +68,28 @@ const LIST := [
 		"width": 0.8,
 	},
 	{
+		"id": "ouninpohja",
+		"name": "OUNINPOHJA",
+		"blurb": "Point to point. Real Finnish gravel: crests, jumps, lakeside",
+		"seed": 1971,
+		# Rally Finland's most famous stage, near Jamsa: 5 km of Ouninpohjantie
+		# in the classic direction (from the Mutanen side towards Hamepohja),
+		# lifted from OpenStreetMap with the real ground round it
+		# (data/stages/ouninpohja, see tools/real_stage); 1.15x life size. The
+		# crests are put back in the bake; the biggest one stands in for the
+		# yellow house jump. A muddy dip down by the lake.
+		"geo": "ouninpohja",
+		"point_to_point": true,
+		"sections": [[0.00, "gravel"], [0.22, "mud"], [0.25, "gravel"]],
+		"jumps": [[0.332, 1.4, 15.0], [0.529, 1.7, 16.0], [0.627, 1.5, 15.0]],
+		"village": [],
+		"forest": 9.0,
+		"forest_band": 26000,
+		"water": [],
+		"water_level": -20.6,
+		"width": 0.75,
+	},
+	{
 		"id": "city",
 		"name": "DOWNTOWN GP",
 		"blurb": "Tarmac and cobbles. Walled streets, square corners",
