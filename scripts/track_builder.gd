@@ -43,7 +43,7 @@ var _scatter := {}  # mesh -> Array[Transform3D], drawn as one MultiMesh each
 var _crater_list: Array = []  # [x, z, radius, depth] on the Moon
 var _road_i := PackedInt32Array()  # per terrain cell: the nearest road sample
 var _rng := RandomNumberGenerator.new()
-var _cliff: CliffRoad  # the mountain pass's drops and rock walls ("alpine" theme)
+var _sample_cells := {}  # road samples by 16 m cell, for clear_of_road()
 var _geo: GeoStage  # a stage built from a real road and its terrain ("geo" maps)
 
 
@@ -51,12 +51,8 @@ func build() -> void:
 	prepare()
 	if _geo:
 		_geo.track = self
-	elif _theme() == "alpine":
-		_cliff = CliffRoad.new(self)
 	_build_road()
 	_build_terrain()
-	if _cliff:
-		_cliff.build()
 	if _geo:
 		_geo.find_drops()
 	_build_barriers()
@@ -442,7 +438,7 @@ func _build_terrain() -> void:
 	noise.frequency = 0.007
 	noise.fractal_octaves = 3
 	_heights.resize(gn * gn)
-	var alpine := _cliff.heights() if _cliff else (_geo.heights() if _geo else PackedFloat32Array())
+	var alpine := _geo.heights() if _geo else PackedFloat32Array()
 	for z in gn:
 		for x in gn:
 			var k := z * gn + x
@@ -461,8 +457,6 @@ func _build_terrain() -> void:
 			_heights[k] = lerpf(base - 0.3, far_base + hills + 3.0, edge) + rim * 60.0
 			if _geo:
 				_heights[k] = alpine[k]  # the real mountains carry on beyond the grid
-			elif _cliff:
-				_heights[k] = alpine[k] + rim * 60.0
 			elif _theme() == "city":
 				# flat streets and plazas between the blocks
 				_heights[k] = lerpf(base - 0.3, base * 0.8, smoothstep(30.0, 90.0, _dist[k])) + rim * 30.0
@@ -494,7 +488,7 @@ func _build_terrain() -> void:
 				var k: int = g.y * gn + g.x
 				var h := _heights[k]
 				var wp := Vector3(origin.x + g.x * CELL, h, origin.y + g.y * CELL)
-				st.set_color(_alpine_color(g.x, g.y) if _cliff or _geo else _terrain_color(h - _road_h[k] * 0.7, k))
+				st.set_color(_alpine_color(g.x, g.y) if _geo else _terrain_color(h - _road_h[k] * 0.7, k))
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
@@ -617,8 +611,6 @@ func city_park(gx: int, gz: int) -> bool:
 func terrain_height(x: float, z: float) -> float:
 	if _geo:
 		return _geo.surface_height(x, z)
-	if _cliff:
-		return ground_height(x, z)  # the mountainside is too steep for the nearest grid point
 	var k := _grid_index(x, z)
 	return _heights[k]
 
@@ -648,8 +640,6 @@ func ground_height(x: float, z: float) -> float:
 ## No room for a tree, a fan or a house at p (a rock wall, over a drop, a
 ## bank too steep)? `hint` is a road sample near p.
 func _blocked(p: Vector3, hint: int) -> bool:
-	if _cliff:
-		return _cliff.blocked(p, hint)
 	return _geo != null and _geo.blocked(p, hint)
 
 
@@ -716,18 +706,20 @@ func _build_barriers() -> void:
 		# positive turn = turning left, so the outside is the right (+side)
 		var out_sign := 1.0 if turn > 0.0 else -1.0
 		var edge := widths[i] * 0.5 + VERGE + 0.4
-		var drop_side := _cliff.side[i] if _cliff else (_geo.side[i] if _geo else 0.0)
+		var drop_side := _geo.side[i] if _geo else 0.0
 		var drop := drop_side != 0.0
 		if drop:
 			if out_sign != drop_side:
 				continue  # the outside of the corner is the rock wall
 			if absf(turn) < CLIFF_ARMCO_TURN:
-				continue  # guard posts (CliffRoad) on the gentler bends
+				continue  # guard posts (GeoStage) on the gentler bends
 			style = styles["wet"]  # armco along the drop
 			edge = widths[i] * 0.5 + VERGE - 0.5  # on the verge, it's thin air past it
 		var size: Vector3 = style["size"]
 		var pos := points[i] + _side(i) * out_sign * (edge + size.x * 0.5)
 		pos.y = points[i].y - 0.45 + size.y * 0.5
+		if not clear_of_road(pos, size.x * 0.5):
+			continue  # round a hairpin the outside of one leg is the other leg
 		var xf := Transform3D(frame(i).basis, pos)
 		if _geo:
 			# on a falling hillside: walls and bales reach down into the
@@ -768,8 +760,28 @@ func _build_barriers() -> void:
 		cs.transform = xf
 		walls.add_child(cs)
 		# chevron boards on the outside of tight corners
-		if absf(turn) > 0.3 and i % 6 == 0 and not drop:
-			_chevron(points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5), -xf.basis.z, out_sign)
+		var board := points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5)
+		if absf(turn) > 0.3 and i % 6 == 0 and not drop and clear_of_road(board, 1.0):
+			_chevron(board, -xf.basis.z, out_sign)
+
+
+## Is p (horizontally) at least `margin` metres off the road, every part
+## of it, not just the nearest stretch?
+func clear_of_road(p: Vector3, margin: float) -> bool:
+	if _sample_cells.is_empty():
+		for j in points.size():
+			var key := Vector2i(floori(points[j].x / 16.0), floori(points[j].z / 16.0))
+			if not _sample_cells.has(key):
+				_sample_cells[key] = PackedInt32Array()
+			_sample_cells[key].append(j)
+	var key := Vector2i(floori(p.x / 16.0), floori(p.z / 16.0))
+	for dz in range(-1, 2):
+		for dx in range(-1, 2):
+			for j in _sample_cells.get(key + Vector2i(dx, dz), PackedInt32Array()):
+				var d := Vector2(points[j].x - p.x, points[j].z - p.z).length()
+				if d < widths[j] * 0.5 + margin:
+					return false
+	return true
 
 
 ## Lowest ground under a box at xf (its footprint's corners and middle).
@@ -1178,7 +1190,7 @@ func _build_spectators() -> void:
 			var k := wrap_index(i + _rng.randi_range(-6, 6))
 			var off := widths[k] * 0.5 + VERGE + _rng.randf_range(4.0, 8.0)
 			var pos := points[k] + _side(k) * inside * off
-			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 or _cliff or _geo else points[k].y - 0.45
+			pos.y = terrain_height(pos.x, pos.z) if _road_dist(pos.x, pos.z) > 14.0 or _geo else points[k].y - 0.45
 			var face := points[k] + Vector3(0, pos.y - points[k].y, 0)
 			var hop := _rng.randi() % 3 == 0
 			# inside a tight corner another part of the road can pass close by
