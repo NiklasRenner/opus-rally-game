@@ -868,12 +868,13 @@ def niva_details(g, body):
 
 
 def niva_wing(g, body):
-    # rally wedge on the back of the roof, kicking up over the tailgate; its
-    # underside reaches down to where the roof curves away at the edges
+    # rally wedge on the back of the roof, kicking up over the tailgate; set
+    # down a little so it sits on the roof where it curves away at the edges
     y = -1.3
     z = body.heights(y)[5]
     g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
-        (0.55, 0.0, -0.07), (0.55, 0.0, 0.02), (0.61, -0.36, 0.22), (0.61, -0.3, -0.07), (0.61, -0.38, 0.18)]], "Livery")
+        (0.55, 0.0, -0.055), (0.55, 0.0, -0.025), (0.61, -0.36, 0.175), (0.61, -0.3, -0.045), (0.61, -0.38, 0.135)]],
+           "Livery")
 
 
 def niva_aux_lamps(g, body):
