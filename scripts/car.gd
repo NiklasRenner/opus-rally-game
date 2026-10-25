@@ -145,6 +145,16 @@ func stat(key: String, default := 1.0) -> float:
 	return spec["stats"].get(key, default)
 
 
+## Tyre grip on a surface: the surface's own, the car's grip, its bite on
+## loose ground (stats "loose", Surfaces.LOOSE) and any per-surface bonus
+## (stats "surf").
+func surface_grip(id: String) -> float:
+	var g: float = Surfaces.get_surface(id)["grip"] * spec["stats"]["grip"]
+	if id in Surfaces.LOOSE:
+		g *= stat("loose")
+	return g * spec["stats"].get("surf", {}).get(id, 1.0)
+
+
 ## Rough performance figures for the menu bars: low-gear pull per kg
 ## (relative to the reference saloon) and top speed in km/h.
 static func accel(spec: Dictionary) -> float:
@@ -389,9 +399,7 @@ func _arcade_assists(b3: Basis, max_steer: float) -> void:
 	var yaw := angular_velocity.dot(up)
 	# downforce beyond a saloon's lets winged cars corner harder at speed
 	var aero := 1.0 + DOWNFORCE * maxf(stat("downforce") - 1.0, 0.0) * speed * speed / (Cars.REF_MASS * gravity)
-	var grip: float = Surfaces.get_surface(surface)["grip"] * stat("grip") * aero
-	if surface in Surfaces.LOOSE:
-		grip *= stat("loose")
+	var grip: float = surface_grip(surface) * aero
 	var fwd := -b3.z
 	var vel := linear_velocity - up * linear_velocity.dot(up)
 	body_slip = 0.0
@@ -524,9 +532,7 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 	if collider and collider.has_meta("surface"):
 		w.surface = collider.get_meta("surface")
 	var sd := Surfaces.get_surface(w.surface)
-	var grip: float = sd["grip"] * spec["stats"]["grip"]
-	if w.surface in Surfaces.LOOSE:
-		grip *= stat("loose")
+	var grip: float = surface_grip(w.surface)
 	if rain:
 		grip *= sd["rain"]
 	var slide_k: float = sd["slide"]
