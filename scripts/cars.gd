@@ -27,7 +27,8 @@ extends RefCounted
 ##           speed comes near the redline in top gear
 ## Extra stats: gearing (final drive multiplier, >1 = shorter gears / lower top
 ## speed), shift (gear change time vs a rally box), drag, downforce, inertia (yaw inertia vs a saloon), pitch (engine note),
-## loose (grip multiplier on loose ground, Surfaces.LOOSE).
+## loose (grip multiplier on loose ground, Surfaces.LOOSE), loose_drag (rolling
+## drag multiplier on loose ground: <1 floats over grass and mud, >1 digs in).
 ## Chassis forces (springs, brakes, yaw assists) scale with mass so light and
 ## heavy vehicles handle alike; engine power does not, so mass still counts.
 
@@ -53,7 +54,7 @@ const LIST := [
 		"id": "pleiad",
 		"class": "A",
 		"name": "SAKSEN 777",
-		"blurb": "Grippy saloon, gold wheels",
+		"blurb": "Grippy saloon, sure-footed in the wet",
 		"number": "5",
 		"plate": "SA 777",
 		"mesh": "res://models/pleiad.glb",
@@ -62,14 +63,16 @@ const LIST := [
 		"spokes": 8,
 		"rims": Color(0.85, 0.68, 0.22),
 		"flaps": Color(0.95, 0.95, 0.95),
+		# symmetrical 4x4: the most grip on sealed roads, more still in the wet
+		# and on cobbles (surf), a little down on power
 		"gears": [3.3, 2.5, 2.02, 1.72, 1.5, 1.32],
-		"stats": {"power": 0.97, "grip": 1.04, "steer": 0.98, "mass": 1230.0},
+		"stats": {"power": 0.97, "grip": 1.04, "steer": 0.98, "mass": 1230.0, "surf": {"wet": 1.08, "cobbles": 1.05}},
 	},
 	{
 		"id": "lancer",
 		"class": "A",
 		"name": "LANCER EVO",
-		"blurb": "Turbo 4x4 saloon, pulls hard out of corners",
+		"blurb": "Turbo 4x4: short gears, quick shifts, punchy",
 		"number": "2",
 		"plate": "LE 2",
 		"mesh": "res://models/lancer.glb",
@@ -78,16 +81,16 @@ const LIST := [
 		"spokes": 10,
 		"rims": Color(0.95, 0.95, 0.93),
 		"flaps": Color(0.8, 0.08, 0.08),
-		# strong mid-range turbo but heavier than the Martello: quicker out of
-		# slow corners, a touch lazier on turn-in
+		# strong turbo through short gears and a quick box: the hardest pull out
+		# of corners, but it runs out of gear sooner and turns in a touch lazier
 		"gears": [3.3, 2.52, 2.04, 1.73, 1.5, 1.32],
-		"stats": {"power": 1.03, "grip": 1.02, "steer": 0.97, "mass": 1250.0},
+		"stats": {"power": 1.08, "grip": 1.02, "steer": 0.97, "mass": 1250.0, "gearing": 1.05, "shift": 0.85},
 	},
 	{
 		"id": "balear",
 		"class": "A",
 		"name": "BALEAR KIT",
-		"blurb": "Little yellow kit car, quick to turn",
+		"blurb": "Light kit car, a darty tarmac sprinter",
 		"number": "15",
 		"plate": "BK 15",
 		"mesh": "res://models/balear.glb",
@@ -96,14 +99,16 @@ const LIST := [
 		"spokes": 6,
 		"rims": Color(0.95, 0.95, 0.93),
 		"flaps": Color(0.08, 0.20, 0.62),
+		# light and darty on sealed roads; small low wheels lose bite and dig in
+		# on gravel, grass and mud (loose, loose_drag)
 		"gears": [3.3, 2.5, 2.0, 1.7, 1.48, 1.32],
-		"stats": {"power": 0.98, "grip": 1.0, "steer": 1.05, "mass": 1120.0},
+		"stats": {"power": 0.98, "grip": 1.02, "steer": 1.08, "mass": 1080.0, "loose": 0.94, "loose_drag": 1.15},
 	},
 	{
 		"id": "niva",
 		"class": "A",
 		"name": "LAD NIVA",
-		"blurb": "Soviet 4x4: slow, tough, loves the rough",
+		"blurb": "Soviet 4x4: slow on tarmac, king of the rough",
 		"number": "157",
 		"plate": "88-44",
 		"mesh": "res://models/niva.glb",
@@ -119,19 +124,20 @@ const LIST := [
 			["AuxLamps", "front", 0.3], ["Antenna", "rear", 0.15], ["Mirror_L", "left", 0.25], ["Mirror_R", "right", 0.25]],
 		"wheels": {"x": 0.74, "zf": -1.12, "zr": 1.08, "rf": 0.36, "rr": 0.36, "wf": 0.25, "wr": 0.25},
 		# short, tall and narrow: less grip and a lazier turn on tarmac, a brick
-		# in the wind, but knobbly tyres and long travel bite on the loose (surf)
-		# and it shrugs off knocks. Four short gears and a slow lever.
+		# in the wind, but knobbly tyres and long travel bite on the loose and on
+		# ice (surf) and float over grass and mud (loose_drag), and it shrugs off
+		# knocks. Four short gears and a slow lever.
 		"gears": [3.3, 2.35, 1.75, 1.36],
-		"stats": {"power": 0.9, "grip": 0.95, "steer": 0.95, "mass": 1250.0, "gearing": 1.05, "drag": 1.25,
+		"stats": {"power": 0.95, "grip": 0.95, "steer": 0.95, "mass": 1250.0, "gearing": 1.15, "drag": 1.25,
 			"armour": 0.6, "travel": 1.2, "bump_soak": 0.6, "roll_tame": 0.85, "pitch": 0.8, "shift": 1.3,
-			"surf": {"gravel": 1.12, "ice": 1.15, "mud": 1.12, "grass": 1.1, "ford": 1.1}},
+			"loose_drag": 0.6, "surf": {"gravel": 1.16, "ice": 1.22, "mud": 1.22, "grass": 1.22, "ford": 1.18}},
 		"shapes": [[Vector3(1.68, 0.66, 3.78), Vector3(0, -0.15, 0)], [Vector3(1.38, 0.6, 2.3), Vector3(0, 0.5, 0.58)]],
 	},
 	{
 		"id": "celica",
 		"class": "A",
 		"name": "TOKYO CELIAC",
-		"blurb": "Turbo 4WD coupe: stable and strong out of corners",
+		"blurb": "Slippery turbo coupe, calm and quick at pace",
 		"number": "5",
 		"plate": "TC 5",
 		"mesh": "res://models/celica.glb",
@@ -141,10 +147,10 @@ const LIST := [
 		"rims": Color(0.95, 0.95, 0.93),
 		"flaps": Color(0.8, 0.1, 0.08),
 		"wheels": {"x": 0.82, "zf": -1.3, "zr": 1.23, "rf": 0.34, "rr": 0.34, "wf": 0.26, "wr": 0.26},
-		# a bit heavier and punchier than the hatches, with a longer, calmer
-		# chassis: a touch more pull, a touch lazier on turn-in
+		# low drag and long gears for the fastest flat-out speed, with a longer,
+		# calmer chassis that is lazier in the hairpins
 		"gears": [3.3, 2.52, 2.02, 1.68, 1.44],
-		"stats": {"power": 1.03, "grip": 1.0, "steer": 0.97, "mass": 1260.0, "inertia": 1.05},
+		"stats": {"power": 1.03, "grip": 1.0, "steer": 0.95, "mass": 1260.0, "inertia": 1.1, "drag": 0.88, "gearing": 0.96},
 	},
 	{
 		"id": "degaulle",
@@ -166,10 +172,11 @@ const LIST := [
 			["Spoiler", "rear", 0.5], ["RoofSpare", "rear", 0.65], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]],
 		"wheels": {"x": 0.84, "zf": -1.38, "zr": 1.32, "rf": 0.37, "rr": 0.37, "wf": 0.3, "wr": 0.3},
 		# heavy and powerful with a tall wing, so it trades top speed and tarmac
-		# grip for bite on loose ground (loose) and soft long-travel suspension
-		# that soaks up ruts and lands jumps flat
+		# grip for bite on loose ground (loose, loose_drag) and soft long-travel
+		# suspension that soaks up ruts and lands jumps flat; its weight and raid
+		# tyres hate ice
 		"gears": [3.3, 2.45, 1.95, 1.62, 1.38],
-		"stats": {"power": 1.15, "grip": 0.98, "steer": 0.97, "mass": 1330.0, "drag": 1.12, "loose": 1.15,
+		"stats": {"power": 1.15, "grip": 0.96, "steer": 0.97, "mass": 1330.0, "drag": 1.12, "loose": 1.12, "loose_drag": 0.85, "surf": {"ice": 0.94},
 			"travel": 1.25, "spring": 0.8, "damper": 0.9, "bump_soak": 0.5, "armour": 0.85, "pitch": 0.9},
 		"shapes": [[Vector3(1.86, 0.62, 4.4), Vector3(0, 0.12, 0)], [Vector3(1.3, 0.45, 2.0), Vector3(0, 0.55, 0.3)]],
 	},
@@ -177,7 +184,7 @@ const LIST := [
 		"id": "cavalier",
 		"class": "A",
 		"name": "CAVALIER NOVA",
-		"blurb": "V8 sheriff's sedan: heavy, soft, loud",
+		"blurb": "V8 sheriff's sedan: top speed, built like a tank",
 		"number": "12",
 		"plate": "PD 12",
 		"mesh": "res://models/cavalier.glb",
@@ -194,10 +201,11 @@ const LIST := [
 			["LightBar", "front", 0.75], ["Spotlight", "left", 0.3], ["Mirror_L", "left", 0.25],
 			["Mirror_R", "right", 0.25]],
 		"wheels": {"x": 0.8, "zf": -1.45, "zr": 1.4, "rf": 0.34, "rr": 0.34, "wf": 0.24, "wr": 0.24},
-		# big lazy V8 through a three-speed automatic: long gears, slow shifts
+		# big lazy V8 through a three-speed automatic: long gears, slow shifts,
+		# the best top speed in the class and the toughest body, soft in corners
 		"gears": [3.3, 2.15, 1.45],
-		"stats": {"power": 1.2, "grip": 0.96, "steer": 0.92, "mass": 1500.0, "gearing": 0.95, "shift": 1.2,
-			"spring": 0.75, "damper": 0.7, "roll_tame": 0.7, "inertia": 1.15, "armour": 0.8},
+		"stats": {"power": 1.28, "grip": 0.96, "steer": 0.94, "mass": 1500.0, "gearing": 0.92, "shift": 1.2, "drag": 0.95,
+			"spring": 0.75, "damper": 0.7, "roll_tame": 0.7, "inertia": 1.15, "armour": 0.6},
 		"shapes": [[Vector3(1.8, 0.62, 4.9), Vector3(0, 0.12, 0)], [Vector3(1.4, 0.42, 1.9), Vector3(0, 0.55, 0.35)]],
 	},
 	{
