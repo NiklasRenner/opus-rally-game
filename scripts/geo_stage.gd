@@ -18,7 +18,6 @@ const DROP := 4.0  # ground this far below the road just past the verge makes th
 const BANK_WIDTH := 44.0  # how far the banks along the road reach out from its centre
 ## Rings of a bank's cross-section, as fractions of the way out from the verge.
 const BANK_RINGS := [0.0, 0.07, 0.17, 0.32, 0.5, 0.72, 1.0]
-const BANK_COVER := 5  # the grid is hidden under the rings up to this one
 const WALL_DROP := 6.0  # ground this far below the verge 3 m out gets a retaining wall instead of a bank
 const BUCKET := 8.0  # spatial hash for height queries on the banks
 
@@ -48,9 +47,8 @@ var side := PackedFloat32Array()
 ## them lie in each BUCKET square.
 var _tris := PackedVector3Array()
 var _hash := {}
-## Per grid vertex: the limits every road nearby puts on the ground (see heights()).
-var _hi := PackedFloat32Array()
-var _lo := PackedFloat32Array()
+var _on_road := PackedByteArray()  # per triangle: 1 the road's, 0 a bank's
+var _tri_at := PackedInt32Array()  # per triangle: the road sample it belongs to
 
 static var _cache := {}
 
@@ -159,25 +157,12 @@ func heights() -> PackedFloat32Array:
 		else:
 			h = clampf(h, lo[k], hi[k])
 		out[k] = h
-	_hi = hi
-	_lo = lo
 	return out
 
 
 ## The real ground under a point, from the baked grid (no road cut).
 func natural(x: float, z: float) -> float:
 	return _bilinear(dem, x, z)
-
-
-## The real ground at a point held within every nearby road's limits, so a
-## bank never stands proud of the cutting or embankment of another road
-## close by (the inside of hairpins stacked up a slope).
-func _limited(x: float, z: float) -> float:
-	var lo := _bilinear(_lo, x, z)
-	var hi := _bilinear(_hi, x, z)
-	if lo > hi:
-		return (lo + hi) * 0.5
-	return clampf(natural(x, z), lo, hi)
 
 
 func _bilinear(grid: PackedFloat32Array, x: float, z: float) -> float:
@@ -201,13 +186,12 @@ func _bilinear(grid: PackedFloat32Array, x: float, z: float) -> float:
 ## steeply for an embankment, a stone retaining wall holds the road up.
 ## Sections are cut short on the inside of tight bends and where another
 ## part of the road passes close by, so neighbouring banks never fold over.
-## Builds the mesh and its collision; returns, per grid vertex, 1 where the
-## banks (or the road) cover it.
-func build_banks() -> PackedByteArray:
+## Builds the mesh and its collision (see also fit_grid()).
+func build_banks() -> void:
 	var n := track.count()
 	var pts := track.points
 	var caps := [_bank_caps(-1.0), _bank_caps(1.0)]
-	var walls := [_walls(-1.0), _walls(1.0)]
+	var walls := [_walls(-1.0, caps[0]), _walls(1.0, caps[1])]
 	# every section's ring points: sections[side][i] = Array[Vector3]
 	var sections := [[], []]
 	for si in 2:
@@ -231,7 +215,7 @@ func build_banks() -> PackedByteArray:
 				var q := p + sd * (e + x)
 				var h := y0
 				if k > 0:
-					var nat := _limited(q.x, q.z)
+					var nat := natural(q.x, q.z)
 					if k == 1 and wall[i]:
 						h = clampf(nat, y0 - 18.0, y0 - 1.0)
 						base = h
@@ -245,8 +229,10 @@ func build_banks() -> PackedByteArray:
 				ring.append(q)
 			# a bank only climbs (a cutting) or only falls (an embankment), so
 			# it never folds back over itself; the outer ring stays on the grid
-			# and the rings inside it give way to it
-			var falling := ring[2].y < y0
+			# and the rings inside it give way to it. Which way is the outer
+			# ring's call: going by a bump near the road instead would drag the
+			# whole bank up or down to the grid in one step at the verge.
+			var falling := ring[ring.size() - 1].y < y0
 			for k in range(2, BANK_RINGS.size() - 1):
 				var prev := ring[k - 1].y
 				ring[k].y = minf(ring[k].y, prev) if falling else maxf(ring[k].y, prev)
@@ -254,8 +240,6 @@ func build_banks() -> PackedByteArray:
 				var next := ring[k + 1].y
 				ring[k].y = maxf(ring[k].y, next) if falling else minf(ring[k].y, next)
 			sections[si].append(ring)
-	var covered := PackedByteArray()
-	covered.resize(near_n * near_n)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var faces := PackedVector3Array()
@@ -266,32 +250,78 @@ func build_banks() -> PackedByteArray:
 			var rb: Array[Vector3] = sections[si][i + 1]
 			for k in BANK_RINGS.size() - 1:
 				var stone := k == 0 and wall[i] and wall[i + 1]
-				# face the open air: outwards over a fall, back towards the road up a cutting
+				# face the sky; a near-vertical step (a wall) faces the open air
+				# instead: outwards over a fall, back towards the road up a cutting
 				var out := track._side(i) * (-1.0 if si == 0 else 1.0)
-				var face := Vector3.UP + out * (2.0 if ra[k + 1].y < ra[k].y else -2.0)
+				var face := Vector3.UP
+				var run := Vector2(ra[k + 1].x - ra[k].x, ra[k + 1].z - ra[k].z).length()
+				if absf(ra[k + 1].y - ra[k].y) > 3.0 * run:
+					face += out * (2.0 if ra[k + 1].y < ra[k].y else -2.0)
 				_bank_quad(st, faces, ra[k], ra[k + 1], rb[k], rb[k + 1], i, stone, face)
-				if k < BANK_COVER:
-					_cover(covered, [ra[k], ra[k + 1], rb[k + 1], rb[k]])
-	# the road and its verges, for coverage and height queries only
+	# the road and its verges, for height queries only
 	for i in n - 1:
 		var la: Array[Vector3] = sections[0][i]
 		var lb: Array[Vector3] = sections[0][i + 1]
 		var ra2: Array[Vector3] = sections[1][i]
 		var rb2: Array[Vector3] = sections[1][i + 1]
-		var quad := [la[0], ra2[0], rb2[0], lb[0]]
-		_cover(covered, quad)
 		var ya := pts[i].y
 		var yb := pts[i + 1].y
 		var lift := func(v: Vector3, y: float) -> Vector3: return Vector3(v.x, y, v.z)
-		_add_tri(lift.call(la[0], ya), lift.call(ra2[0], ya), lift.call(rb2[0], yb))
-		_add_tri(lift.call(la[0], ya), lift.call(rb2[0], yb), lift.call(lb[0], yb))
+		_add_tri(lift.call(la[0], ya), lift.call(ra2[0], ya), lift.call(rb2[0], yb), i, true)
+		_add_tri(lift.call(la[0], ya), lift.call(rb2[0], yb), lift.call(lb[0], yb), i, true)
 	st.generate_normals()
 	var mat := TexGen.material(TexGen.grass(), 1.0, Color(0.8, 0.84, 0.82) if track.rain else Color.WHITE)
 	mat.vertex_color_use_as_albedo = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var arrays := st.commit_to_arrays()
 	track._add_static(arrays, mat, "grass", "Banks")
-	return covered
+
+
+## Fit TrackBuilder's grid to the banks (its heights, in place): a grid
+## point under a bank moves to just below the bank's surface, one under the
+## road well below it, so wherever the grid shows past a bank's edge it
+## meets it without a gap or a step. Returns, per grid cell, 1 where banks
+## and road cover the whole cell, so it needn't be drawn.
+func fit_grid(heights: PackedFloat32Array) -> PackedByteArray:
+	var gn := near_n
+	var cell := TrackBuilder.CELL
+	var under := PackedByteArray()
+	under.resize(gn * gn)
+	for gz in gn:
+		for gx in gn:
+			var k := gz * gn + gx
+			var c := _cover(near_x0 + gx * cell, near_z0 + gz * cell)
+			if c.x < 0.0:
+				continue
+			under[k] = 1
+			heights[k] = c.y - 2.0 if c.x > 0.5 else c.y - 0.3
+	var hidden := PackedByteArray()
+	hidden.resize(gn * gn)
+	for gz in gn - 1:
+		for gx in gn - 1:
+			var k := gz * gn + gx
+			if not (under[k] and under[k + 1] and under[k + gn] and under[k + gn + 1]):
+				continue
+			# corners covered isn't enough: a gap between the banks of two
+			# different stretches of road can run through the cell. Hide it
+			# only if one stretch covers it all.
+			var whole := true
+			var lo := 1 << 30
+			var hi := -1
+			for o in [Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1), Vector2(0.5, 0.0), Vector2(0.0, 0.5),
+					Vector2(1.0, 0.5), Vector2(0.5, 1.0), Vector2(0.5, 0.5), Vector2(0.25, 0.25), Vector2(0.75, 0.25),
+					Vector2(0.25, 0.75), Vector2(0.75, 0.75)]:
+				var c := _cover(near_x0 + (gx + o.x) * cell, near_z0 + (gz + o.y) * cell)
+				if c.x < 0.0:
+					whole = false
+					break
+				lo = mini(lo, int(c.z))
+				hi = maxi(hi, int(c.z))
+			if hi - lo > 12:
+				whole = false
+			if whole:
+				hidden[k] = 1
+	return hidden
 
 
 ## How far out (from the centreline) the banks on side s reach at each
@@ -316,6 +346,10 @@ func _bank_caps(s: float) -> PackedFloat32Array:
 		var turn := track._turn(i, 4)
 		if turn * s < 0.0:  # turning towards this side (+ turn is left, side -1)
 			c = minf(c, 0.7 * 8.0 * TrackBuilder.SPACING / maxf(absf(turn), 0.01))
+		# a bank only a metre or two wide can't climb or fall without a step,
+		# so the bend gets at least 4 m; another part of the road nearby still
+		# has the last word
+		c = maxf(c, e + 4.0)
 		var key := Vector2i(floori(p.x / 32.0), floori(p.z / 32.0))
 		for dz in range(-2, 3):
 			for dx in range(-2, 3):
@@ -328,7 +362,7 @@ func _bank_caps(s: float) -> PackedFloat32Array:
 						continue
 					var other_e := track.widths[j] * 0.5 + TrackBuilder.VERGE
 					c = minf(c, maxf(rel.length() - other_e, 0.0) * 0.5 + e * 0.5)
-		cap[i] = maxf(c, e + 1.5)
+		cap[i] = maxf(c, e + 0.5)
 	# ease the caps along the road so the sections fan smoothly
 	var out := cap.duplicate()
 	for i in n:
@@ -340,15 +374,20 @@ func _bank_caps(s: float) -> PackedFloat32Array:
 
 
 ## Samples where side s gets a retaining wall: the ground 3 m past the verge
-## far below it (runs shorter than 4 samples dropped).
-func _walls(s: float) -> PackedByteArray:
+## far below it, and still well below at the bank's outer edge (cap), so a
+## dip right by the road (the inside of a hairpin, a gully) gets a bank, not
+## a wall down into a trench. Runs shorter than 4 samples are dropped.
+func _walls(s: float, cap: PackedFloat32Array) -> PackedByteArray:
 	var n := track.count()
 	var w := PackedByteArray()
 	w.resize(n)
 	for i in n:
 		var p := track.points[i]
 		var q := p + track._side(i) * s * (track.widths[i] * 0.5 + TrackBuilder.VERGE + 3.0)
-		w[i] = 1 if natural(q.x, q.z) < p.y - 0.5 - WALL_DROP else 0
+		var sd := track._side(i) * s
+		var far := p + sd * cap[i]
+		var low := track.ground_height(far.x, far.z) < p.y - 0.5 - WALL_DROP * 0.5
+		w[i] = 1 if low and natural(q.x, q.z) < p.y - 0.5 - WALL_DROP else 0
 	var i := 0
 	while i < n:
 		var j := i
@@ -379,13 +418,15 @@ func _bank_quad(st: SurfaceTool, faces: PackedVector3Array, a0: Vector3, a1: Vec
 			st.set_uv(Vector2(q.x, q.z) / 8.0 if not stone else Vector2(q.x + q.z, q.y) / 4.0)
 			st.add_vertex(q)
 			faces.append(q)
-		_add_tri(t[0], t[1], t[2])
+		_add_tri(t[0], t[1], t[2], i)
 
 
 ## Remember a triangle for surface_height.
-func _add_tri(a: Vector3, b: Vector3, c: Vector3) -> void:
+func _add_tri(a: Vector3, b: Vector3, c: Vector3, at: int, road := false) -> void:
 	var idx := _tris.size() / 3
 	_tris.append_array(PackedVector3Array([a, b, c]))
+	_on_road.append(1 if road else 0)
+	_tri_at.append(at)
 	var x0 := floori(minf(a.x, minf(b.x, c.x)) / BUCKET)
 	var x1 := floori(maxf(a.x, maxf(b.x, c.x)) / BUCKET)
 	var z0 := floori(minf(a.z, minf(b.z, c.z)) / BUCKET)
@@ -398,27 +439,17 @@ func _add_tri(a: Vector3, b: Vector3, c: Vector3) -> void:
 			_hash[key].append(idx)
 
 
-## Mark the grid vertices inside a quad (four corners in order) as covered.
-func _cover(covered: PackedByteArray, q: Array) -> void:
-	var cell := TrackBuilder.CELL
-	var mn := Vector2(INF, INF)
-	var mx := Vector2(-INF, -INF)
-	var poly := PackedVector2Array()
-	for v in q:
-		var p := Vector2((v as Vector3).x, (v as Vector3).z)
-		poly.append(p)
-		mn = mn.min(p)
-		mx = mx.max(p)
-	for gz in range(maxi(ceili((mn.y - near_z0) / cell), 0), mini(floori((mx.y - near_z0) / cell), near_n - 1) + 1):
-		for gx in range(maxi(ceili((mn.x - near_x0) / cell), 0), mini(floori((mx.x - near_x0) / cell), near_n - 1) + 1):
-			if Geometry2D.is_point_in_polygon(Vector2(near_x0 + gx * cell, near_z0 + gz * cell), poly):
-				covered[gz * near_n + gx] = 1
-
-
 ## Height of the visible ground at a point: the banks or the road where they
 ## are, else the grid.
 func surface_height(x: float, z: float) -> float:
-	var best := -INF
+	var c := _cover(x, z)
+	return c.y if c.x >= 0.0 else track.ground_height(x, z)
+
+
+## What covers a point: (1, height, sample) the road, (0, height, sample) a
+## bank, (-1, 0, 0) neither. The highest wins where they overlap.
+func _cover(x: float, z: float) -> Vector3:
+	var best := Vector3(-1.0, -INF, 0.0)
 	for t in _hash.get(Vector2i(floori(x / BUCKET), floori(z / BUCKET)), PackedInt32Array()):
 		var a := _tris[t * 3]
 		var b := _tris[t * 3 + 1]
@@ -433,8 +464,10 @@ func surface_height(x: float, z: float) -> float:
 		var w := (v0.x * v2.y - v2.x * v0.y) / den
 		if u < -0.001 or w < -0.001 or u + w > 1.002:
 			continue
-		best = maxf(best, a.y + u * (b.y - a.y) + w * (c.y - a.y))
-	return best if best > -INF else track.ground_height(x, z)
+		var h := a.y + u * (b.y - a.y) + w * (c.y - a.y)
+		if h > best.y:
+			best = Vector3(_on_road[t], h, _tri_at[t])
+	return best if best.x >= 0.0 else Vector3(-1.0, 0.0, 0.0)
 
 
 ## Is near grid cell (gx, gz) drawn? Inside the band round the road.
