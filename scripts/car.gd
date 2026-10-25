@@ -145,10 +145,14 @@ func stat(key: String, default := 1.0) -> float:
 	return spec["stats"].get(key, default)
 
 
-## Tyre grip on a surface: the surface's own, the car's grip and its
-## per-surface bonus (stats "surf").
+## Tyre grip on a surface: the surface's own, the car's grip, its bite on
+## loose ground (stats "loose", Surfaces.LOOSE) and any per-surface bonus
+## (stats "surf").
 func surface_grip(id: String) -> float:
-	return Surfaces.get_surface(id)["grip"] * spec["stats"]["grip"] * spec["stats"].get("surf", {}).get(id, 1.0)
+	var g: float = Surfaces.get_surface(id)["grip"] * spec["stats"]["grip"]
+	if id in Surfaces.LOOSE:
+		g *= stat("loose")
+	return g * spec["stats"].get("surf", {}).get(id, 1.0)
 
 
 ## Rough performance figures for the menu bars: low-gear pull per kg

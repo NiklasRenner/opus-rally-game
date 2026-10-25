@@ -409,6 +409,8 @@ def build_car(c):
         hyper_parts(B, c, root, M)
     elif c.get("kind") == "police":
         police_parts(B, c, root, M)
+    elif c.get("kind") == "raid":
+        raid_parts(B, c, root, M)
     else:
         saloon_parts(B, c, root, M)
     make_wheels(B, c, root, M)
@@ -1185,6 +1187,119 @@ def police_parts(B, c, root, M):
     B.make("Exhaust", g, (c["exhaust_x"], ry, 0.22), hull, M)
 
 
+# --------------------------------------------------------------------------- the raid car
+
+def raid_parts(B, c, root, M):
+    """Desert raid saloon on long-travel suspension: lofted body sitting high
+    over big arches, bumpers lifted clear of the ground, a tube bull bar with
+    two spotlights, a spare wheel strapped flat to the roof, a tall rear wing
+    on end plates, long mud flaps and a side-exit exhaust."""
+    body = Body(c)
+    g = G()
+    body.build(g)
+    hull = B.make("Body", g, (0, 0, 0.8), root, M)
+
+    fy, ry = body.front(), body.rear()
+    hwf, hwr = body.half_width(fy - 0.15), body.half_width(ry + 0.15)
+    lo = c["bottom"]  # the bumpers start at the sills, well up off the ground
+    bt = c["bumper_top"]
+    g = G()
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (hwf + 0.015, fy - 0.42, lo), (hwf + 0.015, fy - 0.42, bt[0]), (hwf * 0.9, fy + 0.03, lo + 0.03),
+        (hwf * 0.9, fy + 0.03, bt[0] - 0.02), (hwf * 0.98, fy - 0.12, bt[0]), (hwf * 0.95, fy - 0.05, lo - 0.01)]], "Livery")
+    g.box((0, fy - 0.1, lo - 0.02), (hwf * 1.4, 0.4, 0.03), "Steel")  # sump guard
+    B.make("Bumper_F", g, (0, fy - 0.15, (lo + bt[0]) / 2), hull, M)
+    g = G()
+    g.hull([(sx * x, y, z) for sx in (-1, 1) for (x, y, z) in [
+        (hwr + 0.015, ry + 0.38, lo + 0.05), (hwr + 0.015, ry + 0.38, bt[1]), (hwr * 0.92, ry - 0.03, lo + 0.1),
+        (hwr * 0.92, ry - 0.03, bt[1] - 0.02), (hwr * 0.98, ry + 0.1, bt[1]), (hwr * 0.95, ry + 0.05, lo + 0.07)]], "Livery")
+    B.make("Bumper_R", g, (0, ry + 0.15, (lo + bt[1]) / 2), hull, M)
+
+    # bull bar: two hoops up in front of the grille, a cross tube carrying
+    # the round spotlights, braces back under the bumper
+    g = G()
+    by = fy + 0.12
+    for sx in (-1, 1):
+        rod(g, (sx * 0.3, by, lo + 0.02), (sx * 0.3, by, 0.72), 0.05, "Trim", 8)
+        rod(g, (sx * 0.3, by, 0.72), (sx * 0.12, by, 0.78), 0.05, "Trim", 8)
+        rod(g, (sx * 0.3, by, lo + 0.04), (sx * 0.3, fy - 0.12, lo + 0.04), 0.04, "Trim", 8)
+    rod(g, (-0.12, by, 0.78), (0.12, by, 0.78), 0.05, "Trim", 8)
+    rod(g, (-0.62, by - 0.02, 0.55), (0.62, by - 0.02, 0.55), 0.05, "Trim", 8)
+    rod(g, (-0.3, by, lo + 0.1), (0.3, by, lo + 0.1), 0.04, "Trim", 8)
+    for sx in (-1, 1):
+        x = sx * 0.48
+        g.box((x, by - 0.02, 0.6), (0.04, 0.04, 0.08), "Trim")
+        g.cyl((x, by + 0.02, 0.68), "Y", 0.1, 0.12, "Trim", segs=12)
+        g.cyl((x, by + 0.085, 0.68), "Y", 0.085, 0.015, "Chrome", segs=12)
+        g.cyl((x, by + 0.09, 0.68), "Y", 0.072, 0.015, "Lamp", segs=12)
+    B.make("BullBar", g, (0, by, 0.6), hull, M)
+
+    # mirrors on the doors just behind the A-pillar
+    my = c["mirror_y"]
+    mh = body.heights(my)[4]
+    for s, n in ((-1, "L"), (1, "R")):
+        g = G()
+        x = body.half_width(my)
+        g.hull([(s * (x + dx), my + dy, mh + dz) for (dx, dy, dz) in [
+            (0.04, -0.02, 0.05), (0.04, -0.02, 0.15), (0.17, -0.06, 0.06), (0.17, -0.06, 0.15),
+            (0.04, 0.07, 0.07), (0.04, 0.07, 0.14), (0.17, 0.05, 0.08), (0.17, 0.05, 0.14)]], "Livery")
+        g.box((s * (x + 0.11), my - 0.065, mh + 0.105), (0.11, 0.01, 0.07), "Chrome")
+        B.make("Mirror_" + n, g, (s * (x + 0.1), my, mh + 0.1), hull, M)
+
+    # spare wheel lying flat on a low rack on the roof, two straps over it
+    sy = c["spare_y"]
+    sz = body.heights(sy)[5] + 0.06
+    g = G()
+    for sx in (-1, 1):
+        g.box((sx * 0.42, sy, sz - 0.03), (0.04, 0.9, 0.04), "Trim")
+    for dy in (-0.32, 0.32):
+        g.box((0, sy + dy, sz - 0.03), (0.88, 0.04, 0.04), "Trim")
+    g.cyl((0, sy, sz + 0.11), "Z", 0.37, 0.22, "Trim", segs=16)
+    g.cyl((0, sy, sz + 0.11), "Z", 0.22, 0.225, "Steel", segs=12)
+    for sx in (-1, 1):
+        x = sx * 0.13
+        g.box((x, sy, sz + 0.23), (0.06, 0.74, 0.012), "Livery")
+        for s in (-1, 1):
+            g.box((x, sy + s * 0.375, sz + 0.11), (0.06, 0.012, 0.26), "Livery")
+    B.make("RoofSpare", g, (0, sy, sz + 0.11), hull, M)
+
+    # rear wing: a black plane up on tall end plates that rise from the boot
+    # lid towards the back; the plates carry the sponsor disc (painted)
+    if c.get("wing"):
+        g = G()
+        c["wing"](g, body)
+        wy = c["wing_y"]
+        B.make("Spoiler", g, (0, wy, body.heights(wy)[5] + 0.3), hull, M)
+
+    # long mud flaps behind every wheel, side-exit exhaust ahead of the right
+    # rear wheel
+    g = G()
+    fz0, fz1 = c["flap_z"]
+    for wy in c["wheel_y"]:
+        for s in (-1, 1):
+            g.box((s * (c["wheel_x"] - 0.01), wy - body.arch_r() + 0.02, (fz0 + fz1) / 2),
+                  (0.34, 0.015, fz1 - fz0), "Flap")
+    B.make("MudFlaps", g, (0, 0, (fz0 + fz1) / 2), hull, M)
+    g = G()
+    ey = c["wheel_y"][1] + body.arch_r() + 0.12
+    ex = body.half_width(ey, False)
+    rod(g, (ex - 0.3, ey, lo + 0.02), (ex + 0.02, ey, lo + 0.02), 0.09, "Chrome", 8)
+    g.cyl((ex + 0.025, ey, lo + 0.02), "X", 0.035, 0.01, "Trim", segs=8)
+    B.make("Exhaust", g, (ex, ey, lo + 0.02), hull, M)
+
+
+def raid_wing(g, body):
+    y0, y1 = -1.62, -2.22  # front and back of the end plates
+    z0 = body.heights(-1.9)[5]
+    for s in (-1, 1):
+        g.hull([(s * x, y, z) for x in (0.8, 0.83) for (y, z) in [
+            (y0, z0 - 0.01), (y1 + 0.02, z0 - 0.01), (y1, z0 + 0.66), (y1 + 0.3, z0 + 0.66), (y0 + 0.02, z0 + 0.12)]],
+            "Livery")
+    g.hull([(sx * 0.8, y, z) for sx in (-1, 1) for (y, z) in [
+        (y1 + 0.42, z0 + 0.56), (y1 + 0.4, z0 + 0.6), (y1 + 0.02, z0 + 0.6), (y1 + 0.02, z0 + 0.64)]], "Trim")
+    g.box((0, y1 + 0.03, z0 + 0.66), (1.6, 0.025, 0.05), "Trim")  # gurney lip
+
+
 CARS = [
     dict(name="Pleiad", file="pleiad", paint=(0.1, 0.22, 0.66), flaps=(0.95, 0.95, 0.95), rims=(0.85, 0.68, 0.22),
          hw=0.865, roof_hw=0.62, flare=0.075, bottom=0.2, nose_round=0.84,
@@ -1269,6 +1384,18 @@ CARS = [
          wheel_y=(1.45, -1.4), wheel_x=0.8, wheel_r=0.34, wheel_w=0.24,
          exhaust_x=0.5, lightbar_y=-0.15, back_screen=(-0.9, -1.45),
          body_extras=[nova_front], screen=((0.92, 0.9), (0.2, 1.36))),
+    dict(name="DeGaulle", file="degaulle", kind="raid", paint=(1.0, 0.8, 0.05), flaps=(0.8, 0.1, 0.08),
+         rims=(0.95, 0.95, 0.93), half_len=2.3, z_span=1.8,
+         hw=0.86, roof_hw=0.64, flare=0.12, bottom=0.33, nose_round=0.88, tyre_segs=16,
+         # long-nosed '87 desert raid saloon up on long-travel struts: low
+         # sloping bonnet, raked screen, a roof that falls into a sloping rear
+         # window over a short high boot carrying the wing
+         profile=[(2.24, 0.68, 0.64), (2.17, 0.84, 0.8), (1.7, 0.9, 0.86), (1.0, 0.97, 0.93), (0.15, 1.5, 1.0),
+                  (-0.8, 1.5, 1.02), (-1.55, 1.13, 1.05), (-2.05, 1.12, 1.06), (-2.2, 0.98, 0.92)],
+         glass_y=(0.95, -1.35), pillars=[-0.2, -0.95], b_pillar=-0.2, mirror_y=0.85,
+         wheel_y=(1.38, -1.32), wheel_x=0.84, wheel_r=0.37, wheel_w=0.3,
+         bumper_top=(0.62, 0.7), flap_z=(0.06, 0.62), spare_y=-0.3, wing_y=-1.9,
+         wing=raid_wing, screen=((1.0, 0.97), (0.15, 1.5))),
 ]
 
 
