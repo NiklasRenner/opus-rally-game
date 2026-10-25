@@ -1,6 +1,8 @@
 class_name CameraRig
 extends Camera3D
-## Switchable driving views. Press C (or pad Y) to cycle.
+## Switchable driving views. Press C (or pad Y) to cycle. Hold F (or click the
+## right stick) to look back: the camera sits ahead of the car facing it, with
+## the road behind in view, until the key is let go.
 
 const MODES := ["CHASE", "FAR CHASE", "HOOD", "BUMPER", "TV"]
 
@@ -26,6 +28,8 @@ func cycle() -> void:
 
 
 func mode_name() -> String:
+	if Input.is_action_pressed("look_back"):
+		return "LOOK BACK"
 	return MODES[mode]
 
 
@@ -53,6 +57,10 @@ func _physics_process(delta: float) -> void:
 	var car_xf := target.global_transform
 	var car_pos := car_xf.origin
 	var speed_fov := clampf(target.speed * 0.25, 0.0, 12.0)
+	if Input.is_action_pressed("look_back"):
+		_look_back(car_pos, delta)
+		_apply_shake(delta)
+		return
 	match MODES[mode]:
 		"CHASE", "FAR CHASE":
 			var far_cam: bool = MODES[mode] == "FAR CHASE"
@@ -62,12 +70,7 @@ func _physics_process(delta: float) -> void:
 			_height = lerpf(_height, car_pos.y + h, clampf(delta * 6.0, 0.0, 1.0))
 			var want := car_pos - _dir * dist
 			want.y = _height
-			# keep the camera out of walls / hills
-			var q := PhysicsRayQueryParameters3D.create(car_pos + Vector3.UP, want, 1)
-			var hit := get_world_3d().direct_space_state.intersect_ray(q)
-			if not hit.is_empty():
-				want = (hit["position"] as Vector3) + (car_pos - want).normalized() * 0.4
-			global_position = want
+			global_position = _clear_of_walls(car_pos, want)
 			look_at(car_pos + _dir * 5.0 + Vector3.UP * 1.0, Vector3.UP)
 			fov = (62.0 if far_cam else 68.0) + speed_fov
 		"HOOD":
@@ -80,6 +83,10 @@ func _physics_process(delta: float) -> void:
 			_update_tv(car_pos)
 			look_at(car_pos + Vector3.UP * 0.5, Vector3.UP)
 			fov = clampf(2400.0 / maxf(global_position.distance_to(car_pos), 1.0), 18.0, 70.0)
+	_apply_shake(delta)
+
+
+func _apply_shake(delta: float) -> void:
 	if _shake > 0.0:
 		h_offset = randf_range(-1.0, 1.0) * _shake * 0.25
 		v_offset = randf_range(-1.0, 1.0) * _shake * 0.25
@@ -87,6 +94,28 @@ func _physics_process(delta: float) -> void:
 	else:
 		h_offset = 0.0
 		v_offset = 0.0
+
+
+## Arcade look-back: in front of the car and a little above, facing back over
+## it at the road behind. Keeps the chase direction up to date so letting go
+## of the key drops straight back into the chosen view.
+func _look_back(car_pos: Vector3, delta: float) -> void:
+	_dir = _dir.slerp(_flat_forward(), clampf(delta * 5.0, 0.0, 1.0)).normalized()
+	_height = lerpf(_height, car_pos.y + 2.5, clampf(delta * 6.0, 0.0, 1.0))
+	var want := car_pos + _dir * 6.6
+	want.y = car_pos.y + 2.2
+	global_position = _clear_of_walls(car_pos, want)
+	look_at(car_pos - _dir * 5.0 + Vector3.UP * 1.0, Vector3.UP)
+	fov = 68.0
+
+
+## Pull a camera spot in towards the car if a wall or hill is in between.
+func _clear_of_walls(car_pos: Vector3, want: Vector3) -> Vector3:
+	var q := PhysicsRayQueryParameters3D.create(car_pos + Vector3.UP, want, 1)
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if not hit.is_empty():
+		return (hit["position"] as Vector3) + (car_pos - want).normalized() * 0.4
+	return want
 
 
 ## Trackside camera: pick a spot ahead of the car, hold it until the car passes.

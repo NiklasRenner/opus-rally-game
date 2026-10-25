@@ -55,6 +55,14 @@ const PROFILES := {
 		"body": [700.0, 2200.0, 0.55], "jitter": [0.04, 0.18], "gain": 0.95,
 		"turbo": 0.0, "whistle": [0.0, 0.0], "bov": 0.0, "flutter": 0.0,
 		"crackle": 0.45, "antilag": 0.2, "shift_pop": 0.35, "whine": 0.006},
+	# Niva's carburettor 1.7 four: no turbo, low lazy revs, a gruff boomy
+	# exhaust with lots of body drone and a loose, rattly idle
+	"niva": {"cyl": 4, "offsets": [0.0, 0.04, -0.03, 0.05], "amps": [1.0, 0.85, 1.1, 0.9],
+		"idle": 850.0, "red": 6200.0, "on": [0.15, 1.9], "off": [0.25, 1.4], "knock": 0.05, "top": 2600.0,
+		"r1": [105.0, 2.0, 1.2], "r2": [360.0, 2.0, 0.55], "intake": [1100.0, 1.5, 0.3],
+		"body": [450.0, 1300.0, 0.75], "jitter": [0.08, 0.3], "gain": 1.0,
+		"turbo": 0.0, "whistle": [0.0, 0.0], "bov": 0.0, "flutter": 0.0,
+		"crackle": 0.3, "antilag": 0.0, "shift_pop": 0.15, "whine": 0.008},
 	# V10: uneven banks and lots of combustion rasp so it snarls rather than hums
 	"f1": {"cyl": 10, "offsets": [0.0, 0.04, -0.03, 0.02, -0.05, 0.03, -0.02, 0.05, -0.04, 0.01],
 		"amps": [1.0, 0.82, 1.1, 0.86, 1.04, 0.8, 1.08, 0.88, 1.02, 0.84], "idle": 4000.0, "red": 15500.0,
