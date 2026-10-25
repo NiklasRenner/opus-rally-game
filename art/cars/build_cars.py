@@ -354,7 +354,12 @@ class Body:
                     p = [Vector(verts[i]) for i in (a, b, c, d)]
                     # across the diagonals, so a bent quad reads the same on both sides
                     nr = (p[2] - p[0]).cross(p[3] - p[1]).normalized()
-                    if abs(nr.y) > 0.3 and (cab > 0.3 or self.in_screen(yc)):
+                    back = self.c.get("back_screen")
+                    if back and back[1] - 0.01 < yc < back[0]:
+                        # back window down to the boot lid, between thick C-pillars
+                        if nr.y < -0.3 and e not in (5, n - 7):
+                            key = "Glass"
+                    elif abs(nr.y) > 0.3 and (cab > 0.3 or self.in_screen(yc)):
                         key = "Glass"
                 faces.append((a, b, c, d))
                 keys.append(key)
@@ -1174,7 +1179,7 @@ CARS = [
                   (-0.9, 1.36, 0.9), (-1.45, 0.96, 0.91), (-2.3, 0.95, 0.91), (-2.4, 0.86, 0.82)],
          glass_y=(0.85, -1.02), pillars=[-0.36], b_pillar=-0.36, mirror_y=0.68,
          wheel_y=(1.45, -1.4), wheel_x=0.8, wheel_r=0.34, wheel_w=0.24,
-         exhaust_x=0.5, lightbar_y=-0.15,
+         exhaust_x=0.5, lightbar_y=-0.15, back_screen=(-0.9, -1.45),
          body_extras=[nova_front], screen=((0.92, 0.9), (0.2, 1.36))),
 ]
 

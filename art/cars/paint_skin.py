@@ -851,7 +851,10 @@ def paint_cavalier(sk):
     # top: black bonnet and boot, white roof; unit number on the roof for
     # the helicopter, POLICE across the boot reading from behind
     sk.top_box(-1.0, 1.0, 2.5, 0.5, black)
-    sk.top_box(-1.0, 1.0, -1.36, -2.5, black)
+    sk.top_box(-1.0, 1.0, -1.45, -2.5, black)
+    # the strip under the back window belongs to the boot; the roof edges
+    # either side of it (the C-pillar tops) stay white down to the deck
+    sk.top_box(-0.6, 0.6, -0.95, -1.45, black)
     c = sk.px("top", (0.0, -0.55, 0))
     sk.text("12", c, 14, black, rotate=-90, bold=True)
     sk.text("POLICE", sk.px("top", (0.0, -1.95, 0)), 14, WHITE, rotate=-90, bold=True)
@@ -866,15 +869,18 @@ def paint_cavalier(sk):
     # rear: POLICE across the boot lid, red tail lights at the corners, the
     # plate between them
     sk.end_box(False, -1.0, 1.0, 0.0, 1.6, black)
-    sk.text("POLICE", sk.px("rear", (0, 0, 0.82)), 7, WHITE, bold=True)
+    for s_ in (-1, 1):  # the back faces of the white C-pillars, above the boot
+        sk.end_box(False, s_ * 0.6, s_ * 1.0, 0.97, 1.6, WHITE)
+    sk.text("POLICE", sk.px("rear", (0, 0, 0.765)), 14, WHITE, bold=True)
     for s_ in (-1, 1):
-        sk.end_box(False, s_ * 0.48, s_ * 0.86, 0.56, 0.72, rgb(0.3, 0.3, 0.32))
-        sk.end_box(False, s_ * 0.5, s_ * 0.84, 0.58, 0.7, RED)
-        sk.end_box(False, s_ * 0.52, s_ * 0.82, 0.665, 0.68, rgb(1.0, 0.45, 0.4))
-        sk.end_box(False, s_ * 0.66, s_ * 0.67, 0.58, 0.7, rgb(0.45, 0.04, 0.03))
-    sk.end_box(False, -0.26, 0.26, 0.56, 0.71, WHITE)
-    sk.end_box(False, -0.26, 0.26, 0.56, 0.58, rgb(0.1, 0.2, 0.55))
-    sk.text("PD 12", sk.px("rear", (0, 0, 0.645)), 7, rgb(0.1, 0.2, 0.55))
+        sk.end_box(False, s_ * 0.5, s_ * 0.87, 0.52, 0.66, rgb(0.3, 0.3, 0.32))
+        sk.end_box(False, s_ * 0.52, s_ * 0.85, 0.535, 0.645, RED)
+        sk.end_box(False, s_ * 0.54, s_ * 0.83, 0.62, 0.63, rgb(1.0, 0.45, 0.4))
+        sk.end_box(False, s_ * 0.68, s_ * 0.69, 0.535, 0.645, rgb(0.45, 0.04, 0.03))
+    sk.end_box(False, -0.29, 0.29, 0.52, 0.66, rgb(0.3, 0.3, 0.32))
+    sk.end_box(False, -0.28, 0.28, 0.53, 0.65, WHITE)
+    sk.end_box(False, -0.28, 0.28, 0.53, 0.55, rgb(0.1, 0.2, 0.55))
+    sk.text("PD 12", sk.px("rear", (0, 0, 0.598)), 7, rgb(0.1, 0.2, 0.55))
 
     finish(sk, wheels=(1.45, -1.4))
 
