@@ -51,6 +51,7 @@ class Wheel:
 
 var spec: Dictionary = Cars.LIST[0]  # set before adding to the tree
 var control_enabled := false
+var wrecked := false  # blown up (restart): no tyres, no engine, just a tumbling shell
 var stopping := false  # brake to a halt on its own (past a point-to-point finish)
 var manual_gears := false  # Up / Down shift; the automatic box takes over once control ends
 var rain := false  # wet weather: less grip, spray off every tyre
@@ -304,6 +305,8 @@ func _read_input(delta: float) -> void:
 # --------------------------------------------------------------------------- physics
 
 func _physics_process(delta: float) -> void:
+	if wrecked:
+		return
 	_read_input(delta)
 	var b3 := global_transform.basis
 	forward_speed = -b3.z.dot(linear_velocity)
@@ -773,6 +776,122 @@ func _apply_impact(dv: float, point: Vector3, normal: Vector3) -> void:
 	_sparks.global_position = point
 	_sparks.restart()
 	impact.emit(clampf(dv / 15.0, 0.0, 1.0), zone)
+
+
+## Restart: the car goes up like the biggest crash. The body crumples all
+## round, every bolt-on and wheel flies off, the shell is thrown up spinning
+## and a fireball, smoke and debris burst out of it.
+func blow_up() -> void:
+	if wrecked:
+		return
+	wrecked = true
+	control_enabled = false
+	throttle = 0.0
+	brake = 0.0
+	var vel := linear_velocity
+	for zone in damage:
+		damage[zone] = 1.0
+	var b := global_transform.basis
+	for side in [[Vector3.FORWARD, 2.1], [Vector3.BACK, 2.1], [Vector3.LEFT, 0.9], [Vector3.RIGHT, 0.9], [Vector3.UP, 1.2]]:
+		var out: Vector3 = b * (side[0] as Vector3)
+		model.dent(global_position + out * (side[1] as float), -out, 0.4, 1.4)
+	for i in 6:
+		var out := b * Vector3(_rng.randf_range(-1, 1), _rng.randf_range(0, 0.6), _rng.randf_range(-1, 1)).normalized()
+		model.dent(global_position + out * 1.6, -out, 0.3, 0.9)
+	model.explode(vel, 7.0)
+	for w in wheels:
+		if w.spinner.get_child_count() > 0:
+			_throw_off(w.spinner, w.radius, vel)
+		w.fx.show_surface(w.surface, 0.0, false)
+	apply_central_impulse((Vector3.UP * 6.0 + vel * -0.3) * mass)
+	apply_torque_impulse(Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-0.5, 0.5), _rng.randf_range(-1, 1)) * 2.5 * mass)
+	_smoke.emitting = true
+	_smoke.color = Color(0.08, 0.08, 0.09, 0.9)
+	_explosion_fx()
+	impact.emit(1.0, "front")
+
+
+## A wheel off the car into the world as a loose body.
+func _throw_off(node: Node3D, radius: float, vel: Vector3) -> void:
+	var rb := RigidBody3D.new()
+	rb.mass = 15.0
+	rb.collision_layer = 4
+	rb.collision_mask = 1 | 4
+	var cs := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = radius
+	cyl.height = 0.25
+	cs.shape = cyl
+	cs.rotation.z = PI / 2.0  # axle across the car
+	rb.add_child(cs)
+	get_parent().add_child(rb)
+	rb.global_transform = node.global_transform
+	node.reparent(rb, true)
+	var kick := rb.global_position - global_position
+	kick.y = 0.0
+	rb.linear_velocity = vel * 0.7 + kick.normalized() * _rng.randf_range(5.0, 9.0) + Vector3.UP * _rng.randf_range(5.0, 9.0)
+	rb.angular_velocity = Vector3(_rng.randf_range(-12, 12), _rng.randf_range(-6, 6), _rng.randf_range(-12, 12))
+
+
+## The explosion: a flash of light, a fireball, a column of black smoke and a
+## spray of debris, left in the world where the car blew up.
+func _explosion_fx() -> void:
+	var world := get_parent()
+	var at := global_position + Vector3.UP * 0.6
+	var fire := _make_particles(TexGen.puff(), 28, 0.7)
+	fire.one_shot = true
+	fire.explosiveness = 0.9
+	fire.spread = 180.0
+	fire.initial_velocity_min = 3.0
+	fire.initial_velocity_max = 8.0
+	fire.scale_amount_min = 2.5
+	fire.scale_amount_max = 4.0
+	var hot := Gradient.new()
+	hot.offsets = PackedFloat32Array([0.0, 0.35, 1.0])
+	hot.colors = PackedColorArray([Color(1.0, 0.95, 0.5, 1.0), Color(1.0, 0.45, 0.08, 0.95), Color(0.25, 0.08, 0.04, 0.0)])
+	fire.color_ramp = hot
+	var smoke := _make_particles(TexGen.puff(), 36, 2.6)
+	smoke.one_shot = true
+	smoke.explosiveness = 0.6
+	smoke.color = Color(0.1, 0.1, 0.11, 0.9)
+	smoke.spread = 50.0
+	smoke.initial_velocity_min = 2.0
+	smoke.initial_velocity_max = 6.0
+	smoke.gravity = Vector3(0, 1.5, 0)
+	smoke.scale_amount_min = 2.0
+	smoke.scale_amount_max = 3.5
+	var debris := CPUParticles3D.new()
+	debris.amount = 40
+	debris.lifetime = 1.8
+	debris.one_shot = true
+	debris.explosiveness = 0.95
+	debris.local_coords = false
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.14, 0.08, 0.18)
+	bm.material = TexGen.flat_material(Color(0.16, 0.15, 0.14))
+	debris.mesh = bm
+	debris.direction = Vector3.UP
+	debris.spread = 80.0
+	debris.initial_velocity_min = 6.0
+	debris.initial_velocity_max = 15.0
+	debris.gravity = Vector3(0, -14, 0)
+	debris.angular_velocity_min = -720.0
+	debris.angular_velocity_max = 720.0
+	debris.scale_amount_min = 0.5
+	debris.scale_amount_max = 1.6
+	for p: CPUParticles3D in [fire, smoke, debris]:
+		world.add_child(p)
+		p.global_position = at
+		p.emitting = true
+	_sparks.global_position = at
+	_sparks.restart()
+	var flash := OmniLight3D.new()
+	flash.light_color = Color(1.0, 0.6, 0.25)
+	flash.light_energy = 10.0
+	flash.omni_range = 16.0
+	world.add_child(flash)
+	flash.global_position = at + Vector3.UP
+	flash.create_tween().tween_property(flash, "light_energy", 0.0, 0.6)
 
 
 ## Rain: a pair of spot lamps lighting the road ahead.

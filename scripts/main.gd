@@ -13,6 +13,7 @@ const FINISH_MARGIN := 1.0  # beyond the road edge: the car has to go under the 
 const SPLITS := 3  # split times on the way along a point-to-point stage
 const FALL_DEPTH := 7.0  # this far below the road it last drove on, a car has gone over the edge
 const FALL_TIME := 1.3  # seconds of falling to watch before it's put back on the road
+const BLOW_UP_TIME := 0.35  # seconds of the car blowing up to watch before the flag closes on a restart
 
 var track: TrackBuilder
 var car: RallyCar
@@ -221,6 +222,8 @@ func _build_rain() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if Transition.busy:
+		return
 	if event.is_action_pressed("quit"):
 		if not finished:
 			overlay.open_pause()
@@ -254,14 +257,20 @@ func reset_car(at := -1) -> void:
 	cam.snap()
 
 
+## Start the race again: the car blows up as the flag closes over it.
 func restart() -> void:
+	if Transition.busy:
+		return
 	get_tree().paused = false
-	get_tree().reload_current_scene()
+	overlay.mode = RaceMenu.Mode.NONE
+	car.blow_up()
+	cam.shake(1.0)
+	audio.crash(1.5)
+	Transition.reload(BLOW_UP_TIME)
 
 
 func to_menu() -> void:
-	get_tree().paused = false
-	get_tree().change_scene_to_file("res://menu.tscn")
+	Transition.change_scene("res://menu.tscn")
 
 
 func _on_impact(strength: float, _zone: String) -> void:
@@ -277,8 +286,10 @@ func _flash(text: String, t: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# countdown 3, 2, 1, GO
+	# countdown 3, 2, 1, GO, once the flag has opened on the stage
 	if not _racing:
+		if Transition.busy:
+			return
 		_countdown -= delta
 		if _countdown > 0.6:
 			message = str(int(ceil(_countdown - 0.6)))
