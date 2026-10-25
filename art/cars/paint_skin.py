@@ -1209,13 +1209,134 @@ def paint_degaulle(sk):
     finish(sk, wheels=(1.38, -1.32))
 
 
+# --------------------------------------------------------------------------- the Celica
+
+def paint_celica(sk):
+    """Works Celica in white oil-company colours: a red swoosh edged in green
+    sweeping from the nose along each flank and up over the rear quarter, the
+    oil company in white inside it and big on the bonnet, yellow 5 panels on
+    the doors and roof, a tiny tricolour on the roof vent (made-up KESTROL,
+    TOKYO and PIXELLI)."""
+    red = rgb(0.85, 0.07, 0.07)
+    green = rgb(0.0, 0.52, 0.22)
+    yellow = rgb(1.0, 0.82, 0.08)
+    blue = rgb(0.08, 0.2, 0.62)
+    shut = rgb(0.7, 0.71, 0.72)
+    base(sk, WHITE)
+
+    def swoosh_z(y):
+        """Centre height of the swoosh: low along the nose and door, sweeping
+        up over the rear wheel to the top of the quarter."""
+        return 0.44 + 0.42 * smooth((0.6 - y) / 2.1)
+
+    bands = [(0.075, 0.06, green), (0.055, -0.055, red), (-0.06, -0.08, green)]  # offsets from the centre, top down
+
+    for side in (-1, 1):
+        piece = "side_r" if side > 0 else "side_l"
+        x0, _, x1, _ = sk.rect(piece)
+        o = sk.L["pieces"][piece]["origin"]
+        u = sk.L["pieces"][piece]["u"][1]
+
+        def swoosh(d, side=side, x0=x0, x1=x1, o=o, u=u):
+            for px in range(x0, x1):
+                yy = o[1] + (px - x0 + 0.5) / sk.s * u
+                zc = swoosh_z(yy)
+                for a, b, col in bands:
+                    _, pa = sk.side_pt(side, yy, zc + a)
+                    _, pb = sk.side_pt(side, yy, zc + b)
+                    d.line((px, round(pa), px, round(pb) - 1), fill=col)
+                # a thinner green curve under it, rising from the nose up the front wing
+                if yy > 0.85:
+                    z2 = 0.38 + 0.3 * smooth((yy - 0.85) / 1.3)
+                    _, pa = sk.side_pt(side, yy, z2 + 0.02)
+                    _, pb = sk.side_pt(side, yy, z2 - 0.02)
+                    d.line((px, round(pa), px, round(pb) - 1), fill=green)
+        sk.paint(swoosh)
+        # the oil company in white inside the red band along the door
+        sk.text("KESTROL", sk.side_pt(side, 0.4, swoosh_z(0.4)), 7, WHITE, bold=True)
+        # shut lines, handle, fuel cap
+        for dy in (0.86, -0.32):
+            sk.side_box(side, dy, dy - 0.013, 0.3, 0.85, shut)
+        sk.side_box(side, -0.12, -0.24, 0.76, 0.785, BLACK)
+        sk.side_box(side, -1.55, -1.65, 0.8, 0.86, shut)
+        # yellow number panel on the door
+        sk.side_box(side, 0.46, -0.02, 0.6, 0.81, BLACK)
+        sk.side_box(side, 0.45, -0.01, 0.61, 0.8, yellow)
+        sk.text("5", sk.side_pt(side, 0.22, 0.705), 14, BLACK, bold=True)
+        # maker on the front wing, tyre maker on the sill, stickers behind the front wheel
+        sk.text("TOKYO", sk.side_pt(side, 1.45, 0.72), 7, red, bold=True)
+        sk.text("PIXELLI", sk.side_pt(side, 0.3, 0.3), 7, BLACK)
+        for i, col in enumerate((red, green, BLACK)):
+            yy = 0.82 - i * 0.12
+            sk.side_box(side, yy, yy - 0.1, 0.35, 0.39, col)
+        # driver's name on the rear side window
+        sk.text("D PIXOL", sk.side_pt(side, -0.72, 1.02), 7, WHITE, "glass")
+
+    # top: the oil company big on the bonnet reading from in front, green and
+    # red curves along the wings, roof number panel, the tricolour on the
+    # roof vent, the maker on the ducktail
+    sk.text("KESTROL", sk.px("top", (0.0, 1.55, 0)), 14, red, rotate=90, bold=True)
+    sk.top_box(-0.3, 0.3, 1.3, 1.25, green)
+    for sx in (-1, 1):
+        sk.top_box(sx * 0.66, sx * 0.76, 2.2, 0.9, red)
+        sk.top_box(sx * 0.62, sx * 0.66, 2.2, 0.9, green)
+    c = sk.px("top", (0.0, -0.58, 0))
+    sk.box((c[0] - 10, c[1] - 9), (c[0] + 10, c[1] + 9), BLACK)
+    sk.box((c[0] - 9, c[1] - 8), (c[0] + 9, c[1] + 8), yellow)
+    sk.text("5", c, 14, BLACK, rotate=-90, bold=True)
+    for i, col in enumerate((blue, WHITE, RED)):
+        x = -0.075 + i * 0.05
+        sk.top_box(x, x + 0.05, -0.2, -0.3, col)
+    sk.text("TOKYO", sk.px("top", (0.0, -2.02, 0)), 7, red, rotate=-90, bold=True)
+
+    # front: slim lamps on the slope of the nose either side of a narrow
+    # grille slot with a red badge, deep bumper with a black intake, amber
+    # corners and the swoosh starting across it
+    sk.end_box(True, -0.78, 0.78, 0.565, 0.665, BLACK)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.33, s_ * 0.66, 0.58, 0.65, rgb(1.0, 0.98, 0.86))
+        sk.end_box(True, s_ * 0.67, s_ * 0.76, 0.58, 0.65, AMBER)
+    sk.disc(sk.px("front", (0, 0, 0.615)), 3, red)
+    for a, b, col in ((0.475, 0.46, green), (0.46, 0.43, red), (0.43, 0.415, green)):
+        sk.end_box(True, -1.0, 1.0, b, a, col)
+    sk.end_box(True, -0.5, 0.5, 0.24, 0.39, BLACK)
+    for i in range(5):
+        z = 0.26 + i * 0.024
+        sk.end_box(True, -0.48, 0.48, z, z + 0.008, GREY)
+    sk.end_box(True, -0.95, 0.95, 0.18, 0.23, BLACK)
+    sk.text("KESTROL", sk.px("front", (0, 0, 0.205)), 7, WHITE)
+
+    # rear: full-width red tail light bar across the hatch base with the
+    # maker in the dark middle, yellow plate on the bumper, black diffuser
+    sk.end_box(False, -0.9, 0.9, 0.7, 0.88, BLACK)
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.36, s_ * 0.86, 0.72, 0.86, RED)
+        sk.end_box(False, s_ * 0.38, s_ * 0.84, 0.83, 0.845, rgb(1.0, 0.45, 0.4))
+        sk.end_box(False, s_ * 0.36, s_ * 0.46, 0.72, 0.86, AMBER)
+    sk.end_box(False, -0.34, 0.34, 0.73, 0.85, rgb(0.5, 0.06, 0.06))
+    sk.text("TOKYO", sk.px("rear", (0, 0, 0.79)), 7, rgb(0.78, 0.8, 0.83), bold=True)
+    for a, b, col in ((0.62, 0.6, green), (0.6, 0.56, red), (0.56, 0.54, green)):
+        sk.end_box(False, -1.0, 1.0, b, a, col)
+    sk.end_box(False, -0.24, 0.24, 0.39, 0.5, YELLOW)
+    sk.text("TC 5", sk.px("rear", (0, 0, 0.445)), 7, BLACK, bold=True)
+    sk.end_box(False, -0.95, 0.95, 0.0, 0.33, rgb(0.08, 0.08, 0.09))
+
+    sun_strip(sk, "KESTROL", red, WHITE)
+    finish(sk, wheels=(1.3, -1.23))
+
+
+def smooth(t):
+    t = min(max(t, 0.0), 1.0)
+    return t * t * (3 - 2 * t)
+
+
 def lerp(a, b, t):
     return a + (b - a) * t
 
 
 PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp,
             "bellatrix": paint_bellatrix, "niva": paint_niva, "cavalier": paint_cavalier,
-            "degaulle": paint_degaulle}
+            "degaulle": paint_degaulle, "celica": paint_celica}
 
 
 def main():
