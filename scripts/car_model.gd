@@ -16,6 +16,8 @@ const SPIN_R := {"RoadWheel_": 0.24, "Sprocket_": 0.25, "Idler_": 0.21, "ReturnR
 const CAR_DENTS := ["Body", "Bumper_F", "Bumper_R"]
 const CAR_PARTS := [["Bumper_F", "front", 0.3], ["Bumper_R", "rear", 0.35], ["Spoiler", "rear", 0.55],
 	["LightPod", "front", 0.2], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]]
+const BEACON_COLS := [Color(0.15, 0.35, 1.0), Color(1.0, 0.1, 0.06)]  # blue, red
+const FLASH := 0.9  # seconds for one blue-blue, red-red cycle of the light bar
 const WHEEL_NODES := ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"]  # same order as Cars.wheel_positions
 
 const FACE_BACK := Basis(Vector3.RIGHT, Vector3.UP, Vector3.BACK)
@@ -52,6 +54,11 @@ var _head: Node3D
 # tank only: animated bits
 var _turret: Node3D
 var _gun: Node3D  # mantlet, kept level by the stabiliser
+# police car: the light bar's blue and red lenses and the glow they throw
+var _beacons: Array[StandardMaterial3D] = [TexGen.flat_material(BEACON_COLS[0], 0.2, true),
+	TexGen.flat_material(BEACON_COLS[1], 0.2, true)]
+var _beacon_glow: OmniLight3D
+var _flash_t := 0.0
 var _track_mat: StandardMaterial3D
 var _road_wheels: Array[Node3D] = []
 var _wheel_r: Array[float] = []
@@ -64,6 +71,7 @@ func build() -> void:
 	_body_mat.metallic_specular = 0.75
 	_head = null
 	_gun = null
+	_beacon_glow = null
 	_road_wheels.clear()
 	_wheel_r.clear()
 	_build_mesh()
@@ -120,6 +128,15 @@ func _build_mesh() -> void:
 				w.free()
 	if kind() == "f1":
 		_helmet(spec["helmet_pos"], spec["helmet"], 0.15)  # looks into the corners
+	var bar := root.find_child("LightBar", true, false) as Node3D
+	if spec.get("beacons", false) and bar:
+		_beacon_glow = OmniLight3D.new()
+		_beacon_glow.position = Vector3(0, 0.3, 0)
+		_beacon_glow.omni_range = 7.0
+		_beacon_glow.light_energy = 1.6
+		_beacon_glow.shadow_enabled = false
+		bar.add_child(_beacon_glow)  # goes with the bar if it is knocked off
+	set_process(_beacon_glow != null)
 	if not is_tank():
 		return
 	_turret = root.find_child("Turret", true, false)
@@ -147,10 +164,13 @@ func _car_materials() -> Dictionary:
 		"Lamp": TexGen.flat_material(Color(1.0, 0.95, 0.75), 0.2, true),
 		"Flap": TexGen.flat_material(spec["flaps"], 0.9),
 		"Tyre": TexGen.material(TexGen.chevron_tread() if spec.get("tread") == "chevron" else TexGen.tread(), 0.95),
-		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5), spec.get("rim_ring", Color(0, 0, 0, 0))), 0.4),
+		"Rim": TexGen.material(TexGen.rim(spec["rims"], spec.get("spokes", 5), spec.get("rim_ring", Color(0, 0, 0, 0)),
+			spec.get("hubcap", Color(0, 0, 0, 0))), 0.4),
 		"Tail": TexGen.flat_material(Color(1.0, 0.12, 0.08), 0.3, true),
 		"Frame": _frame_mat(),
 		"Steel": _steel_mat(),
+		"BeaconBlue": _beacons[0],
+		"BeaconRed": _beacons[1],
 	}
 
 
@@ -436,6 +456,22 @@ func _detach(part_name: String, car_velocity: Vector3) -> void:
 
 
 # --------------------------------------------------------------------------- animation
+
+## The police light bar: a double flash of blue, then a double flash of red,
+## the unlit lens dimmed, and the roof light glowing in the lit colour.
+func _process(delta: float) -> void:
+	_flash_t = fmod(_flash_t + delta, FLASH)
+	var half := FLASH / 2.0
+	var side := 0 if _flash_t < half else 1
+	var t := fmod(_flash_t, half) / half
+	var on := t < 0.22 or (t > 0.36 and t < 0.58)
+	for i in 2:
+		var lit := on and i == side
+		_beacons[i].albedo_color = BEACON_COLS[i] if lit else BEACON_COLS[i].darkened(0.7)
+	if is_instance_valid(_beacon_glow):
+		_beacon_glow.visible = on
+		_beacon_glow.light_color = BEACON_COLS[side]
+
 
 ## Per-frame animation: the F1 driver looks into the corner; the tank's tracks
 ## and road wheels roll with the ground speed and the turret leans into the
