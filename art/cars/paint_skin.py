@@ -1422,14 +1422,13 @@ def paint_celica(sk):
         sk.top_box(x, x + 0.05, -0.2, -0.3, col)
     sk.text("TOKYO", sk.px("top", (0.0, -2.02, 0)), 7, red, rotate=-90, bold=True)
 
-    # front: slim lamps on the slope of the nose either side of a narrow
-    # grille slot with a red badge, deep bumper with a black intake, amber
-    # corners and the swoosh starting across it
-    sk.end_box(True, -0.78, 0.78, 0.565, 0.665, BLACK)
-    for s_ in (-1, 1):
-        sk.end_box(True, s_ * 0.33, s_ * 0.66, 0.58, 0.65, rgb(1.0, 0.98, 0.86))
-        sk.end_box(True, s_ * 0.67, s_ * 0.76, 0.58, 0.65, AMBER)
+    # front: the lamps pop up out of the bonnet (geometry), so the nose
+    # carries only a narrow grille slot with a red badge and amber corner
+    # lamps; deep bumper with a black intake, the swoosh starting across it
+    sk.end_box(True, -0.26, 0.26, 0.585, 0.645, BLACK)
     sk.disc(sk.px("front", (0, 0, 0.615)), 3, red)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.6, s_ * 0.76, 0.585, 0.64, AMBER)
     for a, b, col in ((0.475, 0.46, green), (0.46, 0.43, red), (0.43, 0.415, green)):
         sk.end_box(True, -1.0, 1.0, b, a, col)
     sk.end_box(True, -0.5, 0.5, 0.24, 0.39, BLACK)
