@@ -840,8 +840,8 @@ def niva_details(g, body):
     g.cyl((0, ry - 0.16, 0.39), "Z", 0.04, 0.06, "Steel", segs=8)
 
     def gate(z):  # tailgate glass surface, a hair outside it
-        return lerp(-1.84, -1.76, (z - 1.04) / 0.56) - 0.012
-    rod(g, (0.0, gate(1.1), 1.1), (-0.32, gate(1.44), 1.44), 0.02, "Trim")
+        return lerp(-1.8, -1.6, (z - 1.06) / 0.54) - 0.012
+    rod(g, (0.0, gate(1.17), 1.17), (-0.32, gate(1.47), 1.47), 0.02, "Trim")
     (y0, z0), (y1, z1) = body.c["screen"]
     for x in (-0.38, 0.22):
         t = 0.08
@@ -858,7 +858,7 @@ def niva_wing(g, body):
     y = -1.3
     z = body.heights(y)[5]
     g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
-        (0.6, 0.0, -0.01), (0.6, 0.0, 0.02), (0.66, -0.66, 0.22), (0.66, -0.62, 0.0), (0.66, -0.68, 0.18)]], "Livery")
+        (0.6, 0.0, -0.01), (0.6, 0.0, 0.02), (0.66, -0.56, 0.22), (0.66, -0.5, 0.0), (0.66, -0.58, 0.18)]], "Livery")
 
 
 def niva_aux_lamps(g, body):
@@ -1438,10 +1438,12 @@ CARS = [
     dict(name="Niva", file="niva", paint=(0.62, 0.07, 0.06), flaps=(0.06, 0.06, 0.06), rims=(0.95, 0.95, 0.93),
          hw=0.79, roof_hw=0.66, flare=0.06, box_flare=True, bottom=0.42, nose_round=0.95, arch_gap=0.1,
          z_span=1.85,  # tall enough for the roof wedge
-         # short Soviet 4x4: high flat bonnet, upright screen, tall flat roof
-         # and a sheer tailgate, perched high over chunky tyres
+         # short Soviet 4x4: high flat bonnet, upright screen, tall flat roof,
+         # the tailgate glass raked forward up to the roof over a sheer lower
+         # tailgate, perched high over chunky tyres
          profile=[(1.87, 0.6, 0.56), (1.86, 0.95, 0.91), (1.8, 0.99, 0.95), (0.6, 1.04, 1.0), (0.22, 1.56, 1.03),
-                  (-1.6, 1.62, 1.05), (-1.76, 1.6, 1.05), (-1.84, 1.04, 1.02), (-1.87, 0.6, 0.56)],
+                  (-1.52, 1.62, 1.05), (-1.6, 1.6, 1.05), (-1.8, 1.06, 1.03), (-1.85, 1.0, 0.98),
+                  (-1.87, 0.6, 0.56)],
          glass_y=(0.58, -1.45), pillars=[-0.48], b_pillar=-0.48, mirror_y=0.5,
          wheel_y=(1.12, -1.08), wheel_x=0.74, wheel_r=0.36, wheel_w=0.25,
          bumper_top=(0.56, 0.58), bumper_lift=0.16, exhaust_x=-0.5, pod=0, wing_y=-1.3,
