@@ -24,6 +24,7 @@ painted in code at startup.
 | Steer | A D / Left Right | Left stick, d-pad |
 | Handbrake | Space | B |
 | Change camera (Chase, Far chase, Hood, Bumper, TV) | C | Y |
+| Look back (hold) | F | Right stick click |
 | Reset onto road | R | Back |
 | Shift up / down (manual gearbox) | Up / Down | RB / LB |
 | Restart stage | T | |

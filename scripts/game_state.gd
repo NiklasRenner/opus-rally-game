@@ -40,6 +40,7 @@ func _setup_input() -> void:
 	_bind("steer_right", [KEY_D, KEY_RIGHT], [JOY_BUTTON_DPAD_RIGHT], [[JOY_AXIS_LEFT_X, 1.0]])
 	_bind("handbrake", [KEY_SPACE], [JOY_BUTTON_B], [])
 	_bind("camera", [KEY_C], [JOY_BUTTON_Y], [])
+	_bind("look_back", [KEY_F], [JOY_BUTTON_RIGHT_STICK], [])
 	_bind("reset", [KEY_R], [JOY_BUTTON_BACK], [])
 	_bind("restart", [KEY_T], [], [])
 	_bind("shift_up", [KEY_UP], [JOY_BUTTON_RIGHT_SHOULDER], [])
