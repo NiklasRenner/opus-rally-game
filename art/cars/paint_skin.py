@@ -336,13 +336,9 @@ def sun_strip(sk, text, bg, fg):
 
 
 def finish(sk, wheels=(1.32, -1.28), hub=0.34, arch=0.4, belt=0.8):
-    """Glass glints, hand-painted light, window rubbers and the underside.
+    """Hand-painted light, window rubbers and the underside. The glass stays
+    plain: the game's RetroLook shader gives it a moving fake reflection.
     hub, arch: wheel centre height and arch radius; belt: the highlight line."""
-    def glints(d):
-        for k in range(-sk.size, sk.size, 23):
-            d.line((k, 0, k + sk.size, sk.size), fill=rgb(0.16, 0.2, 0.28), width=2)
-    sk.paint(glints, "glass")
-
     # hand-painted light: sides darken towards the sills and round the wheel
     # arches, catch a highlight under the belt; nose and tail fall off at the
     # corners; the top is brightest down the middle
