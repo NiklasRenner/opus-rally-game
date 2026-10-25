@@ -1171,22 +1171,41 @@ def raid_parts(B, c, root, M):
         g.box((s * (x + 0.11), my - 0.065, mh + 0.105), (0.11, 0.01, 0.07), "Chrome")
         B.make("Mirror_" + n, g, (s * (x + 0.1), my, mh + 0.1), hull, M)
 
-    # spare wheel lying flat on a low rack on the roof, two straps over it
+    # spare wheel, the same size as the road wheels, lying flat on a low
+    # rack on the roof with two straps over it
     sy = c["spare_y"]
     sz = body.heights(sy)[5] + 0.06
+    r, w = c["wheel_r"], c["wheel_w"]
     g = G()
     for sx in (-1, 1):
         g.box((sx * 0.42, sy, sz - 0.03), (0.04, 0.9, 0.04), "Trim")
     for dy in (-0.32, 0.32):
         g.box((0, sy + dy, sz - 0.03), (0.88, 0.04, 0.04), "Trim")
-    g.cyl((0, sy, sz + 0.11), "Z", 0.37, 0.22, "Trim", segs=16)
-    g.cyl((0, sy, sz + 0.11), "Z", 0.22, 0.225, "Steel", segs=12)
+    top = sz + w + 0.006
     for sx in (-1, 1):
         x = sx * 0.13
-        g.box((x, sy, sz + 0.23), (0.06, 0.74, 0.012), "Livery")
+        g.box((x, sy, top), (0.06, 2 * r + 0.02, 0.012), "Livery")
         for s in (-1, 1):
-            g.box((x, sy + s * 0.375, sz + 0.11), (0.06, 0.012, 0.26), "Livery")
-    B.make("RoofSpare", g, (0, sy, sz + 0.11), hull, M)
+            g.box((x, sy + s * (r + 0.006), sz + w / 2), (0.06, 0.012, w + 0.02), "Livery")
+    spare = B.make("RoofSpare", g, (0, sy, sz + w / 2), hull, M)
+    # built like a road wheel with its rim face outwards (+X), then laid on
+    # its side so the rim faces up
+    g = G()
+    segs = c.get("tyre_segs", 14)
+    verts, faces, keys = [], [], []
+    for i in range(segs):
+        a = math.tau * i / segs
+        for dx in (-w / 2, w / 2):
+            verts.append((dx, sy + r * math.cos(a), sz + w / 2 + r * math.sin(a)))
+    for i in range(segs):
+        j = (i + 1) % segs
+        faces.append((2 * i, 2 * j, 2 * j + 1, 2 * i + 1))
+        keys.append("Tyre")
+    faces += [tuple(2 * i + 1 for i in range(segs)), tuple(reversed([2 * i for i in range(segs)]))]
+    keys += ["Rim", "Trim"]
+    g.faces(verts, faces, keys)
+    wheel = B.make("SpareWheel", g, (0, sy, sz + w / 2), spare, M)
+    wheel.rotation_euler = (0.0, -math.pi / 2, 0.0)
 
     # rear wing: a black plane up on tall end plates that rise from the boot
     # lid towards the back; the plates carry the sponsor disc (painted)
@@ -1306,7 +1325,7 @@ CARS = [
                   (-0.8, 1.5, 1.02), (-1.55, 1.13, 1.05), (-2.05, 1.12, 1.06), (-2.2, 0.98, 0.92)],
          glass_y=(0.95, -1.35), pillars=[-0.2, -0.95], b_pillar=-0.2, mirror_y=0.85,
          wheel_y=(1.38, -1.32), wheel_x=0.84, wheel_r=0.37, wheel_w=0.3,
-         bumper_top=(0.62, 0.7), flap_z=(0.06, 0.62), spare_y=-0.3, wing_y=-1.9,
+         bumper_top=(0.62, 0.7), flap_z=(0.06, 0.62), spare_y=-0.3, wing_y=-1.9, back_screen=(-0.8, -1.55),
          wing=raid_wing, screen=((1.0, 0.97), (0.15, 1.5))),
 ]
 
