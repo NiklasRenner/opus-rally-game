@@ -879,6 +879,9 @@ def paint_niva(sk):
         sk.side_box(side, 0.62, -0.48, 0.5, 0.513, deep)
         sk.side_box(side, 1.85, 0.62, 0.99, 1.0, deep)
         sk.side_box(side, -1.5, -1.62, 0.9, 0.98, deep)
+        for i in range(3):  # cabin vent slots in the C-pillar
+            z = 1.22 + i * 0.07
+            sk.side_box(side, -1.5, -1.6, z, z + 0.025, deep)
         sk.side_box(side, -1.51, -1.61, 0.91, 0.97, rgb(0.55, 0.06, 0.05))
         sk.side_box(side, -0.3, -0.32, 0.88, 0.9, chrome)  # door lock
         # big CCCP along the door with the white 157 panel in front of it
@@ -949,8 +952,9 @@ def paint_niva(sk):
     # the lamp clusters (geometry) and the plate, a black bumper with a
     # ribbed rubber strip, the wedge's yellow edge
     for s_ in (-1, 1):
-        sk.end_box(False, s_ * 0.73, s_ * 0.745, 0.58, 1.04, deep)
+        sk.end_box(False, s_ * 0.73, s_ * 0.745, 0.58, 1.565, deep)
     sk.end_box(False, -0.745, 0.745, 0.575, 0.59, deep)
+    sk.end_box(False, -0.8, 0.8, 1.555, 1.57, deep)  # seam between the roof and the tailgate
     sk.text("CCCP", sk.px("rear", (0.012, 0, 0.938)), 14, deep, bold=True)  # drop shadow
     sk.text("CCCP", sk.px("rear", (0, 0, 0.95)), 14, yellow, bold=True)
     sk.text("НИВА", sk.px("rear", (0.52, 0, 0.81)), 7, chrome)
