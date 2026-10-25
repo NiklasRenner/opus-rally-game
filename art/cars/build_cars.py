@@ -844,12 +844,15 @@ def niva_details(g, body):
         return lerp(-1.8, -1.6, (z - 1.06) / 0.54) - 0.012 - out
     # back window: a straight-edged pane with clipped corners in a black
     # rubber, set into the tailgate between thick pillars
-    def pane(hw, z0, z1, c, out, key):
-        pts = [(-hw + c, z0), (hw - c, z0), (hw, z0 + c), (hw, z1 - c), (hw - c, z1), (-hw + c, z1),
-               (-hw, z1 - c), (-hw, z0 + c)]
+    # it widens towards the bottom so its sides run with the pillars
+    def pane(hw0, hw1, z0, z1, c, out, key):
+        def hw(z):
+            return lerp(hw0, hw1, (z - z0) / (z1 - z0))
+        pts = [(-hw(z0) + c, z0), (hw(z0) - c, z0), (hw(z0 + c), z0 + c), (hw(z1 - c), z1 - c), (hw(z1) - c, z1),
+               (-hw(z1) + c, z1), (-hw(z1 - c), z1 - c), (-hw(z0 + c), z0 + c)]
         g.hull([(x, gate(z, o), z) for x, z in pts for o in (out - 0.012, out)], key)
-    pane(0.54, 1.1, 1.52, 0.05, 0.016, "Trim")
-    pane(0.51, 1.13, 1.49, 0.04, 0.028, "Glass")
+    pane(0.6, 0.5, 1.1, 1.52, 0.05, 0.016, "Trim")
+    pane(0.57, 0.47, 1.13, 1.49, 0.04, 0.028, "Glass")
     rod(g, (0.0, gate(1.17, 0.04), 1.17), (-0.32, gate(1.45, 0.04), 1.45), 0.02, "Trim")
     (y0, z0), (y1, z1) = body.c["screen"]
     for x in (-0.38, 0.22):
