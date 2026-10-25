@@ -476,19 +476,27 @@ func _build_terrain() -> void:
 		hidden = _geo.fit_grid(_heights)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var cols := PackedColorArray()  # per grid point, worked out the first time it's drawn
+	cols.resize(gn * gn)
+	var have := PackedByteArray()
+	have.resize(gn * gn)
+	var ids := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1), Vector2i(0, 0), Vector2i(1, 1), Vector2i(0, 1)]
 	for z in gn - 1:
 		for x in gn - 1:
 			if _geo and not _geo.cell_drawn(x, z):
 				continue  # out past the band round the road: the distant mesh
 			if _geo and hidden[z * gn + x]:
 				continue  # under the banks
-			var ids := [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x + 1, z + 1),
-				Vector2i(x, z), Vector2i(x + 1, z + 1), Vector2i(x, z + 1)]
-			for g in ids:
-				var k: int = g.y * gn + g.x
+			for o in ids:
+				var gx: int = x + o.x
+				var gz: int = z + o.y
+				var k := gz * gn + gx
 				var h := _heights[k]
-				var wp := Vector3(origin.x + g.x * CELL, h, origin.y + g.y * CELL)
-				st.set_color(_alpine_color(g.x, g.y) if _geo else _terrain_color(h - _road_h[k] * 0.7, k))
+				if not have[k]:
+					cols[k] = _alpine_color(gx, gz) if _geo else _terrain_color(h - _road_h[k] * 0.7, k)
+					have[k] = 1
+				var wp := Vector3(origin.x + gx * CELL, h, origin.y + gz * CELL)
+				st.set_color(cols[k])
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
