@@ -830,11 +830,12 @@ def niva_details(g, body):
     for sx in (-1, 1):
         # chrome-rimmed cluster: red tail and brake lamp outboard, amber
         # indicator and a white reversing lamp inboard
-        g.box((sx * 0.63, ry - 0.01, 0.68), (0.34, 0.03, 0.15), "Chrome")
-        g.box((sx * 0.7, ry - 0.025, 0.68), (0.17, 0.02, 0.12), "Tail")
-        g.box((sx * 0.555, ry - 0.025, 0.68), (0.1, 0.02, 0.12), "Lamp")
+        # (kept inside the tail's width)
+        g.box((sx * 0.53, ry - 0.01, 0.68), (0.34, 0.03, 0.15), "Chrome")
+        g.box((sx * 0.6, ry - 0.025, 0.68), (0.17, 0.02, 0.12), "Tail")
+        g.box((sx * 0.455, ry - 0.025, 0.68), (0.1, 0.02, 0.12), "Lamp")
         # reflector on the bumper corner
-        g.box((sx * 0.68, ry - 0.06, 0.5), (0.1, 0.02, 0.04), "Tail")
+        g.box((sx * 0.62, ry - 0.06, 0.5), (0.1, 0.02, 0.04), "Tail")
     g.box((0, ry - 0.015, 0.765), (0.16, 0.03, 0.03), "Chrome")  # tailgate handle over the plate
     g.box((0, ry - 0.02, 0.6), (0.08, 0.03, 0.02), "Lamp")  # plate lamp
     rod(g, (0, ry + 0.05, 0.36), (0, ry - 0.16, 0.36), 0.05, "Steel")  # tow hook
@@ -844,15 +845,16 @@ def niva_details(g, body):
         return lerp(-1.8, -1.6, (z - 1.06) / 0.54) - 0.012 - out
     # back window: a straight-edged pane with clipped corners in a black
     # rubber, set into the tailgate between thick pillars
-    # it widens towards the bottom so its sides run with the pillars
-    def pane(hw0, hw1, z0, z1, c, out, key):
+    # its sides run parallel to the cabin's sides as seen from behind,
+    # `pillar` metres in from them
+    def pane(pillar, z0, z1, c, out, key):
         def hw(z):
-            return lerp(hw0, hw1, (z - z0) / (z1 - z0))
+            return body_x(body, -1.0, z) - pillar
         pts = [(-hw(z0) + c, z0), (hw(z0) - c, z0), (hw(z0 + c), z0 + c), (hw(z1 - c), z1 - c), (hw(z1) - c, z1),
                (-hw(z1) + c, z1), (-hw(z1 - c), z1 - c), (-hw(z0 + c), z0 + c)]
         g.hull([(x, gate(z, o), z) for x, z in pts for o in (out - 0.012, out)], key)
-    pane(0.6, 0.5, 1.1, 1.52, 0.05, 0.016, "Trim")
-    pane(0.57, 0.47, 1.13, 1.49, 0.04, 0.028, "Glass")
+    pane(0.12, 1.1, 1.52, 0.05, 0.016, "Trim")
+    pane(0.15, 1.13, 1.49, 0.04, 0.028, "Glass")
     rod(g, (0.0, gate(1.17, 0.04), 1.17), (-0.32, gate(1.45, 0.04), 1.45), 0.02, "Trim")
     (y0, z0), (y1, z1) = body.c["screen"]
     for x in (-0.38, 0.22):
@@ -870,7 +872,7 @@ def niva_wing(g, body):
     y = -1.3
     z = body.heights(y)[5]
     g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
-        (0.6, 0.0, -0.01), (0.6, 0.0, 0.02), (0.66, -0.36, 0.22), (0.66, -0.3, 0.0), (0.66, -0.38, 0.18)]], "Livery")
+        (0.55, 0.0, -0.01), (0.55, 0.0, 0.02), (0.61, -0.36, 0.22), (0.61, -0.3, 0.0), (0.61, -0.38, 0.18)]], "Livery")
 
 
 def niva_aux_lamps(g, body):
@@ -1448,7 +1450,7 @@ CARS = [
          body_extras=[evo_extras], wing=evo_wing,
          screen=((0.95, 0.9), (0.18, 1.4))),
     dict(name="Niva", file="niva", paint=(0.62, 0.07, 0.06), flaps=(0.06, 0.06, 0.06), rims=(0.95, 0.95, 0.93),
-         hw=0.79, roof_hw=0.66, flare=0.06, box_flare=True, bottom=0.42, nose_round=0.95, arch_gap=0.1,
+         hw=0.79, roof_hw=0.6, flare=0.06, box_flare=True, bottom=0.42, nose_round=0.95, arch_gap=0.1,
          z_span=1.85,  # tall enough for the roof wedge
          tail_glass=False,  # the back window is its own inset pane (niva_details)
          # short Soviet 4x4: high flat bonnet, upright screen, tall flat roof,
