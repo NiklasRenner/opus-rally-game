@@ -493,6 +493,12 @@ def saloon_parts(B, c, root, M):
     g.cyl((c["exhaust_x"], ry - 0.11, 0.26), "Y", 0.035, 0.01, "Trim", segs=8)
     B.make("Exhaust", g, (c["exhaust_x"], ry, 0.26), hull, M)
 
+    # the car's own bolt-ons: each builder fills its geometry and returns its origin
+    for name, fn in c.get("bolt_ons", ()):
+        g = G()
+        origin = fn(g, body)
+        B.make(name, g, origin, hull, M)
+
 
 
 # --------------------------------------------------------------------------- the hypercar
@@ -771,6 +777,45 @@ def ibiza_wing(g, body):
     for sx in (-1, 1):
         g.hull([(sx * x, y + dy, z + dz) for x in (0.66, 0.69) for (dy, dz) in [
             (0.04, -0.03), (0.04, 0.05), (-0.42, -0.1), (-0.42, 0.0), (-0.2, -0.12)]], "Livery")
+
+
+def celica_extras(g, body):
+    """Bulge down the middle of the bonnet with two vent grilles on it and a
+    small vent pod on the roof."""
+    for y0, y1 in ((1.85, 1.15),):
+        za, zb = body.heights(y0)[5], body.heights(y1)[5]
+        g.hull([(sx * x, y, z + dz) for sx in (-1, 1) for (x, y, z) in ((0.36, y0, za), (0.36, y1, zb))
+                for dz in (-0.01, 0.0)] + [(sx * 0.28, y, z + 0.035) for sx in (-1, 1)
+                                          for (y, z) in ((y0 - 0.08, za), (y1 + 0.05, zb))], "Livery")
+    for sx in (-1, 1):
+        y = 1.45
+        z = body.heights(y)[5] + 0.035
+        g.hull([(sx * x, y + dy, z + dz) for x in (0.07, 0.25) for dy in (-0.13, 0.13) for dz in (0.0, 0.006)], "Trim")
+    y = -0.15
+    z = body.heights(y)[5]
+    g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.13, 0.1, -0.005), (0.13, -0.22, -0.005), (0.1, 0.07, 0.05), (0.1, -0.22, 0.035)]], "Livery")
+    g.box((0, y + 0.08, z + 0.025), (0.18, 0.02, 0.035), "Trim")
+
+
+def celica_wing(g, body):
+    # ducktail: a small lip rising off the end of the tail deck
+    y = -1.95
+    z = body.heights(y)[5]
+    g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.68, 0.18, -0.01), (0.7, -0.2, -0.01), (0.7, -0.2, 0.06), (0.68, 0.05, 0.015)]], "Livery")
+
+
+def celica_pods(g, body):
+    # two black auxiliary lamp pods sitting on the front bumper ahead of the lamps
+    y = body.front() + 0.04
+    z = body.c["bumper_top"][0] + 0.03
+    g.box((0, y - 0.03, z - 0.08), (1.0, 0.04, 0.03), "Trim")
+    for sx in (-1, 1):
+        g.cyl((sx * 0.52, y, z), "Y", 0.1, 0.09, "Trim", segs=12)
+        g.cyl((sx * 0.52, y + 0.05, z), "Y", 0.085, 0.012, "Lamp", segs=12)
+        g.box((sx * 0.52, y - 0.03, z - 0.06), (0.04, 0.04, 0.06), "Trim")
+    return (0, y, z)
 
 
 def truck_parts(B, c, root, M):
@@ -1258,6 +1303,18 @@ CARS = [
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
          wing=ibiza_wing, screen=((0.95, 0.88), (0.3, 1.32))),
+    dict(name="Celica", file="celica", paint=(0.95, 0.95, 0.93), flaps=(0.8, 0.1, 0.08), rims=(0.95, 0.95, 0.93),
+         hw=0.84, roof_hw=0.6, flare=0.07, bottom=0.19, nose_round=0.82,
+         # '92 four-wheel-drive liftback coupe: short low nose, raked screen,
+         # a rounded roof falling into a long sloping hatch over a ducktail
+         profile=[(2.2, 0.55, 0.51), (2.13, 0.67, 0.63), (1.8, 0.74, 0.7), (1.3, 0.8, 0.76), (0.88, 0.85, 0.81),
+                  (0.0, 1.28, 0.84), (-0.5, 1.29, 0.86), (-0.75, 1.25, 0.87), (-1.45, 0.97, 0.89),
+                  (-2.0, 0.95, 0.89), (-2.12, 0.9, 0.85), (-2.2, 0.66, 0.62)],
+         glass_y=(0.85, -1.2), pillars=[-0.32], b_pillar=-0.32, mirror_y=0.68, back_screen=(-0.74, -1.45),
+         wheel_y=(1.3, -1.23), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
+         bumper_top=(0.5, 0.6), exhaust_x=-0.55, pod=0, wing_y=-1.95,
+         body_extras=[celica_extras], wing=celica_wing, bolt_ons=[("LightPod", celica_pods)],
+         screen=((0.88, 0.85), (0.0, 1.28))),
     dict(name="Swamp", file="swamp", kind="truck", paint=(0.55, 0.85, 0.1), flaps=(0.1, 0.1, 0.1),
          rims=(1.0, 0.5, 0.05), frame=(0.8, 0.08, 0.06), tyre_segs=20,
          hw=0.92, roof_hw=0.8, flare=0.0, bottom=1.38, nose_round=0.93, half_len=2.45, px_m=70.0,

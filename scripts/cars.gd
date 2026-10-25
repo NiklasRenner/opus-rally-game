@@ -81,6 +81,25 @@ const LIST := [
 		"stats": {"power": 0.98, "grip": 1.0, "steer": 1.05, "mass": 1120.0},
 	},
 	{
+		"id": "celica",
+		"class": "A",
+		"name": "TOKYO CELIAC",
+		"blurb": "Turbo 4WD coupe: stable and strong out of corners",
+		"number": "5",
+		"plate": "TC 5",
+		"mesh": "res://models/celica.glb",
+		"nose": -2.23,
+		"skin": "res://models/celica_skin.png",
+		"spokes": 6,
+		"rims": Color(0.95, 0.95, 0.93),
+		"flaps": Color(0.8, 0.1, 0.08),
+		"wheels": {"x": 0.82, "zf": -1.3, "zr": 1.23, "rf": 0.34, "rr": 0.34, "wf": 0.26, "wr": 0.26},
+		# a bit heavier and punchier than the hatches, with a longer, calmer
+		# chassis: a touch more pull, a touch lazier on turn-in
+		"gears": [3.3, 2.52, 2.02, 1.68, 1.44],
+		"stats": {"power": 1.03, "grip": 1.0, "steer": 0.97, "mass": 1260.0, "inertia": 1.05},
+	},
+	{
 		"id": "degaulle",
 		"class": "A",
 		"name": "DE GAULLE 405",
