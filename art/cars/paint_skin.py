@@ -952,7 +952,7 @@ def paint_niva(sk):
     # the lamp clusters (geometry) and the plate, a black bumper with a
     # ribbed rubber strip, the wedge's yellow edge
     for s_ in (-1, 1):
-        sk.end_box(False, s_ * 0.73, s_ * 0.745, 0.58, 1.565, deep)
+        sk.end_box(False, s_ * 0.73, s_ * 0.745, 0.58, 1.04, deep)
     sk.end_box(False, -0.745, 0.745, 0.575, 0.59, deep)
     sk.end_box(False, -0.8, 0.8, 1.555, 1.57, deep)  # seam between the roof and the tailgate
     sk.text("CCCP", sk.px("rear", (0.012, 0, 0.938)), 14, deep, bold=True)  # drop shadow
