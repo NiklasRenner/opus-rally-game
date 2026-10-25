@@ -474,12 +474,23 @@ func _build_terrain() -> void:
 			var sink := _water_depth(wx, wz)
 			if sink > 0.0:
 				_heights[k] = lerpf(_heights[k], _water_level() - 5.0, sink)
+	var covered := PackedByteArray()
+	if _geo:
+		# the banks along the road take over from the grid near it; the grid
+		# ducks under them where the two overlap
+		covered = _geo.build_banks()
+		for k in gn * gn:
+			if covered[k]:
+				_heights[k] -= 2.0
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for z in gn - 1:
 		for x in gn - 1:
 			if _geo and not _geo.cell_drawn(x, z):
 				continue  # out past the band round the road: the distant mesh
+			if _geo and covered[z * gn + x] and covered[z * gn + x + 1] and covered[(z + 1) * gn + x] \
+					and covered[(z + 1) * gn + x + 1]:
+				continue  # under the banks
 			var ids := [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x + 1, z + 1),
 				Vector2i(x, z), Vector2i(x + 1, z + 1), Vector2i(x, z + 1)]
 			for g in ids:
@@ -587,6 +598,12 @@ func _alpine_color(gx: int, gz: int) -> Color:
 	for o in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var q := Vector2i(clampi(gx + o.x, 0, gn - 1), clampi(gz + o.y, 0, gn - 1))
 		steep = maxf(steep, absf(_heights[q.y * gn + q.x] - h) / CELL)
+	return alpine_tint(h, steep, k)
+
+
+## The mountain colours for ground at height h, this steep (rise per metre);
+## k varies the grass a little.
+func alpine_tint(h: float, steep: float, k: int) -> Color:
 	var grass := Color(0.40, 0.56, 0.24).lerp(Color(0.56, 0.58, 0.30), clampf(sin(k * 0.37) * 0.5 + 0.5, 0.0, 1.0) * 0.4)
 	var rock := Color(0.58, 0.55, 0.50).lerp(Color(0.46, 0.44, 0.42), clampf(sin(k * 0.53) * 0.5 + 0.5, 0.0, 1.0))
 	var c := grass.lerp(rock, smoothstep(0.55, 1.1, steep))
@@ -601,7 +618,9 @@ func city_park(gx: int, gz: int) -> bool:
 
 
 func terrain_height(x: float, z: float) -> float:
-	if _cliff or _geo:
+	if _geo:
+		return _geo.surface_height(x, z)
+	if _cliff:
 		return ground_height(x, z)  # the mountainside is too steep for the nearest grid point
 	var k := _grid_index(x, z)
 	return _heights[k]
@@ -713,6 +732,19 @@ func _build_barriers() -> void:
 		var pos := points[i] + _side(i) * out_sign * (edge + size.x * 0.5)
 		pos.y = points[i].y - 0.45 + size.y * 0.5
 		var xf := Transform3D(frame(i).basis, pos)
+		if _geo:
+			# on a falling hillside: walls and bales reach down into the
+			# ground, armco stands on a post
+			var low := _lowest_ground(xf, size)
+			var bottom := pos.y - size.y * 0.5
+			if low < bottom - 0.05:
+				if size.x < 0.5:
+					_armco_post(walls, xf, bottom, low)
+				else:
+					var ext := bottom - low + 0.3
+					size = Vector3(size.x, size.y + ext, size.z)
+					pos.y -= ext * 0.5
+					xf.origin = pos
 		var mi := MeshInstance3D.new()
 		if style.get("log", false):
 			# a felled log lying along the corner
@@ -741,6 +773,27 @@ func _build_barriers() -> void:
 		# chevron boards on the outside of tight corners
 		if absf(turn) > 0.3 and i % 6 == 0 and not drop:
 			_chevron(points[i] + _side(i) * out_sign * (widths[i] * 0.5 + VERGE + 2.5), -xf.basis.z, out_sign)
+
+
+## Lowest ground under a box at xf (its footprint's corners and middle).
+func _lowest_ground(xf: Transform3D, size: Vector3) -> float:
+	var low := INF
+	for c in [Vector2(0, 0), Vector2(-0.5, -0.5), Vector2(0.5, -0.5), Vector2(-0.5, 0.5), Vector2(0.5, 0.5)]:
+		var q: Vector3 = xf * Vector3(c.x * size.x, 0, c.y * size.z)
+		low = minf(low, terrain_height(q.x, q.z))
+	return low
+
+
+## A steel post under a length of armco, from the ground up to its rail.
+func _armco_post(body: StaticBody3D, xf: Transform3D, top: float, ground: float) -> void:
+	var h := top - ground + 0.4
+	var box := BoxMesh.new()
+	box.size = Vector3(0.14, h, 0.14)
+	var mi := MeshInstance3D.new()
+	mi.mesh = box
+	mi.material_override = TexGen.flat_material(Color(0.55, 0.57, 0.6), 0.5)
+	mi.transform = Transform3D(xf.basis, Vector3(xf.origin.x, top - h * 0.5 + 0.1, xf.origin.z))
+	body.add_child(mi)
 
 
 ## A point-to-point road just stops: a row of bales across each end, with a
@@ -791,6 +844,10 @@ func _chevron(pos: Vector3, tangent: Vector3, out_sign: float) -> void:
 	bm.size = Vector3(1.6, 0.8, 0.08)
 	board.mesh = bm
 	board.material_override = TexGen.material(TexGen.stripes(Color(1.0, 0.82, 0.1), Color(0.08, 0.08, 0.08), 4), 0.8)
+	var ground := pos.y - 0.45
+	if _geo:
+		ground = terrain_height(pos.x, pos.z)
+		pos.y = maxf(pos.y, ground + 0.45)  # up a cut bank it stands on the bank
 	board.position = pos + Vector3(0, 1.6, 0)
 	add_child(board)
 	board.look_at(board.position + tangent, Vector3.UP)
@@ -805,10 +862,12 @@ func _chevron(pos: Vector3, tangent: Vector3, out_sign: float) -> void:
 	board.add_child(label)
 	var post := MeshInstance3D.new()
 	var pm := BoxMesh.new()
-	pm.size = Vector3(0.12, 2.2, 0.12)
+	# from the board down into the ground, however far below it is
+	var top := pos.y + 1.6
+	pm.size = Vector3(0.12, top - ground + 0.3, 0.12)
 	post.mesh = pm
 	post.material_override = TexGen.flat_material(Color(0.85, 0.85, 0.85))
-	post.position = pos + Vector3(0, 0.5, 0)
+	post.position = Vector3(pos.x, (top + ground - 0.3) * 0.5, pos.z)
 	add_child(post)
 
 
@@ -1129,6 +1188,8 @@ func _build_spectators() -> void:
 			var near := nearest_index(pos, k)
 			if distance_to_road(pos, near) < widths[near] * 0.5 + VERGE + 1.5 or _blocked(pos, near):
 				continue
+			if _geo and _geo.slope(pos.x, pos.z) > 0.45:
+				continue  # nobody stands on a bank that steep
 			crowd.person(Transform3D(Basis.looking_at(face - pos, Vector3.UP), pos), hop)
 	var mi := crowd.make()
 	if mi:

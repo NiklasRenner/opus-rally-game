@@ -291,6 +291,8 @@ func _read_input(delta: float) -> void:
 		# brakes while rolling, then the handbrake (holding the brake would reverse)
 		b = 0.6 if forward_speed > 1.0 else 0.0
 		hb = forward_speed <= 1.0
+	else:
+		hb = true  # parked on the line until GO, even on a slope
 	throttle = move_toward(throttle, t, delta * 6.0)
 	brake = move_toward(brake, b, delta * 8.0)
 	# keyboard steering ramps in, centres faster

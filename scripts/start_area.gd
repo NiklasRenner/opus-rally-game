@@ -113,6 +113,16 @@ func _drop(k: int, off: float) -> float:
 	return -0.5 * clampf((absf(off) - _hw(k)) / TrackBuilder.VERGE, 0.0, 1.0)
 
 
+## Height of the ground (relative to the road at k) at x across from the
+## centre (+ right): the real ground on a stage built from a real road,
+## else the road's usual shoulder.
+func _ground(k: int, x: float) -> float:
+	if track._geo:
+		var w := _frame(k) * Vector3(x, 0, 0)
+		return track.terrain_height(w.x, w.z) - w.y
+	return _drop(k, x)
+
+
 ## Stands well clear of other parts of the route?
 func _clear(p: Vector3, off: float) -> bool:
 	for q in track.points:
@@ -483,10 +493,15 @@ func _grandstand(s: float, k0: int, k1: int, rows: int, roof: bool) -> void:
 	var seat := _tiled(TexGen.concrete(), 1.0, Vector3(3, 2, 1), Color(0.85, 0.85, 0.82))
 	var paint := [TexGen.flat_material(Color(0.1, 0.3, 0.75), 0.8), TexGen.flat_material(Color(0.85, 0.85, 0.85), 0.8)]
 	var base := -0.6
+	var foot := base
+	if track._geo:
+		# down to the ground, where it falls away under the stand
+		for k in range(k0, k1 + 1):
+			foot = minf(foot, _ground(k, s * (off0 + rows * depth)) - 0.3)
 	for r in rows:
 		var top := base + 0.6 + r * 0.55
-		var c := Vector3(s * (off0 + depth * (r + 0.5)), (base + top) * 0.5, 0)
-		var size := Vector3(depth, top - base, length)
+		var c := Vector3(s * (off0 + depth * (r + 0.5)), (foot + top) * 0.5, 0)
+		var size := Vector3(depth, top - foot, length)
 		_mesh(_box_mesh(size), seat, xf * Transform3D(Basis.IDENTITY, c))
 		# painted riser
 		_mesh(_box_mesh(Vector3(0.04, 0.5, length)), paint[r % 2],
@@ -611,7 +626,7 @@ func _flags_and_crowd() -> void:
 			var hw := _hw(k)
 			# flagpoles behind the boards, bunting strung between them
 			if posmod(k, 3) == 0 and not on_stand and theme != "moon":  # no wind to fly a flag in
-				var base := xf * Vector3(s * (hw + 2.4), _drop(k, hw + 2.4), 0)
+				var base := xf * Vector3(s * (hw + 2.4), _ground(k, s * (hw + 2.4)), 0)
 				var tex: ImageTexture = designs[_rng.randi() % designs.size()]
 				_flag(base, s, tex, 5.0)
 				var top := base + Vector3(0, 4.6, 0)
@@ -627,7 +642,11 @@ func _flags_and_crowd() -> void:
 				var z := -1.5 + _rng.randf_range(0.0, 0.4)
 				while z < 1.5:
 					if _rng.randf() < density * (1.0 - row * 0.2):
-						var p := Vector3(s * (off + _rng.randf_range(-0.15, 0.15)), _drop(k, off) + row * 0.25, z)
+						var p := Vector3(s * (off + _rng.randf_range(-0.15, 0.15)), _ground(k, s * off) + (0.0 if track._geo else row * 0.25), z)
+						var w := xf * p
+						if track._geo and track._geo.slope(w.x, w.z) > 0.6:
+							z += 0.7
+							continue  # no standing on a steep bank
 						_crowd.person(xf * Transform3D(Basis(Vector3.UP, s * PI * 0.5 + _rng.randf_range(-0.4, 0.4)), p),
 							_rng.randf() < 0.55)
 					z += _rng.randf_range(0.55, 0.85)
