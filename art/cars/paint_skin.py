@@ -1209,6 +1209,135 @@ def paint_degaulle(sk):
     finish(sk, wheels=(1.38, -1.32))
 
 
+# --------------------------------------------------------------------------- the Lancer
+
+def paint_lancer(sk):
+    """Late-90s works Lancer in tobacco red: a big white chevron over the
+    bonnet running down onto the front wings, the same chevron logo on the
+    rear doors, wing end plates and the top of the wing, white number 2
+    panels on the front doors, a white strip along the rear valance and
+    yellow fog lamps (made-up MARLOW, RALLIPIX, KARISMO, SOLPIX, PIXELIN)."""
+    red = rgb(0.85, 0.07, 0.07)
+    shut = rgb(0.55, 0.04, 0.04)
+    fog = rgb(1.0, 0.86, 0.15)
+    base(sk, red)
+
+    def logo(pts, w, h, text=True):
+        """Chevron pack logo in a box given by its four corners (top-left,
+        top-right, bottom-right, bottom-left in skin pixels): white with the
+        red roof across its top, the name under it."""
+        (ax, ay), (bx, by), (cx, cy), (dx, dy) = pts
+        sk.paint(lambda d: d.polygon(pts, fill=WHITE))
+
+        def at(u, v):  # u across, v down, both 0..1
+            return (lerp(lerp(ax, bx, u), lerp(dx, cx, u), v), lerp(lerp(ay, by, u), lerp(dy, cy, u), v))
+        roof = [at(0, 0), at(1, 0), at(1, 0.55), at(0.5, 0.2), at(0, 0.55)]
+        sk.paint(lambda d: d.polygon(roof, fill=red))
+        if text:
+            c = at(0.5, 0.77)
+            sk.text("MARLOW", c, h, BLACK)
+
+    for side in (-1, 1):
+        # the bonnet chevron runs down over the nose and back along the front
+        # wing as a white wedge, then a thin line to the front door
+        pts = [sk.side_pt(side, 2.25, 0.84), sk.side_pt(side, 2.25, 0.62), sk.side_pt(side, 1.72, 0.64),
+               sk.side_pt(side, 0.98, 0.8), sk.side_pt(side, 0.98, 0.86)]
+        sk.paint(lambda d, pts=pts: d.polygon(pts, fill=WHITE))
+        sk.side_box(side, 0.98, 0.5, 0.82, 0.845, WHITE)
+        # shut lines, handles, fuel cap
+        for dy in (0.98, -0.33, -1.15):
+            sk.side_box(side, dy, dy - 0.013, 0.3, 0.92, shut)
+        for hy in (-0.2, -0.98):
+            sk.side_box(side, hy, hy + 0.11, 0.8, 0.82, BLACK)
+        sk.side_box(side, -1.5, -1.6, 0.8, 0.86, shut)
+        # number panel on the front door, the paint sponsor along its foot
+        sk.side_box(side, 0.78, 0.18, 0.44, 0.82, BLACK)
+        sk.side_box(side, 0.77, 0.19, 0.45, 0.81, WHITE)
+        sk.text("2", sk.side_pt(side, 0.48, 0.69), 14, BLACK, bold=True)
+        sk.text("SOLPIX", sk.side_pt(side, 0.48, 0.51), 7, BLACK, bold=True)
+        # the pack logo on the rear door, works names on the quarter
+        a, b = sk.side_pt(side, -0.37, 0.89), sk.side_pt(side, -0.86, 0.89)
+        c, d = sk.side_pt(side, -0.86, 0.47), sk.side_pt(side, -0.37, 0.47)
+        logo([a, b, c, d], abs(b[0] - a[0]), 7)
+        sk.side_box(side, -1.38, -2.0, 0.855, 0.935, WHITE)
+        sk.text("RALLIPIX", sk.side_pt(side, -1.69, 0.895), 7, BLACK, bold=True)
+        sk.text("KARISMO", sk.side_pt(side, -1.69, 0.8), 7, WHITE, bold=True)
+        # stickers behind the front wheel and on the rear bumper, tyre maker
+        for i, col in enumerate((WHITE, BLACK, WHITE, rgb(0.1, 0.2, 0.6))):
+            z = 0.7 - i * 0.075
+            sk.side_box(side, 0.95, 0.83, z, z - 0.06, col)
+        sk.side_box(side, 0.1, -0.68, 0.33, 0.41, BLACK)
+        sk.text("PIXELIN", sk.side_pt(side, -0.29, 0.37), 7, WHITE)
+        # crew names on the rear side windows
+        sk.text("PIXINEN", sk.side_pt(side, -0.72, 1.12), 7, WHITE, "glass")
+        sk.text("BYTEINEN", sk.side_pt(side, -0.72, 1.03), 7, WHITE, "glass")
+        # wing end plates: the logo again, no room for the name
+        a, b = sk.side_pt(side, -1.76, 1.37), sk.side_pt(side, -2.08, 1.37)
+        c, d = sk.side_pt(side, -2.08, 1.12), sk.side_pt(side, -1.76, 1.12)
+        logo([a, b, c, d], abs(b[0] - a[0]), 7, text=False)
+
+    # top: the chevron over the bonnet (white, peaking back towards the
+    # screen), the name across it reading from in front; roof number; the
+    # logo on the wing reading from behind
+    pts = [sk.px("top", (x, y, 0)) for x, y in ((-1.0, 2.3), (1.0, 2.3), (1.0, 1.55), (0.0, 1.08), (-1.0, 1.55))]
+    sk.paint(lambda d: d.polygon(pts, fill=WHITE))
+    sk.text("MARLOW", sk.px("top", (0.0, 1.85, 0)), 14, red, rotate=90, bold=True)
+    c = sk.px("top", (0.0, -0.45, 0))
+    sk.box((c[0] - 10, c[1] - 10), (c[0] + 10, c[1] + 10), BLACK)
+    sk.box((c[0] - 9, c[1] - 9), (c[0] + 9, c[1] + 9), WHITE)
+    sk.text("2", c, 14, BLACK, rotate=-90, bold=True)
+    sk.top_box(-0.62, 0.62, -1.86, -2.1, WHITE)
+    roof = [sk.px("top", (x, y, 0)) for x, y in ((-0.62, -1.86), (0.62, -1.86), (0.62, -1.99), (0.0, -1.9), (-0.62, -1.99))]
+    sk.paint(lambda d: d.polygon(roof, fill=red))
+    sk.text("MARLOW", sk.px("top", (0.0, -2.04, 0)), 7, BLACK, rotate=-90, bold=True)
+
+    # front: white bonnet edge, wide headlamps either side of a slim black
+    # grille, a deep bumper with a big middle intake and side intakes
+    # carrying the yellow fog lamps, tyre maker on the lip
+    sk.end_box(True, -1.0, 1.0, 0.7, 0.9, WHITE)
+    sk.end_box(True, -0.26, 0.26, 0.58, 0.68, BLACK)
+    for i in range(3):
+        z = 0.6 + i * 0.025
+        sk.end_box(True, -0.24, 0.24, z, z + 0.009, GREY)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.29, s_ * 0.78, 0.58, 0.7, BLACK)
+        sk.end_box(True, s_ * 0.31, s_ * 0.6, 0.595, 0.685, rgb(1.0, 0.98, 0.86))
+        sk.end_box(True, s_ * 0.62, s_ * 0.76, 0.595, 0.685, rgb(0.9, 0.9, 0.86))
+        sk.end_box(True, s_ * 0.66, s_ * 0.8, 0.5, 0.54, AMBER)
+        sk.end_box(True, s_ * 0.52, s_ * 0.82, 0.26, 0.44, BLACK)
+        sk.disc(sk.px("front", (s_ * 0.67, 0, 0.35)), 0.07 * sk.s, GREY)
+        sk.disc(sk.px("front", (s_ * 0.67, 0, 0.35)), 0.058 * sk.s, fog)
+    sk.end_box(True, -0.46, 0.46, 0.25, 0.47, BLACK)
+    for i in range(7):
+        z = 0.27 + i * 0.027
+        sk.end_box(True, -0.44, 0.44, z, z + 0.009, GREY)
+    sk.end_box(True, -0.95, 0.95, 0.19, 0.23, BLACK)
+    sk.end_box(True, -0.3, 0.3, 0.48, 0.565, BLACK)
+    sk.text("PIXELIN", sk.px("front", (0, 0, 0.523)), 7, WHITE)
+
+    # rear: white band across the boot lid with the name, wide red tail lights
+    # with amber inners, plate in a black recess, white valance strip
+    sk.end_box(False, -0.62, 0.62, 0.86, 0.97, WHITE)
+    sk.text("MARLOW", sk.px("rear", (0, 0, 0.915)), 7, BLACK, bold=True)
+    for s_ in (-1, 1):
+        # the lenses are brighter than the paint so they read against it
+        sk.end_box(False, s_ * 0.38, s_ * 0.88, 0.69, 0.86, BLACK)
+        sk.end_box(False, s_ * 0.6, s_ * 0.86, 0.71, 0.84, rgb(1.0, 0.22, 0.16))
+        sk.end_box(False, s_ * 0.62, s_ * 0.84, 0.81, 0.825, rgb(1.0, 0.6, 0.55))
+        sk.end_box(False, s_ * 0.5, s_ * 0.585, 0.71, 0.84, AMBER)
+        sk.end_box(False, s_ * 0.4, s_ * 0.485, 0.71, 0.84, rgb(0.88, 0.88, 0.86))
+    sk.end_box(False, -0.3, 0.3, 0.58, 0.72, BLACK)
+    sk.end_box(False, -0.24, 0.24, 0.6, 0.7, YELLOW)
+    sk.text("LE 2", sk.px("rear", (0, 0, 0.65)), 7, BLACK, bold=True)
+    sk.end_box(False, -0.3, 0.3, 0.44, 0.52, BLACK)
+    sk.text("PIXELIN", sk.px("rear", (0, 0, 0.48)), 7, WHITE)
+    sk.end_box(False, -0.95, 0.95, 0.33, 0.39, WHITE)
+    sk.end_box(False, -0.95, 0.95, 0.0, 0.33, rgb(0.08, 0.08, 0.09))
+
+    sun_strip(sk, "LANCER EVO", WHITE, red)
+    finish(sk)
+
+
 # --------------------------------------------------------------------------- the Celica
 
 def paint_celica(sk):
@@ -1336,7 +1465,7 @@ def lerp(a, b, t):
 
 PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp,
             "bellatrix": paint_bellatrix, "niva": paint_niva, "cavalier": paint_cavalier,
-            "degaulle": paint_degaulle, "celica": paint_celica}
+            "degaulle": paint_degaulle, "lancer": paint_lancer, "celica": paint_celica}
 
 
 def main():

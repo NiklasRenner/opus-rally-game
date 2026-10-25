@@ -780,6 +780,39 @@ def ibiza_wing(g, body):
             (0.04, -0.03), (0.04, 0.05), (-0.42, -0.1), (-0.42, 0.0), (-0.2, -0.12)]], "Livery")
 
 
+def evo_extras(g, body):
+    # vented bonnet: a low intake in the middle, two outlet grilles behind it
+    y = 1.3
+    z = body.heights(y)[5]
+    g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.24, 0.2, -0.01), (0.24, -0.16, -0.01), (0.2, 0.18, 0.045), (0.2, -0.16, 0.05)]], "Livery")
+    g.box((0, y + 0.185, z + 0.02), (0.36, 0.02, 0.04), "Trim")
+    for sx in (-1, 1):
+        g.box((sx * 0.44, 1.62, body.heights(1.62)[5] + 0.008), (0.2, 0.2, 0.02), "Trim")
+        for i in range(3):
+            g.box((sx * 0.44, 1.55 + i * 0.07, body.heights(1.62)[5] + 0.02), (0.18, 0.02, 0.01), "Steel")
+    # roof scoop up at the front of the roof
+    y = 0.02
+    z = body.heights(y)[5]
+    g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
+        (0.15, 0.08, -0.005), (0.15, -0.28, -0.005), (0.12, 0.06, 0.065), (0.12, -0.28, 0.035)]], "Livery")
+    g.box((0, y + 0.07, z + 0.03), (0.22, 0.02, 0.045), "Trim")
+
+
+def evo_wing(g, body):
+    # two-tier wing on tall end plates standing at the edges of the boot lid
+    y = -1.9
+    z = body.heights(y)[5]
+    for s in (-1, 1):
+        g.hull([(s * x, y + dy, z + dz) for x in (0.7, 0.73) for (dy, dz) in [
+            (0.16, -0.01), (-0.16, -0.01), (0.04, 0.36), (-0.2, 0.36)]], "Livery")
+    g.hull([(sx * 0.72, y + dy, z + dz) for sx in (-1, 1) for (dy, dz) in [
+        (0.06, 0.33), (-0.22, 0.37), (-0.22, 0.33), (0.04, 0.3)]], "Livery")
+    g.hull([(sx * 0.7, y + dy, z + dz) for sx in (-1, 1) for (dy, dz) in [
+        (0.1, 0.15), (-0.16, 0.17), (-0.16, 0.14), (0.09, 0.13)]], "Livery")
+    g.box((0, y - 0.225, z + 0.37), (1.46, 0.015, 0.03), "Trim")  # gurney on the top plane
+
+
 def niva_lamps(g, body):
     # round headlamps either side of the grille on the flat nose
     y = body.front() - 0.005
@@ -1391,6 +1424,17 @@ CARS = [
          wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
          bumper_top=(0.52, 0.58), exhaust_x=-0.5, pod=0, wing_y=-1.22,
          wing=ibiza_wing, screen=((0.95, 0.88), (0.3, 1.32))),
+    dict(name="Lancer", file="lancer", paint=(0.85, 0.07, 0.07), flaps=(0.8, 0.08, 0.08), rims=(0.95, 0.95, 0.93),
+         hw=0.865, roof_hw=0.64, flare=0.09, bottom=0.2, nose_round=0.9,
+         # boxy '99 four-door: deep nose, long flat bonnet, upright screen, a
+         # tall flat roof and a short high boot carrying the wing
+         profile=[(2.17, 0.6, 0.56), (2.1, 0.76, 0.72), (1.6, 0.83, 0.79), (0.95, 0.9, 0.86), (0.18, 1.4, 0.93),
+                  (-0.82, 1.4, 0.95), (-1.42, 1.04, 0.97), (-2.03, 1.06, 0.99), (-2.17, 0.88, 0.85)],
+         glass_y=(0.98, -1.18), pillars=[-0.33], b_pillar=-0.33, mirror_y=0.75,
+         wheel_y=(1.32, -1.28), wheel_x=0.82, wheel_r=0.34, wheel_w=0.26,
+         bumper_top=(0.58, 0.62), exhaust_x=-0.5, pod=0, wing_y=-1.9,
+         body_extras=[evo_extras], wing=evo_wing,
+         screen=((0.95, 0.9), (0.18, 1.4))),
     dict(name="Niva", file="niva", paint=(0.62, 0.07, 0.06), flaps=(0.06, 0.06, 0.06), rims=(0.95, 0.95, 0.93),
          hw=0.79, roof_hw=0.66, flare=0.06, box_flare=True, bottom=0.42, nose_round=0.95, arch_gap=0.1,
          z_span=1.85,  # tall enough for the roof wedge
