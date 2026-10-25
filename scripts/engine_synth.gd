@@ -73,6 +73,15 @@ const PROFILES := {
 		"body": [450.0, 1400.0, 0.7], "jitter": [0.04, 0.16], "gain": 1.05,
 		"turbo": 0.009, "whistle": [1200.0, 2600.0], "bov": 0.6, "flutter": 0.2,
 		"crackle": 0.15, "antilag": 0.0, "shift_pop": 0.2, "whine": 0.0},
+	# small-block V8 through one pipe: the cross-plane crank fires each bank
+	# unevenly, so it burbles and lopes at idle and booms low on the throttle
+	"cavalier": {"cyl": 8, "offsets": [0.0, 0.09, -0.07, 0.11, 0.02, -0.09, 0.07, -0.1],
+		"amps": [1.0, 0.78, 1.12, 0.84, 1.06, 0.76, 1.1, 0.82],
+		"idle": 650.0, "red": 5400.0, "on": [0.12, 2.1], "off": [0.2, 1.6], "knock": 0.0, "top": 2400.0,
+		"r1": [85.0, 2.0, 1.3], "r2": [290.0, 2.0, 0.6], "intake": [950.0, 1.5, 0.3],
+		"body": [420.0, 1300.0, 0.7], "jitter": [0.06, 0.28], "gain": 1.05,
+		"turbo": 0.0, "whistle": [0.0, 0.0], "bov": 0.0, "flutter": 0.0,
+		"crackle": 0.35, "antilag": 0.0, "shift_pop": 0.15, "whine": 0.0},
 	# twin-turbo V12 diesel: deep and slow, the banks firing unevenly for a
 	# lumpy throb, heavy track rumble and a clank per track link
 	"tank": {"cyl": 12, "offsets": [0.0, 0.03, -0.02, 0.05, 0.0, -0.04, 0.02, 0.0, -0.03, 0.04, 0.01, -0.02],

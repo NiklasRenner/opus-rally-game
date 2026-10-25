@@ -957,12 +957,11 @@ def paint_niva(sk):
     sk.end_box(False, -0.745, 0.745, 0.575, 0.59, deep)
     sk.text("CCCP", sk.px("rear", (0.012, 0, 0.938)), 14, deep, bold=True)  # drop shadow
     sk.text("CCCP", sk.px("rear", (0, 0, 0.95)), 14, yellow, bold=True)
-    sk.text("ЛАДА НИВА", sk.px("rear", (0.4, 0, 0.84)), 7, chrome)
+    sk.text("НИВА", sk.px("rear", (0.52, 0, 0.81)), 7, chrome)
     sk.end_box(False, -0.8, 0.8, 0.6, 0.76, sill)
     sk.end_box(False, -0.29, 0.29, 0.605, 0.745, chrome)
     sk.end_box(False, -0.28, 0.28, 0.615, 0.735, WHITE)
-    sk.text("88-44", sk.px("rear", (-0.06, 0, 0.675)), 7, BLACK, bold=True)
-    sk.text("ПДН", sk.px("rear", (0.18, 0, 0.675)), 7, BLACK)
+    sk.text("88-44", sk.px("rear", (0, 0, 0.675)), 7, BLACK, bold=True)
     sk.end_box(False, -1.0, 1.0, 0.0, 0.58, sill)
     for i in range(3):
         z = 0.47 + i * 0.03
@@ -989,11 +988,11 @@ def paint_niva(sk):
                 if not m[x, y]:
                     continue
                 z = height_at(x - x0, y - y0)
-                p = max(min((top - z) / (top - 0.4), 1.0), 0.0) ** 1.6 * 0.6 + arch_at(x - x0, y - y0)
+                p = max(min((top - z) / (top - 0.4), 1.0), 0.0) ** 1.8 * 0.45 + arch_at(x - x0, y - y0)
                 if rnd.random() < p:
                     c = dust[rnd.randrange(3)]
                     o = px[x, y]
-                    px[x, y] = tuple((o[i] + c[i] * 2) // 3 for i in range(3)) + (255,)
+                    px[x, y] = tuple((o[i] + c[i]) // 2 for i in range(3)) + (255,)
     for side in (-1, 1):
         piece = "side_r" if side > 0 else "side_l"
         o = sk.L["pieces"][piece]["origin"]
@@ -1003,12 +1002,111 @@ def paint_niva(sk):
             wy = o[1] + (x + 0.5) / sk.s * u
             z = o[2] - (y + 0.5) / sk.s
             r = min(math.hypot(wy - w, z - 0.36) for w in wheels)
-            return 0.35 * max(0.0, 1.0 - (r - 0.46) / 0.14) if r > 0.44 else 0.0
+            return 0.25 * max(0.0, 1.0 - (r - 0.46) / 0.1) if r > 0.44 else 0.0
         dirt(piece, lambda x, y, o=o: o[2] - (y + 0.5) / sk.s, arch)
     for piece in ("front", "rear"):
-        dirt(piece, lambda x, y: 1.85 - (y + 0.5) / sk.s, top=0.62)
+        dirt(piece, lambda x, y: 1.85 - (y + 0.5) / sk.s, top=0.5)
 
     finish(sk, wheels=wheels, hub=0.36, arch=0.46, belt=1.0)
+
+
+# --------------------------------------------------------------------------- the police car
+
+def paint_cavalier(sk):
+    """Black-and-white county sheriff's sedan: black nose, bonnet, boot and
+    rear quarters, white doors and roof. Gold six-point star on the front
+    doors with POLICE under it, SHERIFF on the front wings, 911 on the rear
+    quarters, POLICE across the boot."""
+    black = rgb(0.06, 0.06, 0.07)
+    gold = rgb(0.95, 0.74, 0.2)
+    dark_gold = rgb(0.62, 0.44, 0.1)
+    seam = rgb(0.55, 0.56, 0.58)
+    base(sk, WHITE)
+
+    def belt(y):  # the beltline of the profile in build_cars.py
+        return lerp(0.83, 0.86, min(max((1.6 - y) / 0.68, 0.0), 1.0)) if y > 0.0 else 0.9
+
+    def star(c, r):
+        """Sheriff's star: six points with a ball on each tip, darker middle."""
+        pts = []
+        for i in range(12):
+            a = math.pi * i / 6 - math.pi / 2
+            k = r if i % 2 == 0 else r * 0.52
+            pts.append((c[0] + k * math.cos(a), c[1] + k * math.sin(a)))
+        sk.paint(lambda d: d.polygon(pts, fill=gold))
+        for i in range(0, 12, 2):
+            sk.disc(pts[i], 1.3, gold)
+        sk.disc(c, r * 0.36, dark_gold)
+        sk.disc(c, r * 0.18, gold)
+
+    for side in (-1, 1):
+        piece = "side_r" if side > 0 else "side_l"
+        o = sk.L["pieces"][piece]["origin"]
+        u = sk.L["pieces"][piece]["u"][1]
+        x0, y0, x1, y1 = sk.rect(piece)
+
+        def two_tone(d, o=o, u=u, x0=x0, y0=y0, x1=x1, y1=y1):
+            for px in range(x0, x1):
+                wy = o[1] + (px - x0 + 0.5) / sk.s * u
+                if -1.02 < wy < 0.86:
+                    continue  # the doors stay white
+                # the wings, bonnet and boot edges are black all the way up;
+                # the C-pillar above the rear quarter stays white
+                _, top = sk.side_pt(side, wy, belt(wy) + 0.01 if wy > -1.45 and wy < 0.0 else 1.6)
+                d.line((px, round(top), px, y1), fill=black)
+        sk.paint(two_tone)
+        # shut lines, handles, fuel filler behind the rear door
+        for dy in (0.86, -0.36, -1.02):
+            sk.side_box(side, dy + 0.007, dy - 0.007, 0.3, 0.9, seam)
+        for hy in (0.0, -0.9):
+            sk.side_box(side, hy, hy - 0.12, 0.78, 0.8, GREY)
+        sk.side_box(side, -1.6, -1.72, 0.74, 0.82, rgb(0.14, 0.14, 0.15))
+        # chrome strip along the sill, side marker lamps at the corners
+        sk.side_box(side, 2.35, -2.35, 0.3, 0.315, rgb(0.7, 0.7, 0.72))
+        sk.side_box(side, 2.3, 2.18, 0.58, 0.63, AMBER)
+        sk.side_box(side, -2.2, -2.32, 0.58, 0.63, RED)
+        # the star and POLICE on the front door, SHERIFF on the wing, 911 behind
+        star(sk.side_pt(side, 0.42, 0.66), 0.13 * sk.s)
+        sk.text("POLICE", sk.side_pt(side, 0.42, 0.47), 7, black, bold=True)
+        sk.text("SHERIFF", sk.side_pt(side, 1.5, 0.62), 7, WHITE, bold=True)
+        sk.text("911", sk.side_pt(side, -1.95, 0.76), 7, WHITE, bold=True)
+        sk.text("CO 12", sk.side_pt(side, -0.7, 0.66), 7, black)
+
+    # top: black bonnet and boot, white roof; unit number on the roof for
+    # the helicopter, POLICE across the boot reading from behind
+    sk.top_box(-1.0, 1.0, 2.5, 0.5, black)
+    sk.top_box(-1.0, 1.0, -1.45, -2.5, black)
+    # the strip under the back window belongs to the boot; the roof edges
+    # either side of it (the C-pillar tops) stay white down to the deck
+    sk.top_box(-0.6, 0.6, -0.95, -1.45, black)
+    c = sk.px("top", (0.0, -0.55, 0))
+    sk.text("12", c, 14, black, rotate=-90, bold=True)
+    sk.text("POLICE", sk.px("top", (0.0, -1.95, 0)), 14, WHITE, rotate=-90, bold=True)
+
+    # front: all black behind the chrome grille and lamps (geometry), amber
+    # turn signals outboard of the headlamps
+    sk.end_box(True, -1.0, 1.0, 0.0, 1.6, black)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.775, s_ * 0.86, 0.56, 0.71, AMBER)
+        sk.end_box(True, s_ * 0.79, s_ * 0.845, 0.68, 0.695, rgb(1.0, 0.8, 0.45))
+
+    # rear: POLICE across the boot lid, red tail lights at the corners, the
+    # plate between them
+    sk.end_box(False, -1.0, 1.0, 0.0, 1.6, black)
+    for s_ in (-1, 1):  # the back faces of the white C-pillars, above the boot
+        sk.end_box(False, s_ * 0.6, s_ * 1.0, 0.97, 1.6, WHITE)
+    sk.text("POLICE", sk.px("rear", (0, 0, 0.765)), 14, WHITE, bold=True)
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.5, s_ * 0.87, 0.52, 0.66, rgb(0.3, 0.3, 0.32))
+        sk.end_box(False, s_ * 0.52, s_ * 0.85, 0.535, 0.645, RED)
+        sk.end_box(False, s_ * 0.54, s_ * 0.83, 0.62, 0.63, rgb(1.0, 0.45, 0.4))
+        sk.end_box(False, s_ * 0.68, s_ * 0.69, 0.535, 0.645, rgb(0.45, 0.04, 0.03))
+    sk.end_box(False, -0.29, 0.29, 0.52, 0.66, rgb(0.3, 0.3, 0.32))
+    sk.end_box(False, -0.28, 0.28, 0.53, 0.65, WHITE)
+    sk.end_box(False, -0.28, 0.28, 0.53, 0.55, rgb(0.1, 0.2, 0.55))
+    sk.text("PD 12", sk.px("rear", (0, 0, 0.598)), 7, rgb(0.1, 0.2, 0.55))
+
+    finish(sk, wheels=(1.45, -1.4))
 
 
 def lerp(a, b, t):
@@ -1016,7 +1114,7 @@ def lerp(a, b, t):
 
 
 PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp,
-            "bellatrix": paint_bellatrix, "niva": paint_niva}
+            "bellatrix": paint_bellatrix, "niva": paint_niva, "cavalier": paint_cavalier}
 
 
 def main():

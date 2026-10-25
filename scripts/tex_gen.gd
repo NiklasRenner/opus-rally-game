@@ -680,12 +680,14 @@ static func _make_danish_flag() -> ImageTexture:
 # --------------------------------------------------------------------------- modelled cars
 
 ## Wheel face: tyre sidewall round a spoked rim (0 spokes: a flat cover) and
-## a hub, with an optional coloured ring on the tyre wall.
-static func rim(col: Color, spokes := 5, ring := Color(0, 0, 0, 0)) -> ImageTexture:
-	return cached("rim|%s|%d|%s" % [col.to_html(), spokes, ring.to_html()], _make_rim.bind(col, spokes, ring))
+## a hub, with an optional coloured ring on the tyre wall and an optional
+## small hubcap over the middle.
+static func rim(col: Color, spokes := 5, ring := Color(0, 0, 0, 0), hubcap := Color(0, 0, 0, 0)) -> ImageTexture:
+	return cached("rim|%s|%d|%s|%s" % [col.to_html(), spokes, ring.to_html(), hubcap.to_html()],
+		_make_rim.bind(col, spokes, ring, hubcap))
 
 
-static func _make_rim(col: Color, spokes: int, ring: Color) -> ImageTexture:
+static func _make_rim(col: Color, spokes: int, ring: Color, hubcap: Color) -> ImageTexture:
 	var img := Image.create(32, 32, false, Image.FORMAT_RGB8)
 	for y in 32:
 		for x in 32:
@@ -701,6 +703,9 @@ static func _make_rim(col: Color, spokes: int, ring: Color) -> ImageTexture:
 				c = col.darkened(0.25)
 			if ring.a > 0.0 and r > 0.78 and r < 0.86:
 				c = ring
+			if hubcap.a > 0.0 and r < 0.34:
+				# domed cap: a bright glint up and to the left, a dark rim round it
+				c = hubcap.darkened(0.45) if r > 0.29 else hubcap.lightened(0.35) if d.x + d.y < -4.0 and r > 0.15 else hubcap
 			img.set_pixel(x, y, c)
 	return _tex(img)
 
