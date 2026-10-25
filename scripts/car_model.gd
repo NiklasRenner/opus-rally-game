@@ -313,17 +313,85 @@ func _make_dentable(mi: MeshInstance3D) -> void:
 			uvs.append(uv[i])
 			colors.append(baked[i] if not baked.is_empty() else Color.WHITE)
 		var mat := mi.get_surface_override_material(s)
-		_add_deformable(mi, verts, uvs, mat if mat else mesh.surface_get_material(s), colors)
+		var own := mesh.surface_get_material(s)
+		var glass := own != null and own.resource_name.get_slice(".", 0) == "Glass"
+		_add_deformable(mi, verts, uvs, mat if mat else own, colors, _pane_uvs(verts) if glass else PackedVector2Array())
 	mi.mesh = null
+
+
+## Where each corner of a triangle soup sits on its window pane, for the glass
+## shader (RetroLook) to lay the same reflection out on every window whatever
+## its size: y runs 0..1 up the pane; x is the pane's width in decimetres
+## (whole part) plus 0..1 across it, left to right seen from outside. A pane
+## is the triangles joined at their corners and facing within ~35 degrees of
+## the first one found, so a faceted windscreen counts as one.
+static func _pane_uvs(verts: PackedVector3Array) -> PackedVector2Array:
+	var tris := verts.size() / 3
+	var normals := PackedVector3Array()
+	var at := {}  # corner position (to the mm) -> triangles that touch it
+	for t in tris:
+		var a := verts[t * 3]
+		normals.append((verts[t * 3 + 1] - a).cross(verts[t * 3 + 2] - a) * Geo.winding())
+		for k in 3:
+			var key := Vector3i((verts[t * 3 + k] * 1000.0).round())
+			if not at.has(key):
+				at[key] = []
+			at[key].append(t)
+	var out := PackedVector2Array()
+	out.resize(verts.size())
+	var pane := PackedInt32Array()
+	pane.resize(tris)
+	pane.fill(-1)
+	for first in tris:
+		if pane[first] != -1:
+			continue
+		pane[first] = first
+		var facing := normals[first].normalized()
+		var group: Array[int] = [first]
+		var i := 0
+		var n_sum := Vector3.ZERO
+		while i < group.size():
+			var t := group[i]
+			i += 1
+			n_sum += normals[t]
+			for k in 3:
+				for o in at[Vector3i((verts[t * 3 + k] * 1000.0).round())]:
+					if pane[o] == -1 and normals[o].normalized().dot(facing) > 0.82:
+						pane[o] = first
+						group.append(o)
+		var n := n_sum.normalized()
+		var up := Vector3.UP - n * n.y
+		if up.length() < 0.3:  # a roof or bonnet pane: "up" runs towards the nose
+			up = Vector3.FORWARD - n * n.z
+		up = up.normalized()
+		var across := up.cross(n).normalized()
+		var lo := Vector2(INF, INF)
+		var hi := -lo
+		for t in group:
+			for k in 3:
+				var p := verts[t * 3 + k]
+				var q := Vector2(p.dot(across), p.dot(up))
+				lo = lo.min(q)
+				hi = hi.max(q)
+		var size := (hi - lo).max(Vector2(0.001, 0.001))
+		var width := maxf(roundf(size.x * 10.0), 1.0)
+		for t in group:
+			for k in 3:
+				var p := verts[t * 3 + k]
+				var q := (Vector2(p.dot(across), p.dot(up)) - lo) / size
+				out[t * 3 + k] = Vector2(width + q.x * 0.999, q.y)
+	return out
 
 
 ## A dentable triangle soup. Its vertex colours (the model's baked light, or
 ## white, scuffed darker by dents) tint the material's texture.
 func _add_deformable(parent: Node3D, verts: PackedVector3Array, uvs: PackedVector2Array, mat: Material,
-		colors := PackedColorArray()) -> void:
+		colors := PackedColorArray(), panes := PackedVector2Array()) -> void:
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	if not panes.is_empty():
+		arrays[Mesh.ARRAY_TEX_UV2] = panes  # glass: where on its window pane (_pane_uvs)
 	if colors.is_empty():
 		colors.resize(verts.size())
 		colors.fill(Color.WHITE)
