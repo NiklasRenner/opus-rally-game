@@ -76,10 +76,17 @@ FONT_ROWS = {
     "7": ("#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."),
     "8": (".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."),
     "9": (".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."),
+    "Д": ("..##.", ".#.#.", ".#.#.", ".#.#.", ".#.#.", "#####", "#...#"),
+    "И": ("#...#", "#...#", "#..##", "#.#.#", "##..#", "#...#", "#...#"),
+    "Л": ("..###", ".#..#", ".#..#", ".#..#", ".#..#", ".#..#", "#...#"),
+    "П": ("#####", "#...#", "#...#", "#...#", "#...#", "#...#", "#...#"),
+    "Э": ("###..", "...#.", "....#", ".####", "....#", "...#.", "###.."),
     " ": (".....",) * 7,
     "-": (".....", ".....", ".....", "#####", ".....", ".....", "....."),
 }
 FONT = {k: "".join(v) for k, v in FONT_ROWS.items()}
+for _cy, _lat in zip("АВЕКМНОРСТХ", "ABEKMHOPCTX"):
+    FONT[_cy] = FONT[_lat]
 
 
 class Skin:
@@ -325,8 +332,9 @@ def sun_strip(sk, text, bg, fg):
     sk.text(text, ((x0 + x1) / 2, y0 + 0.075 * sk.s), 0.08 * sk.s, fg, "glass", bold=True)
 
 
-def finish(sk, wheels=(1.32, -1.28)):
-    """Glass glints, hand-painted light, window rubbers and the underside."""
+def finish(sk, wheels=(1.32, -1.28), hub=0.34, arch=0.4, belt=0.8):
+    """Glass glints, hand-painted light, window rubbers and the underside.
+    hub, arch: wheel centre height and arch radius; belt: the highlight line."""
     def glints(d):
         for k in range(-sk.size, sk.size, 23):
             d.line((k, 0, k + sk.size, sk.size), fill=rgb(0.16, 0.2, 0.28), width=2)
@@ -344,12 +352,12 @@ def finish(sk, wheels=(1.32, -1.28)):
             wy = o[1] + (x + 0.5) / sk.s * u
             z = o[2] - (y + 0.5) / sk.s
             v = 0.74 + 0.3 * min(max((z - 0.15) / 0.7, 0.0), 1.0)
-            if 0.79 < z < 0.82:
+            if belt - 0.01 < z < belt + 0.02:
                 v += 0.08
             for wy0 in wheels:
-                r = math.hypot(wy - wy0, z - 0.34)
-                if 0.4 < r < 0.52 and z > 0.2:
-                    v *= 0.78 + 0.22 * (r - 0.4) / 0.12
+                r = math.hypot(wy - wy0, z - hub)
+                if arch < r < arch + 0.12 and z > 0.2:
+                    v *= 0.78 + 0.22 * (r - arch) / 0.12
             return v
         sk.shade(piece, k)
     for piece in ("front", "rear"):
@@ -786,12 +794,142 @@ def paint_bellatrix(sk):
     finish(sk, wheels=(1.4, -1.32))
 
 
+# --------------------------------------------------------------------------- the Niva
+
+def emblem(sk, draw_fn, centre, size, col, mask="body", rotate=0):
+    """A small badge drawn big with draw_fn(ImageDraw, n) on an n x n canvas,
+    then shrunk to `size` pixels with hard edges so it reads as pixel art."""
+    n = 64
+    big = Image.new("L", (n, n), 0)
+    draw_fn(ImageDraw.Draw(big), n)
+    if rotate:
+        big = big.rotate(rotate)
+    px = max(3, round(size))
+    small = big.resize((px, px), Image.BOX).point(lambda v: 255 if v > 80 else 0)
+    layer = Image.new("RGBA", small.size, col)
+    layer.putalpha(small)
+    full = Image.new("RGBA", sk.img.size, (0, 0, 0, 0))
+    full.alpha_composite(layer, (round(centre[0] - px / 2), round(centre[1] - px / 2)))
+    m = {"body": sk.body, "glass": sk.glass, "any": None}[mask]
+    if m is not None:
+        full.putalpha(Image.composite(full.getchannel("A"), Image.new("L", full.size, 0), m))
+    sk.img.alpha_composite(full)
+
+
+def star_shape(d, n):
+    c, r0, r1 = n / 2, n * 0.5, n * 0.2
+    pts = []
+    for i in range(10):
+        a = -math.pi / 2 + i * math.pi / 5
+        r = r0 if i % 2 == 0 else r1
+        pts.append((c + r * math.cos(a), c + 0.04 * n + r * math.sin(a)))
+    d.polygon(pts, fill=255)
+
+
+def hammer_sickle_shape(d, n):
+    k = n / 64.0
+    # sickle: a crescent round the right, thick at the back of the blade and
+    # opening to the left, its handle out to the bottom left
+    d.ellipse((12 * k, 4 * k, 62 * k, 54 * k), fill=255)
+    d.ellipse((6 * k, 0, 52 * k, 46 * k), fill=0)
+    d.rectangle((0, 0, 20 * k, 40 * k), fill=0)
+    d.line((30 * k, 50 * k, 8 * k, 61 * k), fill=255, width=round(8 * k))
+    # hammer: head at the top left, handle down to the bottom right
+    d.line((22 * k, 22 * k, 58 * k, 58 * k), fill=255, width=round(8 * k))
+    d.polygon([(4 * k, 22 * k), (22 * k, 4 * k), (31 * k, 13 * k), (13 * k, 31 * k)], fill=255)
+
+
+def paint_niva(sk):
+    """USSR works Niva: dark red all over with yellow CCCP lettering, hammer
+    and sickle and stars, the export agency name (АВТОЭКСПОРТ) along the
+    flanks and bonnet, a white 157 door panel, a black grille with a red star
+    and a yellow roof wedge."""
+    red = rgb(0.66, 0.07, 0.06)
+    deep = rgb(0.42, 0.04, 0.04)
+    yellow = rgb(1.0, 0.82, 0.1)
+    star_red = rgb(0.9, 0.08, 0.06)
+    base(sk, red)
+
+    def star(c, size, col, mask="body", rotate=0):
+        emblem(sk, star_shape, c, size, col, mask, rotate)
+
+    def sickle(c, size, col, mask="body", rotate=0):
+        emblem(sk, hammer_sickle_shape, c, size, col, mask, rotate)
+
+    for side in (-1, 1):
+        # shut lines, handle, fuel cap
+        sk.side_box(side, 0.62, 0.607, 0.45, 1.02, deep)
+        sk.side_box(side, -0.48, -0.493, 0.45, 1.02, deep)
+        sk.side_box(side, -0.28, -0.4, 0.94, 0.965, BLACK)
+        sk.side_box(side, -1.5, -1.6, 0.92, 0.98, deep)
+        # big CCCP along the door with the white 157 panel in front of it
+        sk.text("CCCP", sk.side_pt(side, -0.3, 0.7), 21, yellow, bold=True)
+        sk.side_box(side, 0.22, 0.64, 0.56, 0.84, BLACK)
+        sk.side_box(side, 0.23, 0.63, 0.57, 0.83, WHITE)
+        sk.text("157", sk.side_pt(side, 0.43, 0.7), 14, BLACK, bold=True)
+        # export agency over the rear wheel, emblems front and back
+        sk.text("АВТОЭКСПОРТ", sk.side_pt(side, -0.82, 0.93), 7, yellow, bold=True)
+        star(sk.side_pt(side, 1.62, 0.76), 0.2 * sk.s, yellow)
+        sickle(sk.side_pt(side, -1.66, 0.74), 0.2 * sk.s, yellow)
+        sickle(sk.side_pt(side, -1.0, 1.3), 0.2 * sk.s, yellow, "glass")
+        # the roof wedge: yellow with a red star on each cheek
+        sk.side_box(side, -1.25, -2.05, 1.635, 1.85, yellow)
+        star(sk.side_pt(side, -1.82, 1.72), 9, star_red)
+
+    # top: hammer and sickle, CCCP and the export agency on the bonnet,
+    # reading from in front; a big star on the roof; the yellow wedge with
+    # CCCP and a red star, reading from behind
+    sickle(sk.px("top", (0.0, 1.6, 0)), 0.3 * sk.s, yellow, rotate=90)
+    sk.text("CCCP", sk.px("top", (0.0, 1.27, 0)), 14, yellow, rotate=90, bold=True)
+    sk.text("АВТОЭКСПОРТ", sk.px("top", (0.0, 0.92, 0)), 7, yellow, rotate=90, bold=True)
+    star(sk.px("top", (0.0, -0.55, 0)), 0.55 * sk.s, yellow, rotate=-90)
+    sk.top_box(-1.0, 1.0, -1.28, -2.2, yellow)
+    sk.text("CCCP", sk.px("top", (0.18, -1.68, 0)), 7, star_red, rotate=-90, bold=True)
+    star(sk.px("top", (-0.42, -1.68, 0)), 12, star_red, rotate=-90)
+
+    # front: black grille right across between the round lamps with a red
+    # star in it, amber indicators, a white ЛАДА 4X4 plate on the bumper
+    sk.end_box(True, -0.74, 0.74, 0.7, 0.94, BLACK)
+    for i in range(5):
+        z = 0.73 + i * 0.04
+        sk.end_box(True, -0.42, 0.42, z, z + 0.012, GREY)
+    sk.end_box(True, -0.08, 0.08, 0.75, 0.89, BLACK)
+    star(sk.px("front", (0, 0, 0.82)), 10, star_red)
+    for s_ in (-1, 1):
+        sk.end_box(True, s_ * 0.5, s_ * 0.7, 0.64, 0.68, AMBER)
+    sk.end_box(True, -0.36, 0.36, 0.41, 0.5, BLACK)
+    sk.end_box(True, -0.35, 0.35, 0.415, 0.495, WHITE)
+    sk.text("ЛАДА 4X4", sk.px("front", (0, 0, 0.455)), 7, BLACK, bold=True)
+    sk.end_box(True, -1.0, 1.0, 1.62, 1.85, yellow)
+
+    # rear: CCCP across the tailgate, the name badge, red and amber lamps
+    # either side of the plate, dark bumper, the wedge's yellow edge
+    sk.text("CCCP", sk.px("rear", (0, 0, 0.93)), 14, yellow, bold=True)
+    sk.text("ЛАДА НИВА", sk.px("rear", (0, 0, 0.79)), 7, WHITE)
+    for s_ in (-1, 1):
+        sk.end_box(False, s_ * 0.46, s_ * 0.8, 0.6, 0.74, BLACK)
+        sk.end_box(False, s_ * 0.6, s_ * 0.78, 0.62, 0.72, RED)
+        sk.end_box(False, s_ * 0.48, s_ * 0.58, 0.62, 0.72, AMBER)
+    sk.end_box(False, -0.27, 0.27, 0.61, 0.73, BLACK)
+    sk.end_box(False, -0.26, 0.26, 0.62, 0.72, WHITE)
+    sk.text("88-44", sk.px("rear", (0, 0, 0.67)), 7, BLACK, bold=True)
+    sk.end_box(False, -1.0, 1.0, 0.0, 0.56, rgb(0.1, 0.1, 0.11))
+    sk.end_box(False, -1.0, 1.0, 1.62, 1.85, yellow)
+    sk.text("CCCP", sk.px("rear", (0, 0, 1.72)), 7, star_red, "any", bold=True)
+
+    # sun strip: CCCP and the export agency in white on red
+    x0, y0, x1, y1 = sk.rect("screen")
+    sk.box((x0, y0), (x1, y0 + 0.15 * sk.s), star_red, "glass")
+    sk.text("CCCP АВТОЭКСПОРТ", ((x0 + x1) / 2, y0 + 0.075 * sk.s), 7, WHITE, "glass", bold=True)
+    finish(sk, wheels=(1.12, -1.08), hub=0.36, arch=0.46, belt=1.0)
+
+
 def lerp(a, b, t):
     return a + (b - a) * t
 
 
 PAINTERS = {"martello": paint_martello, "pleiad": paint_pleiad, "veloce": paint_veloce, "balear": paint_balear, "swamp": paint_swamp,
-            "bellatrix": paint_bellatrix}
+            "bellatrix": paint_bellatrix, "niva": paint_niva}
 
 
 def main():

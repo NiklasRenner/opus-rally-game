@@ -16,7 +16,8 @@ extends RefCounted
 ##           that fall off (cars default to body and bumpers / bumpers, wing,
 ##           light pod and mirrors)
 ## helmet, helmet_pos: the F1 driver's helmet
-## stats   : power, grip and steer multipliers, mass in kg (the tank adds a few more)
+## stats   : power, grip and steer multipliers, mass in kg (the tank adds a few more);
+##           surf: extra grip multiplier per surface id (the Niva on the loose)
 ## wheels  : optional layout {x, zf, zr, rf, rr, wf, wr}: track half-width,
 ##           front/rear axle z, visual tyre radius and width per axle
 ## shapes  : optional collision boxes [size, centre]
@@ -76,6 +77,34 @@ const LIST := [
 		"flaps": Color(0.08, 0.20, 0.62),
 		"gears": [3.3, 2.5, 2.0, 1.7, 1.48, 1.32],
 		"stats": {"power": 0.98, "grip": 1.0, "steer": 1.05, "mass": 1120.0},
+	},
+	{
+		"id": "niva",
+		"class": "A",
+		"name": "LAD NIVA",
+		"blurb": "Soviet 4x4: slow, tough, loves the rough",
+		"number": "157",
+		"plate": "88-44",
+		"mesh": "res://models/niva.glb",
+		"nose": -1.92,
+		# rides high on long springs, so the ground sits lower in car space
+		"ground_y": -0.8,
+		"skin": "res://models/niva_skin.png",
+		"spokes": 5,
+		"rims": Color(0.95, 0.95, 0.93),
+		"flaps": Color(0.06, 0.06, 0.06),
+		# the roof wedge and spot lamps go first; the antenna snaps off at a touch
+		"parts": [["Bumper_F", "front", 0.4], ["Bumper_R", "rear", 0.45], ["Spoiler", "rear", 0.6],
+			["AuxLamps", "front", 0.3], ["Antenna", "rear", 0.15], ["Mirror_L", "left", 0.25], ["Mirror_R", "right", 0.25]],
+		"wheels": {"x": 0.74, "zf": -1.12, "zr": 1.08, "rf": 0.36, "rr": 0.36, "wf": 0.25, "wr": 0.25},
+		# short, tall and narrow: less grip and a lazier turn on tarmac, a brick
+		# in the wind, but knobbly tyres and long travel bite on the loose (surf)
+		# and it shrugs off knocks. Four short gears and a slow lever.
+		"gears": [3.3, 2.35, 1.75, 1.36],
+		"stats": {"power": 0.9, "grip": 0.95, "steer": 0.95, "mass": 1250.0, "gearing": 1.05, "drag": 1.25,
+			"armour": 0.6, "travel": 1.2, "bump_soak": 0.6, "roll_tame": 0.85, "pitch": 0.8, "shift": 1.3,
+			"surf": {"gravel": 1.12, "ice": 1.15, "mud": 1.12, "grass": 1.1, "ford": 1.1}},
+		"shapes": [[Vector3(1.68, 0.66, 3.78), Vector3(0, -0.15, 0)], [Vector3(1.38, 0.6, 2.3), Vector3(0, 0.5, 0.58)]],
 	},
 	{
 		"id": "f1",
