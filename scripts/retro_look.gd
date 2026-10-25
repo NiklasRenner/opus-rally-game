@@ -47,7 +47,11 @@ varying vec3 bulge;
 
 void vertex() {
 	UV = UV * uv1_scale.xy + uv1_offset.xy;
-	bulge = (MODELVIEW_MATRIX * vec4(VERTEX - vec3(0.0, 0.5, 0.0), 0.0)).xyz;
+	// the ball is squashed to the car's shape (long, low) so the panes at
+	// the ends bend as much as those along the sides: measured from the
+	// middle, an upright tailgate would otherwise hardly turn across its
+	// width and show the skyline as a few big blocks
+	bulge = (MODELVIEW_MATRIX * vec4((VERTEX - vec3(0.0, 0.5, 0.0)) * vec3(1.0, 2.0, 0.5), 0.0)).xyz;
 }
 
 void fragment() {
