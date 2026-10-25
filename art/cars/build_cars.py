@@ -968,7 +968,7 @@ def bake_light(coll, wheels=(), ground=0.0):
             n = (rot @ poly.normal).normalized()
             up = max(min(n.z * 0.8 + n.y * 0.2 + 0.25, 1.0), 0.0)
             if key in GLOWING + ("Glass",):
-                face = 1.0  # lights glow, glass keeps its painted glints
+                face = 1.0  # lights glow, glass gets its shine in game (RetroLook)
             elif key in TUBES:
                 face = 0.6 + 0.4 * up
             elif key in PAINTED:

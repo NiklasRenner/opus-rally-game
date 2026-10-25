@@ -3,7 +3,7 @@ extends Node
 ## The arcade look for a race, switched with F2: sunlight falls off across a
 ## surface in a few soft steps instead of a smooth ramp (Saturn / PS1 era
 ## shading), the sun casts hard-edged shadows, the car's windows reflect a
-## flat fake sky, and the fog is a depth fog that closes in on the distance.
+## low-res fake sky and skyline that slides as the car turns, and the fog is a depth fog that closes in on the distance.
 ## It works by swapping every lit StandardMaterial3D in the scene for a shader
 ## copy with its own light(), and swapping them back when it's switched off.
 ## Unshaded, see-through and billboard materials are left alone.
@@ -33,15 +33,21 @@ uniform float alpha_scissor = 0.5;
 uniform float bands = 3.0;
 uniform float softness = 0.2;
 uniform float wrap = 0.25;
-// the car's windows reflect a three-band fake sky instead of the real one,
-// like the environment maps of the time
+// the car's windows reflect a fake sky instead of the real one, like the
+// environment maps of the time; curve: how far each flat pane is bent round
 uniform float mirror = 0.0;
+uniform float curve = 0.5;
 uniform vec3 sky_hi : source_color = vec3(0.5, 0.6, 0.8);
 uniform vec3 sky_lo : source_color = vec3(0.7, 0.8, 0.9);
 uniform vec3 ground_col : source_color = vec3(0.3, 0.3, 0.3);
 
+// the glass's direction out from the middle of the car, in view space: bent
+// into the normal it curves each flat pane like a bit of a chrome ball
+varying vec3 bulge;
+
 void vertex() {
 	UV = UV * uv1_scale.xy + uv1_offset.xy;
+	bulge = (MODELVIEW_MATRIX * vec4(VERTEX - vec3(0.0, 0.5, 0.0), 0.0)).xyz;
 }
 
 void fragment() {
@@ -59,10 +65,41 @@ void fragment() {
 	SPECULAR = mirror > 0.0 ? 0.0 : spec;
 	EMISSION = emission;
 	if (mirror > 0.0) {
-		vec3 r = (INV_VIEW_MATRIX * vec4(reflect(-VIEW, NORMAL), 0.0)).xyz;
-		vec3 env = r.y > 0.3 ? sky_hi : (r.y > -0.05 ? sky_lo : ground_col);
-		ALBEDO *= 1.0 - mirror * 0.5;
-		EMISSION += env * mirror;
+		// the windows reflect a fake environment, like the chrome maps of the
+		// time: a stepped sky over a blocky skyline over the ground, looked up
+		// by the reflected view direction so it slides as the car turns and the
+		// camera moves. The direction is snapped to a coarse grid first, which
+		// is what a small environment texture would give.
+		// tilted up a little: from the usual chase camera the side windows
+		// would only ever show the road, and the skyline is the interesting part
+		vec3 r = normalize((INV_VIEW_MATRIX * vec4(reflect(-VIEW, normalize(NORMAL + curve * normalize(bulge))), 0.0)).xyz + vec3(0.0, 0.3, 0.0));
+		float az = floor(atan(r.z, r.x) / TAU * 32.0 + 0.5);  // 32 columns round
+		float el = floor(asin(clamp(r.y, -1.0, 1.0)) / (PI * 0.5) * 24.0 + 0.5) / 24.0;  // 24 rows each way
+		// hills and treetops: two waves round the horizon, blocky per column
+		float sky_line = 0.04 + 0.05 * abs(sin(az * 0.59) + 0.5 * sin(az * 1.57 + 1.7));
+		vec3 env;
+		if (el > sky_line) {
+			// banded sky, the palest band just over the skyline
+			float t = floor(clamp((el - sky_line) / 0.5, 0.0, 1.0) * 4.0 + 0.5) / 4.0;
+			env = t < 0.1 ? min(sky_lo * 1.5, vec3(1.0)) : mix(sky_lo, sky_hi, t);
+			// blocky clouds in rows, wider the higher they are
+			float row = floor(el * 8.0);
+			float cell = floor(az / (2.0 + row));
+			if (row >= 1.0 && row <= 6.0 && fract(sin(cell * 12.9898 + row * 78.233) * 43758.5453) > 0.6) {
+				env = mix(env, vec3(1.0), 0.75);
+			}
+		} else if (el > -0.04) {
+			env = mix(ground_col, sky_hi, 0.3) * 0.45;  // the skyline, a dark silhouette
+		} else {
+			env = ground_col * (el > -0.3 ? 0.8 : 0.5);  // the road, darker straight down
+		}
+		// glass reflects more at a glancing angle, about a third face on;
+		// banners and lettering on the glass take less of it so they stay readable
+		float fres = 0.5 + 0.5 * pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+		float paint = smoothstep(0.2, 0.6, dot(c.rgb, vec3(0.3, 0.5, 0.2)));
+		float k = mirror * fres * (1.0 - 0.6 * paint);
+		ALBEDO *= 1.0 - k * 0.8;
+		EMISSION += env * k;
 	}
 }
 
@@ -276,11 +313,11 @@ func _copy(mat: Material, on_car: bool) -> ShaderMaterial:
 	# only the car's glass gets the fake sky (on the road the band edges would
 	# sit at a fixed distance from the camera and draw a ring round it), and
 	# only its paint the hard highlight (on a road it'd be a hard-edged blob,
-	# on glass a hotspot on top of the flat sky)
+	# on flat glass the whole pane would flash white at once)
 	if on_car and m.roughness >= 0.2:
 		sm.set_shader_parameter("gloss", clampf((0.6 - m.roughness) * m.metallic_specular, 0.0, 0.5))
 	if on_car and m.roughness < 0.2:
-		sm.set_shader_parameter("mirror", 0.3)
+		sm.set_shader_parameter("mirror", 0.9)
 		sm.set_shader_parameter("sky_hi", sky_colors[0])
 		sm.set_shader_parameter("sky_lo", sky_colors[1])
 		sm.set_shader_parameter("ground_col", sky_colors[2])
