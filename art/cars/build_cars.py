@@ -777,6 +777,38 @@ def niva_lamps(g, body):
         g.cyl((sx * 0.57, y + 0.016, 0.82), "Y", 0.085, 0.012, "Lamp", segs=10)
 
 
+def niva_details(g, body):
+    """Tail lamp clusters standing proud of the tail, a chrome tailgate
+    handle and plate lamp, a tow hook, wipers front and back and chrome
+    door handles."""
+    ry = body.rear()
+    for sx in (-1, 1):
+        # chrome-rimmed cluster: red tail and brake lamp outboard, amber
+        # indicator and a white reversing lamp inboard
+        g.box((sx * 0.63, ry - 0.01, 0.68), (0.34, 0.03, 0.15), "Chrome")
+        g.box((sx * 0.7, ry - 0.025, 0.68), (0.17, 0.02, 0.12), "Tail")
+        g.box((sx * 0.555, ry - 0.025, 0.68), (0.1, 0.02, 0.12), "Lamp")
+        # reflector on the bumper corner
+        g.box((sx * 0.68, ry - 0.06, 0.5), (0.1, 0.02, 0.04), "Tail")
+    g.box((0, ry - 0.015, 0.765), (0.16, 0.03, 0.03), "Chrome")  # tailgate handle over the plate
+    g.box((0, ry - 0.02, 0.6), (0.08, 0.03, 0.02), "Lamp")  # plate lamp
+    rod(g, (0, ry + 0.05, 0.36), (0, ry - 0.16, 0.36), 0.05, "Steel")  # tow hook
+    g.cyl((0, ry - 0.16, 0.39), "Z", 0.04, 0.06, "Steel", segs=8)
+
+    def gate(z):  # tailgate glass surface, a hair outside it
+        return lerp(-1.84, -1.76, (z - 1.04) / 0.56) - 0.012
+    rod(g, (0.0, gate(1.1), 1.1), (-0.32, gate(1.44), 1.44), 0.02, "Trim")
+    (y0, z0), (y1, z1) = body.c["screen"]
+    for x in (-0.38, 0.22):
+        t = 0.08
+        a = (x, lerp(y0, y1, t) + 0.01, lerp(z0, z1, t) + 0.012)
+        b = (x + 0.42, lerp(y0, y1, 0.16) + 0.01, lerp(z0, z1, 0.16) + 0.012)
+        rod(g, a, b, 0.02, "Trim")
+    for sx in (-1, 1):
+        x = body_x(body, -0.36, 0.95)
+        g.box((sx * (x + 0.012), -0.36, 0.95), (0.025, 0.13, 0.035), "Chrome")
+
+
 def niva_wing(g, body):
     # rally wedge on the back of the roof, kicking up over the tailgate
     y = -1.3
@@ -1077,7 +1109,7 @@ CARS = [
          glass_y=(0.58, -1.45), pillars=[-0.48], b_pillar=-0.48, mirror_y=0.5,
          wheel_y=(1.12, -1.08), wheel_x=0.74, wheel_r=0.36, wheel_w=0.25,
          bumper_top=(0.56, 0.58), bumper_lift=0.16, exhaust_x=-0.5, pod=0, wing_y=-1.3,
-         body_extras=[niva_lamps], wing=niva_wing,
+         body_extras=[niva_lamps, niva_details], wing=niva_wing,
          bolt_ons=[("AuxLamps", niva_aux_lamps), ("Antenna", niva_antenna)],
          screen=((0.6, 1.04), (0.22, 1.56))),
     dict(name="Swamp", file="swamp", kind="truck", paint=(0.55, 0.85, 0.1), flaps=(0.1, 0.1, 0.1),
