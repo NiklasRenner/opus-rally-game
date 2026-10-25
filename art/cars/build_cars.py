@@ -915,18 +915,19 @@ def celica_extras(g, body):
     g.hull([(sx * x, y + dy, z + dz) for sx in (-1, 1) for (x, dy, dz) in [
         (0.13, 0.1, -0.005), (0.13, -0.22, -0.005), (0.1, 0.07, 0.05), (0.1, -0.22, 0.035)]], "Livery")
     g.box((0, y + 0.08, z + 0.025), (0.18, 0.02, 0.035), "Trim")
-    # pop-up lamps, raised: a black box on each front corner of the bonnet,
-    # flat lid, the lens filling its upright front face
-    y0, y1 = 2.04, 1.82  # front and back of a pod
+    # pop-up lamps, raised: each lid flips up out of the front corner of the
+    # bonnet, so the pod stands tall at the front with the lens in its
+    # upright face and its back slopes down into the bonnet. Painted with the
+    # livery like the rest of the body.
+    y0, y1 = 2.04, 1.66  # front face, where the back meets the bonnet
+    top = body_top(body, y0, 0.56) + 0.16
     for sx in (-1, 1):
-        xs = (0.4, 0.72)
         pts = []
-        for x in xs:
-            for y, h in ((y0, 0.15), (y1, 0.13)):
-                zb = body_top(body, y, x) - 0.02
-                pts += [(sx * x, y, zb), (sx * x, y, body_top(body, y1, 0.56) + h)]
-        g.hull(pts, "Trim")
-        zc = body_top(body, y1, 0.56) + 0.15 - 0.075
+        for x in (0.4, 0.72):
+            pts += [(sx * x, y0, body_top(body, y0, x) - 0.02), (sx * x, y0, top),
+                    (sx * x, y0 - 0.07, top), (sx * x, y1, body_top(body, y1, x) - 0.01)]
+        g.hull(pts, "Livery")
+        zc = top - 0.075
         g.box((sx * 0.56, y0 + 0.004, zc), (0.27, 0.01, 0.1), "Chrome")
         g.box((sx * 0.56, y0 + 0.01, zc), (0.24, 0.01, 0.08), "Lamp")
 

@@ -1392,6 +1392,11 @@ def paint_celica(sk):
             sk.side_box(side, dy, dy - 0.013, 0.3, 0.85, shut)
         sk.side_box(side, -0.12, -0.24, 0.76, 0.785, BLACK)
         sk.side_box(side, -1.55, -1.65, 0.8, 0.86, shut)
+        # pop-up lamp pod flanks: the swoosh colours across them, red over
+        # green, black lower edge where the lid meets the wing
+        sk.side_box(side, 2.06, 1.6, 0.77, 0.83, red)
+        sk.side_box(side, 2.06, 1.6, 0.74, 0.77, green)
+        sk.side_box(side, 2.06, 1.6, 0.69, 0.74, BLACK)
         # yellow number panel on the door
         sk.side_box(side, 0.46, -0.02, 0.6, 0.81, BLACK)
         sk.side_box(side, 0.45, -0.01, 0.61, 0.8, yellow)
@@ -1429,6 +1434,8 @@ def paint_celica(sk):
     sk.disc(sk.px("front", (0, 0, 0.615)), 3, red)
     for s_ in (-1, 1):
         sk.end_box(True, s_ * 0.6, s_ * 0.76, 0.585, 0.64, AMBER)
+        # pop-up lamp pods: black face round the lens
+        sk.end_box(True, s_ * 0.38, s_ * 0.74, 0.69, 0.92, BLACK)
     for a, b, col in ((0.475, 0.46, green), (0.46, 0.43, red), (0.43, 0.415, green)):
         sk.end_box(True, -1.0, 1.0, b, a, col)
     sk.end_box(True, -0.5, 0.5, 0.24, 0.39, BLACK)
