@@ -390,6 +390,8 @@ func _arcade_assists(b3: Basis, max_steer: float) -> void:
 	# downforce beyond a saloon's lets winged cars corner harder at speed
 	var aero := 1.0 + DOWNFORCE * maxf(stat("downforce") - 1.0, 0.0) * speed * speed / (Cars.REF_MASS * gravity)
 	var grip: float = Surfaces.get_surface(surface)["grip"] * stat("grip") * aero
+	if surface in Surfaces.LOOSE:
+		grip *= stat("loose")
 	var fwd := -b3.z
 	var vel := linear_velocity - up * linear_velocity.dot(up)
 	body_slip = 0.0
@@ -523,6 +525,8 @@ func _update_wheel(w: Wheel, delta: float, drive_force: float, brake_input: floa
 		w.surface = collider.get_meta("surface")
 	var sd := Surfaces.get_surface(w.surface)
 	var grip: float = sd["grip"] * spec["stats"]["grip"]
+	if w.surface in Surfaces.LOOSE:
+		grip *= stat("loose")
 	if rain:
 		grip *= sd["rain"]
 	var slide_k: float = sd["slide"]

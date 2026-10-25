@@ -23,7 +23,8 @@ extends RefCounted
 ## gears   : forward gear ratios, first to top (default GEARS); spaced so top
 ##           speed comes near the redline in top gear
 ## Extra stats: gearing (final drive multiplier, >1 = shorter gears / lower top
-## speed), shift (gear change time vs a rally box), drag, downforce, inertia (yaw inertia vs a saloon), pitch (engine note).
+## speed), shift (gear change time vs a rally box), drag, downforce, inertia (yaw inertia vs a saloon), pitch (engine note),
+## loose (grip multiplier on loose ground, Surfaces.LOOSE).
 ## Chassis forces (springs, brakes, yaw assists) scale with mass so light and
 ## heavy vehicles handle alike; engine power does not, so mass still counts.
 
@@ -76,6 +77,33 @@ const LIST := [
 		"flaps": Color(0.08, 0.20, 0.62),
 		"gears": [3.3, 2.5, 2.0, 1.7, 1.48, 1.32],
 		"stats": {"power": 0.98, "grip": 1.0, "steer": 1.05, "mass": 1120.0},
+	},
+	{
+		"id": "degaulle",
+		"class": "A",
+		"name": "DE GAULLE 405",
+		"blurb": "Desert raid 4x4: flies over gravel and jumps",
+		"number": "203",
+		"plate": "DG 203",
+		"mesh": "res://models/degaulle.glb",
+		"nose": -2.24,
+		# long-travel struts lift it higher off the road than the other rally cars
+		"ground_y": -0.8,
+		"skin": "res://models/degaulle_skin.png",
+		"spokes": 6,
+		"rims": Color(0.95, 0.95, 0.93),
+		"tread": "chevron",
+		"flaps": Color(0.8, 0.1, 0.08),
+		"parts": [["Bumper_F", "front", 0.3], ["Bumper_R", "rear", 0.35], ["BullBar", "front", 0.4],
+			["Spoiler", "rear", 0.5], ["RoofSpare", "rear", 0.65], ["Mirror_L", "left", 0.2], ["Mirror_R", "right", 0.2]],
+		"wheels": {"x": 0.84, "zf": -1.38, "zr": 1.32, "rf": 0.37, "rr": 0.37, "wf": 0.3, "wr": 0.3},
+		# heavy and powerful with a tall wing, so it trades top speed and tarmac
+		# grip for bite on loose ground (loose) and soft long-travel suspension
+		# that soaks up ruts and lands jumps flat
+		"gears": [3.3, 2.45, 1.95, 1.62, 1.38],
+		"stats": {"power": 1.15, "grip": 0.98, "steer": 0.97, "mass": 1330.0, "drag": 1.12, "loose": 1.15,
+			"travel": 1.25, "spring": 0.8, "damper": 0.9, "bump_soak": 0.5, "armour": 0.85, "pitch": 0.9},
+		"shapes": [[Vector3(1.86, 0.62, 4.4), Vector3(0, 0.12, 0)], [Vector3(1.3, 0.45, 2.0), Vector3(0, 0.55, 0.3)]],
 	},
 	{
 		"id": "f1",
