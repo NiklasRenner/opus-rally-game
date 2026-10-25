@@ -474,22 +474,19 @@ func _build_terrain() -> void:
 			var sink := _water_depth(wx, wz)
 			if sink > 0.0:
 				_heights[k] = lerpf(_heights[k], _water_level() - 5.0, sink)
-	var covered := PackedByteArray()
+	var hidden := PackedByteArray()
 	if _geo:
 		# the banks along the road take over from the grid near it; the grid
-		# ducks under them where the two overlap
-		covered = _geo.build_banks()
-		for k in gn * gn:
-			if covered[k]:
-				_heights[k] -= 2.0
+		# meets their edges and isn't drawn where they cover it
+		_geo.build_banks()
+		hidden = _geo.fit_grid(_heights)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for z in gn - 1:
 		for x in gn - 1:
 			if _geo and not _geo.cell_drawn(x, z):
 				continue  # out past the band round the road: the distant mesh
-			if _geo and covered[z * gn + x] and covered[z * gn + x + 1] and covered[(z + 1) * gn + x] \
-					and covered[(z + 1) * gn + x + 1]:
+			if _geo and hidden[z * gn + x]:
 				continue  # under the banks
 			var ids := [Vector2i(x, z), Vector2i(x + 1, z), Vector2i(x + 1, z + 1),
 				Vector2i(x, z), Vector2i(x + 1, z + 1), Vector2i(x, z + 1)]
