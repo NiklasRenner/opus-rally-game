@@ -845,11 +845,11 @@ def niva_details(g, body):
         return lerp(-1.8, -1.6, (z - 1.06) / 0.54) - 0.012 - out
     # back window: a straight-edged pane with clipped corners in a black
     # rubber, set into the tailgate between thick pillars
-    # its sides run parallel to the cabin's sides as seen from behind,
-    # `pillar` metres in from them
+    # its sides follow the cabin's sides as seen from behind, `pillar`
+    # metres in from them, the pillars thickening a touch towards the roof
     def pane(pillar, z0, z1, c, out, key):
         def hw(z):
-            return body_x(body, -1.0, z) - pillar
+            return body_x(body, -1.0, z) - pillar - 0.04 * (z - 1.1) / 0.42
         pts = [(-hw(z0) + c, z0), (hw(z0) - c, z0), (hw(z0 + c), z0 + c), (hw(z1 - c), z1 - c), (hw(z1) - c, z1),
                (-hw(z1) + c, z1), (-hw(z1 - c), z1 - c), (-hw(z0 + c), z0 + c)]
         g.hull([(x, gate(z, o), z) for x, z in pts for o in (out - 0.012, out)], key)
