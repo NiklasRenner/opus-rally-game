@@ -9,7 +9,9 @@ extends RefCounted
 ## frame   : tube frame colour (the truck)
 ## mesh    : the model in models/; nose: z of its nose in car space
 ## skin    : its painted skin (art/cars/paint_skin.py); the tank is painted in code
-## rims, spokes, rim_ring: wheel face colour, spoke count (0 = cover), tyre ring
+## rims, spokes, rim_ring, hubcap: wheel face colour, spoke count (0 = cover),
+##           tyre ring, small hubcap colour
+## beacons : true for a roof light bar that flashes blue and red
 ## flaps   : mud flap colour
 ## number, plate: race number and number plate (also painted on the skin)
 ## dents, parts: mesh nodes that dent, and [node, zone, threshold] bolt-ons
@@ -104,6 +106,33 @@ const LIST := [
 		"stats": {"power": 1.15, "grip": 0.98, "steer": 0.97, "mass": 1330.0, "drag": 1.12, "loose": 1.15,
 			"travel": 1.25, "spring": 0.8, "damper": 0.9, "bump_soak": 0.5, "armour": 0.85, "pitch": 0.9},
 		"shapes": [[Vector3(1.86, 0.62, 4.4), Vector3(0, 0.12, 0)], [Vector3(1.3, 0.45, 2.0), Vector3(0, 0.55, 0.3)]],
+	},
+	{
+		"id": "cavalier",
+		"class": "A",
+		"name": "CAVALIER NOVA",
+		"blurb": "V8 sheriff's sedan: heavy, soft, loud",
+		"number": "12",
+		"plate": "PD 12",
+		"mesh": "res://models/cavalier.glb",
+		"nose": -2.69,
+		"skin": "res://models/cavalier_skin.png",
+		"spokes": 0,  # plain black steel wheels with small chrome hubcaps
+		"rims": Color(0.06, 0.06, 0.07),
+		"hubcap": Color(0.78, 0.78, 0.8),
+		"flaps": Color(0.1, 0.1, 0.1),
+		"beacons": true,  # the light bar flashes blue and red
+		"dents": ["Body", "Bumper_F", "Bumper_R"],
+		# the push bar takes the first hits; chrome bumpers hang on longer than a rally car's
+		"parts": [["PushBar", "front", 0.4], ["Bumper_F", "front", 0.55], ["Bumper_R", "rear", 0.5],
+			["LightBar", "front", 0.75], ["Spotlight", "left", 0.3], ["Mirror_L", "left", 0.25],
+			["Mirror_R", "right", 0.25]],
+		"wheels": {"x": 0.8, "zf": -1.45, "zr": 1.4, "rf": 0.34, "rr": 0.34, "wf": 0.24, "wr": 0.24},
+		# big lazy V8 through a three-speed automatic: long gears, slow shifts
+		"gears": [3.3, 2.15, 1.45],
+		"stats": {"power": 1.2, "grip": 0.96, "steer": 0.92, "mass": 1500.0, "gearing": 0.95, "shift": 1.2,
+			"spring": 0.75, "damper": 0.7, "roll_tame": 0.7, "inertia": 1.15, "armour": 0.8},
+		"shapes": [[Vector3(1.8, 0.62, 4.9), Vector3(0, 0.12, 0)], [Vector3(1.4, 0.42, 1.9), Vector3(0, 0.55, 0.35)]],
 	},
 	{
 		"id": "f1",

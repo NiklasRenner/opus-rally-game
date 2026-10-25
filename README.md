@@ -64,6 +64,7 @@ race from the menu (a restart keeps the same weather). Each launch starts on
 | Saksen 777 | Blue Impreza-style saloon, gold wheels, bonnet scoop, big wing | Most grip, a bit less power |
 | Balear Kit | Yellow Ibiza-style kit car, big roof spoiler, white wheels | Lightest rally car, sharpest turn-in |
 | De Gaulle 405 | Yellow 405-style desert raid saloon up on long-travel suspension: tricolour stripes, 203 number panels, bull bar with two spotlights, spare wheel strapped to the roof, tall rear wing, red mud flaps, chunky tyres on white wheels | Heaviest and most powerful rally car: a few percent more grip on loose ground (gravel, grass, mud) and a little less on tarmac; soft long-travel springs soak up ruts and land jumps flat |
+| Cavalier Nova | Late-70s black-and-white sheriff's sedan: gold star on the doors, push bar, chrome bumpers and grille, steel wheels, a light bar that flashes blue and red | Class A for fun: heavy and soft, leans and floats, lazy V8 through a three-speed auto; a few percent slower than the rally cars |
 | Peak F1 | Modern single-seater: halo, sidepods, multi-element wings, black with red and silver | About 225 km/h, fierce acceleration, downforce gives more grip the faster it goes; hopeless off the tarmac; fragile, wings snap off at a touch |
 | Bongatti 27 | Low, wide mid-engined hypercar: bright blue nose and gunmetal tail split by a chrome C on each flank, horseshoe grille, full-width red light bar, louvred engine cover | Class S with the F1: a touch slower off the line, faster flat out (about 240 km/h), heavier and with less downforce, so it slides more in fast corners but shrugs off knocks better |
 | Swamp King | Lime monster truck on huge knobbly tyres, tube frame and roll cage | Class X: bouncy long-travel suspension, rolls a lot, soaks up rough ground, big jumps |
@@ -85,8 +86,8 @@ their old names.
 The cars come from `art/cars/build_cars.py`: run it in Blender's Scripting
 tab (with `build_all("<path to this folder>")`) to rebuild their .blend files
 and re-export `models/martello.glb`, `models/pleiad.glb`, `models/balear.glb`,
-`models/veloce.glb` (the F1 car), `models/bellatrix.glb` (the hypercar) and
-`models/swamp.glb` (the monster truck).
+`models/veloce.glb` (the F1 car), `models/bellatrix.glb` (the hypercar),
+`models/cavalier.glb` (the police car) and `models/swamp.glb` (the monster truck).
 
 They all wear a skin painted in separate panel pieces (each side, top, front,
 back, windscreen) in `art/cars/<car>_pieces/`, combined into
@@ -185,6 +186,7 @@ Based on how arcade rally games and classic game car-physics write-ups do it:
   all synthesised, no audio files. Each vehicle has its own engine: the
   Martello a raspy turbo four with anti-lag pops and a fluttering blow-off,
   the Saksen a burbling flat four, the Balear a revvy non-turbo four, the
+  Cavalier a loping small-block V8, the
   Peak a snarling V10 and the Holger Danske a deep, lumpy V12 diesel with
   rumbling, clanking tracks. The engine is band-limited to each profile's
   `top` so high revs never alias into whistles. Upshifts cut and bang,
