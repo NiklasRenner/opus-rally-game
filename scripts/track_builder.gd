@@ -17,6 +17,7 @@ const WIDTH := {"asphalt": 10.0, "gravel": 8.5, "wet": 10.0, "ice": 9.0, "grass"
 ## Current map definition (see maps.gd), set before build().
 var map: Dictionary = Maps.LIST[0]
 var rain := false  # wet weather: shiny dark roads, darker grass
+var bake := false  # a geo stage: build its ground afresh and bake it (see GeoStage.load_built)
 var _control_points: Array = []
 var _sections: Array = []
 var _elevation_keys: Array = []
@@ -438,6 +439,12 @@ func _build_terrain() -> void:
 	noise.frequency = 0.007
 	noise.fractal_octaves = 3
 	_heights.resize(gn * gn)
+	if _geo and not bake:
+		var built := _geo.load_built()
+		if not built.is_empty():
+			_heights = built["heights"]
+			_add_static(built["terrain"], _terrain_material(), _offroad(), "Terrain")
+			return
 	var alpine := _geo.heights() if _geo else PackedFloat32Array()
 	for z in gn:
 		for x in gn:
@@ -500,11 +507,20 @@ func _build_terrain() -> void:
 				st.set_uv(Vector2(wp.x, wp.z) / 8.0)
 				st.add_vertex(wp)
 	st.generate_normals()
+	var arrays := st.commit_to_arrays()
+	_add_static(arrays, _terrain_material(), _offroad(), "Terrain")
+	if _geo and bake:
+		var err := _geo.save_built(_heights, arrays)
+		if err != OK:
+			push_error("couldn't bake the terrain: %s" % error_string(err))
+
+
+func _terrain_material() -> StandardMaterial3D:
 	var ground_tex: Texture2D = {"moon": TexGen.road("dust"), "city": TexGen.concrete()}.get(_theme(), TexGen.grass())
 	var mat := TexGen.material(ground_tex, 1.0, Color(0.8, 0.84, 0.82) if rain else Color.WHITE)
 	mat.vertex_color_use_as_albedo = true
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_add_static(st.commit_to_arrays(), mat, _offroad(), "Terrain")
+	return mat
 
 
 ## Is the ground beside this part of the lap (a fraction) kept level? The

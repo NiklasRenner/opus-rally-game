@@ -139,6 +139,17 @@ model by `tools/real_stage/bake_stage.py` into `data/stages/`, and
 `scripts/geo_stage.gd` cuts the road into that ground and draws the distant
 mountains. See `tools/real_stage/README.md` to bake another road.
 
+Cutting the road in takes a few seconds, so the finished ground is baked too,
+to `data/stages/<id>.built`, and the game loads that instead. After changing
+`geo_stage.gd`, `track_builder.gd`, the stage data or its `maps.gd` entry, bake
+it again (the game warns that the bake is out of date and builds the ground
+itself meanwhile, which is slower):
+
+    godot --headless -s tools/bake_terrain.gd -- turini
+
+`godot --headless -s tools/stage_check.gd -- turini` scans the built ground for
+holes, spikes, terrain through the road and props on it.
+
 The surface table (`scripts/surfaces.gd`) has asphalt, gravel, wet, ice,
 grass, mud, river (ford), wooden bridge, regolith, moon dust and cobbles
 surfaces, each with its own grip,
