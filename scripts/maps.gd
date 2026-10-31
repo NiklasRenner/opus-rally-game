@@ -90,6 +90,29 @@ const LIST := [
 		"width": 0.75,
 	},
 	{
+		"id": "ouninpohja_hd",
+		"name": "OUNINPOHJA HD",
+		"blurb": "Point to point. Detail test: every real crest, banked bends",
+		"seed": 1972,
+		# a proof of concept for more detailed real roads: Ouninpohjantie
+		# again, further on through its twistier bends towards the Hamepohja
+		# junction, life size. The road's height comes from a 2 m elevation
+		# model (every real crest and dip, no stand-in jumps), the bends are
+		# banked (and lean with the hillside, sometimes the wrong way), small
+		# bumps run all along, and the line keeps the real corners tight
+		# (data/stages/ouninpohja_hd, see tools/real_stage)
+		"geo": "ouninpohja_hd",
+		"point_to_point": true,
+		"sections": [[0.00, "gravel"], [0.05, "mud"], [0.085, "gravel"]],
+		"jumps": [],
+		"village": [],
+		"forest": 9.0,
+		"forest_band": 26000,
+		"water": [],
+		"water_level": -19.3,
+		"width": 0.75,
+	},
+	{
 		"id": "city",
 		"name": "DOWNTOWN GP",
 		"blurb": "Tarmac and cobbles. Walled streets, square corners",

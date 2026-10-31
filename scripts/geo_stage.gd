@@ -28,6 +28,7 @@ var data: Dictionary
 var points: Array[Vector2] = []
 var profile := PackedFloat32Array()
 var profile_step := 2.0
+var cambers := PackedFloat32Array()  # the road's camber along the route, profile_step apart (empty: flat)
 var lead := 0  # control points before the start line
 var tail := 0  # and after the finish line
 var near_x0 := 0.0
@@ -74,6 +75,7 @@ func _load(path: String) -> void:
 		points.append(Vector2(p[0], p[1]))
 	profile = PackedFloat32Array(data["profile"])
 	profile_step = data["profile_step"]
+	cambers = PackedFloat32Array(data.get("camber", []))
 	lead = data["lead"]
 	tail = data["tail"]
 	var nr: Dictionary = data["near"]
@@ -112,6 +114,16 @@ func road_height(route_frac: float, route_length: float) -> float:
 	return v.y
 
 
+## The road's camber (rise per metre to its right) a fraction of the way
+## along the whole route.
+func camber_at(route_frac: float, route_length: float) -> float:
+	if cambers.is_empty():
+		return 0.0
+	var f := clampf(route_frac * route_length / profile_step, 0.0, cambers.size() - 1.001)
+	var i := int(f)
+	return lerpf(cambers[i], cambers[i + 1], f - i)
+
+
 func band_distance(k: int) -> float:
 	return band_dist[k] * 4.0
 
@@ -139,7 +151,7 @@ func heights() -> PackedFloat32Array:
 	for i in range(0, pts.size(), 2):
 		var p := pts[i]
 		var e := track.widths[i] * 0.5 + TrackBuilder.VERGE + BANK_START
-		var y := p.y - 0.3
+		var y := p.y - 0.3 - absf(track.camber[i]) * track.widths[i] * 0.5  # (the lower edge of a cambered road)
 		var cx := int(round((p.x - near_x0) / cell))
 		var cz := int(round((p.z - near_z0) / cell))
 		for gz in range(maxi(cz - r, 0), mini(cz + r, gn - 1) + 1):
@@ -214,7 +226,7 @@ func build_banks() -> void:
 			var p := pts[i]
 			var sd := track._side(i) * s
 			var e := track.widths[i] * 0.5 + TrackBuilder.VERGE
-			var y0 := p.y - 0.5
+			var y0 := track.road_y(i, s * e) - 0.5
 			var ring: Array[Vector3] = []
 			var base := y0  # where the slope below starts (the foot of a wall)
 			var base_x := 0.0
@@ -276,11 +288,16 @@ func build_banks() -> void:
 		var lb: Array[Vector3] = sections[0][i + 1]
 		var ra2: Array[Vector3] = sections[1][i]
 		var rb2: Array[Vector3] = sections[1][i + 1]
-		var ya := pts[i].y
-		var yb := pts[i + 1].y
+		var e := track.widths[i] * 0.5 + TrackBuilder.VERGE
 		var lift := func(v: Vector3, y: float) -> Vector3: return Vector3(v.x, y, v.z)
-		_add_tri(lift.call(la[0], ya), lift.call(ra2[0], ya), lift.call(rb2[0], yb), i, true)
-		_add_tri(lift.call(la[0], ya), lift.call(rb2[0], yb), lift.call(lb[0], yb), i, true)
+		# (the edges at the tarmac's edge heights: a cambered road's surface
+		# carried on out over the verges)
+		var lya := pts[i].y - track.camber[i] * e
+		var rya := pts[i].y + track.camber[i] * e
+		var lyb := pts[i + 1].y - track.camber[i + 1] * e
+		var ryb := pts[i + 1].y + track.camber[i + 1] * e
+		_add_tri(lift.call(la[0], lya), lift.call(ra2[0], rya), lift.call(rb2[0], ryb), i, true)
+		_add_tri(lift.call(la[0], lya), lift.call(rb2[0], ryb), lift.call(lb[0], lyb), i, true)
 	st.generate_normals()
 	_bank_arrays = st.commit_to_arrays()
 	_add_banks()
@@ -540,8 +557,9 @@ func _walls(s: float, cap: PackedFloat32Array) -> PackedByteArray:
 		var q := p + track._side(i) * s * (track.widths[i] * 0.5 + TrackBuilder.VERGE + 3.0)
 		var sd := track._side(i) * s
 		var far := p + sd * cap[i]
-		var low := track.ground_height(far.x, far.z) < p.y - 0.5 - WALL_DROP * 0.5
-		w[i] = 1 if low and natural(q.x, q.z) < p.y - 0.5 - WALL_DROP else 0
+		var y := track.road_y(i, s * track.widths[i])
+		var low := track.ground_height(far.x, far.z) < y - 0.5 - WALL_DROP * 0.5
+		w[i] = 1 if low and natural(q.x, q.z) < y - 0.5 - WALL_DROP else 0
 	var i := 0
 	while i < n:
 		var j := i
@@ -824,7 +842,7 @@ func _guard_posts(i0: int, i1: int, s: float) -> void:
 		if absf(track._turn(i, 4)) >= TrackBuilder.CLIFF_ARMCO_TURN or track.near_line(i, StartArea.REACH + 3):
 			continue
 		var xf := Transform3D(track.frame(i).basis, track.points[i] + track._side(i) * s * (track.widths[i] * 0.5 + TrackBuilder.VERGE - 0.45)
-			+ Vector3(0, -0.5 + 0.4, 0))
+			+ Vector3(0, track.road_y(i, s * track.widths[i]) - track.points[i].y - 0.5 + 0.4, 0))
 		var mi := MeshInstance3D.new()
 		mi.mesh = post
 		mi.material_override = stone

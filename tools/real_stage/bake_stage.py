@@ -33,12 +33,17 @@ OUT = os.path.join(REPO, "data", "stages")
 OVERTURE = "overturemaps-us-west-2/release/2026-10-21.0/theme=transportation/type=segment/"
 DEM_URL = ("https://copernicus-dem-30m.s3.amazonaws.com/Copernicus_DSM_COG_10_N{lat:02d}_00_E{lon:03d}_00_DEM/"
 	"Copernicus_DSM_COG_10_N{lat:02d}_00_E{lon:03d}_00_DEM.tif")
+# ArcticDEM 2 m mosaic (everything north of 60 deg, so all of Finland): 50 km
+# subtiles in polar stereographic metres (EPSG:3413)
+ARCTIC_URL = ("https://pgc-opendata-dems.s3.us-west-2.amazonaws.com/arcticdem/mosaics/v4.1/2m/"
+	"{row:02d}_{col:02d}/{row:02d}_{col:02d}_{sr}_{sc}_2m_v4.1_dem.tif")
 
 CELL = 8.0  # TrackBuilder.CELL: the near terrain grid, in game metres
 FAR_CELL = 96.0  # the distant terrain, a whole number of near cells
 FAR_HALF = 5200.0  # how far the distant terrain reaches from the stage
 BAND = 300.0  # the near (solid) terrain covers this far from the road
 DETAIL = (110.0, 180.0)  # ...with full detail this close, eased into the distant mesh by the outer distance
+MAX_GRADE = 0.16  # the steepest slope a 2 m road profile keeps
 
 STAGES = {
 	"turini": {
@@ -71,6 +76,34 @@ STAGES = {
 		"jumps": [[1033, 0.8, 12.0], [1661, 1.4, 15.0], [2147, 0.7, 12.0], [2474, 1.2, 14.0],
 			[2643, 1.7, 16.0], [3136, 1.5, 15.0], [3939, 1.3, 14.0], [4237, 1.2, 14.0]],
 	},
+	"ouninpohja_hd": {
+		# the detail test: Ouninpohjantie again (a stretch further on, through
+		# the twistier bends towards the Hamepohjantie junction), but with the
+		# road's height from the 2 m ArcticDEM instead of the 30 m model, so
+		# every real crest and dip is there; banked bends; small bumps; life
+		# size and a tighter line so the real corners stay tight
+		"road": "Ouninpohjantie",
+		"roads_from": "ouninpohja",  # same Overture download
+		"bbox": [24.85, 61.72, 25.03, 61.79],
+		"from_m": 4000.0,
+		"to_m": 9800.0,
+		"lead": 60.0,
+		"tail": 150.0,
+		"scale": 1.0,
+		"spacing": 5.0,
+		"line_sigma": 2.5,
+		"fine_dem": "arcticdem",
+		# the sharpest crest it keeps (vertical radius, real metres): at 50 the
+		# autopilot was off the ground for 13% of the stage, mostly over
+		# treetop lumps; at 130 a car takes off over a crest from ~130 km/h
+		"crest_r": 130.0,
+		# road camber, rise per metre across: leaning into a bend of radius R by
+		# turn / R, plus `hill` times the slope of the hillside it runs along,
+		# no more than `max` either way
+		"camber": {"turn": 4.5, "hill": 0.2, "max": 0.11},
+		# small bumps on top of the real profile (game metres, roughly)
+		"roughness": 0.06,
+	},
 }
 
 
@@ -81,7 +114,7 @@ def overture_roads(cfg, stage_id):
 	import pyarrow.dataset as ds
 	import pyarrow.fs as pf
 	import pyarrow.parquet as pq
-	path = os.path.join(CACHE, stage_id + "_roads.parquet")
+	path = os.path.join(CACHE, cfg.get("roads_from", stage_id) + "_roads.parquet")
 	if not os.path.exists(path):
 		proxy = {}
 		if os.environ.get("HTTPS_PROXY"):
@@ -157,6 +190,134 @@ class Dem:
 		return ndimage.map_coordinates(self.z, [r, c], order=3, mode="nearest")
 
 
+class ArcticDem:
+	"""ArcticDEM 2 m heights round a lon/lat box (a surface model: trees and
+	all), read straight from the cloud-optimised tiles and cached. Heights are
+	over the ellipsoid, so they sit some metres off Copernicus's: callers
+	only use them relative to each other."""
+
+	def __init__(self, stage_id, lon0, lat0, lon1, lat1):
+		from pyproj import Transformer
+		self.to_ps = Transformer.from_crs(4326, 3413, always_xy=True)
+		path = os.path.join(CACHE, stage_id + "_arcticdem.npz")
+		if os.path.exists(path):
+			d = np.load(path)
+			self.x0, self.y1, self.z = float(d["x0"]), float(d["y1"]), d["z"]
+			return
+		cx, cy = self.to_ps.transform([lon0, lon1, lon0, lon1], [lat0, lat0, lat1, lat1])
+		self.x0 = math.floor(min(cx) / 2.0) * 2.0
+		self.y1 = math.ceil(max(cy) / 2.0) * 2.0
+		w = int((math.ceil(max(cx) / 2.0) * 2.0 - self.x0) / 2.0)
+		h = int((self.y1 - math.floor(min(cy) / 2.0) * 2.0) / 2.0)
+		self.z = np.full((h, w), np.nan, np.float32)
+		tiles = set()
+		for x in np.linspace(self.x0, self.x0 + w * 2.0, 8):
+			for y in np.linspace(self.y1 - h * 2.0, self.y1, 8):
+				col, row = int((x + 4e6) // 1e5) + 1, int((y + 4e6) // 1e5) + 1
+				sc, sr = int((x + 4e6) % 1e5 >= 5e4) + 1, int((y + 4e6) % 1e5 >= 5e4) + 1
+				tiles.add((row, col, sr, sc))
+		self._read(tiles, w, h)
+		np.savez_compressed(path, x0=self.x0, y1=self.y1, z=self.z)
+
+	def _read(self, tiles, w, h):
+		import rasterio
+		from rasterio.windows import Window
+		env = {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR"}
+		if os.environ.get("HTTPS_PROXY"):
+			env["GDAL_HTTP_PROXY"] = os.environ["HTTPS_PROXY"]
+		with rasterio.Env(**env):
+			for row, col, sr, sc in sorted(tiles):
+				url = ARCTIC_URL.format(row=row, col=col, sr=sr, sc=sc)
+				print("reading ArcticDEM", url.rsplit("/", 1)[1])
+				with rasterio.open("/vsicurl/" + url) as src:
+					c0 = round((self.x0 - src.transform.c) / 2.0)
+					r0 = round((src.transform.f - self.y1) / 2.0)
+					tile = src.read(1, window=Window(c0, r0, w, h), boundless=True, fill_value=-9999.0)
+				tile[tile < -1000] = np.nan
+				self.z = np.where(np.isnan(self.z), tile, self.z)
+
+	def sample(self, lon, lat):
+		x, y = self.to_ps.transform(np.asarray(lon), np.asarray(lat))
+		c = (np.asarray(x) - self.x0) / 2.0 - 0.5
+		r = (self.y1 - np.asarray(y)) / 2.0 - 0.5
+		ok = ~np.isnan(self.z)
+		v = ndimage.map_coordinates(np.where(ok, self.z, 0.0), [r, c], order=1, mode="nearest")
+		w = ndimage.map_coordinates(ok.astype(np.float32), [r, c], order=1, mode="nearest")
+		return np.where(w > 0.99, v, np.nan)
+
+
+def fine_profile(adem, real, kx, ky, crest_r):
+	"""The road's height every real metre from the 2 m model: across the road
+	(5 m either side) the lower quarter of the samples, which keeps the odd
+	tree overhanging the verge out of it, then a light smoothing (sigma 2.5 m)
+	that takes out the model's noise but keeps crests a few tens of metres
+	long. NaN where the model has no data."""
+	tan = np.gradient(real, axis=0)
+	tan /= np.linalg.norm(tan, axis=1)[:, None]
+	nrm = np.c_[-tan[:, 1], tan[:, 0]]
+	cross = []
+	for o in np.arange(-5.0, 5.5, 1.0):
+		q = real + nrm * o
+		cross.append(adem.sample(q[:, 0] / kx, -q[:, 1] / ky))
+	z = np.nanpercentile(np.stack(cross, 1), 25, axis=1)
+	bad = np.isnan(z)
+	if bad.all():
+		sys.exit("no ArcticDEM along the road")
+	if bad.any():
+		z[bad] = np.interp(np.flatnonzero(bad), np.flatnonzero(~bad), z[~bad])
+	# a surface model sees the treetops where the forest closes over a narrow
+	# road: they only ever add height, so take the ground as the highest
+	# curve under the samples that no road could beat: crests no sharper than
+	# crest_r (a parabola rolled along underneath) and no slope steeper than
+	# MAX_GRADE
+	x = np.arange(-45.0, 46.0)
+	z = ndimage.grey_opening(z, structure=-x * x / (2.0 * crest_r), size=len(x), mode="nearest")
+	x = np.arange(-150.0, 151.0)
+	z = ndimage.grey_erosion(z, structure=-MAX_GRADE * np.abs(x), size=len(x), mode="nearest")
+	return ndimage.gaussian_filter1d(z, 2.5, mode="nearest"), bad
+
+
+def camber_profile(cfg, real, dem, kx, ky):
+	"""Rise per metre across the road, + where its right side is higher: into
+	the bends, and with the hillside it's cut into (so now and then a bend
+	leans the wrong way, as real back roads do). Real metre steps."""
+	c = cfg["camber"]
+	# (the bend as a whole: OSM draws a corner as a few kinks at its nodes)
+	sm = np.c_[ndimage.gaussian_filter1d(real[:, 0], 8.0, mode="nearest"),
+		ndimage.gaussian_filter1d(real[:, 1], 8.0, mode="nearest")]
+	tan = np.gradient(sm, axis=0)
+	tan /= np.linalg.norm(tan, axis=1)[:, None]
+	# x east, z south: the right of a heading (tx, tz) is (-tz, tx), and a
+	# left-hand bend turns the heading the other way round
+	dt = np.gradient(tan, axis=0)
+	left = -(tan[:, 0] * dt[:, 1] - tan[:, 1] * dt[:, 0])  # 1 / radius, + to the left, real metres
+	left = ndimage.gaussian_filter1d(left, 6.0, mode="nearest")
+	right = np.c_[-tan[:, 1], tan[:, 0]]
+	q0 = real - right * 15.0
+	q1 = real + right * 15.0
+	hill = (dem.sample(q1[:, 0] / kx, -q1[:, 1] / ky) - dem.sample(q0[:, 0] / kx, -q0[:, 1] / ky)) / 30.0
+	hill = ndimage.gaussian_filter1d(hill, 10.0, mode="nearest")
+	cam = c["turn"] * left / cfg["scale"] + c["hill"] * hill
+	cam = ndimage.gaussian_filter1d(np.clip(cam, -c["max"], c["max"]), 5.0, mode="nearest")
+	return cam
+
+
+def bumps(n, amp, seed):
+	"""Small bumps and ripples every real metre: a few waves 9-30 m long with
+	random phases, stronger on some stretches than others."""
+	rng = np.random.default_rng(seed)
+	x = np.arange(n, dtype=float)
+	out = np.zeros(n)
+	for wl, a in [(9.0, 0.3), (13.0, 0.45), (19.0, 0.5), (29.0, 0.55)]:
+		ph = rng.uniform(0, 2 * np.pi)
+		drift = ndimage.gaussian_filter1d(rng.normal(0, 1, n), 40.0) * 25.0  # the waves wander a little
+		out += a * np.sin(2 * np.pi * x / wl + ph + drift)
+	out /= np.abs(out).max()
+	env = ndimage.gaussian_filter1d(rng.normal(0, 1, n), 60.0)
+	env = 0.35 + 0.65 * np.clip((env - env.min()) / (np.ptp(env) + 1e-9), 0, 1)
+	return out * env * amp
+
+
 # --------------------------------------------------------------------------- geometry
 
 def resample(xy, step):
@@ -199,8 +360,9 @@ def bake(stage_id, preview):
 		sys.exit("stretch runs off the end of the road (%d m long)" % len(real))
 	real = real[a:b + 1]
 	# OSM's nodes leave little kinks: smooth the line a touch (sigma 3 m)
-	real = np.c_[ndimage.gaussian_filter1d(real[:, 0], 3.0, mode="nearest"),
-		ndimage.gaussian_filter1d(real[:, 1], 3.0, mode="nearest")]
+	sig = cfg.get("line_sigma", 3.0)
+	real = np.c_[ndimage.gaussian_filter1d(real[:, 0], sig, mode="nearest"),
+		ndimage.gaussian_filter1d(real[:, 1], sig, mode="nearest")]
 	lon = real[:, 0] / kx
 	lat = -real[:, 1] / ky
 	pad = (FAR_HALF / sc + 500.0) / ky
@@ -210,6 +372,22 @@ def bake(stage_id, preview):
 	zr = dem.sample(lon, lat)
 	zr = ndimage.median_filter(zr, 81, mode="nearest")
 	zr = ndimage.gaussian_filter1d(zr, 45.0, mode="nearest")
+	# with a finer model the road takes its height from that instead, every
+	# crest and dip of it; `fine` is how far it is off the coarse profile, which
+	# the ground beside the road takes too (fading out away from it), so a
+	# crest is a little hill and not just the road heaped up
+	fine = None
+	if cfg.get("fine_dem") == "arcticdem":
+		apad = 0.004
+		adem = ArcticDem(stage_id, lon.min() - apad * 2, lat.min() - apad, lon.max() + apad * 2, lat.max() + apad)
+		zf, gaps = fine_profile(adem, real, kx, ky, cfg.get("crest_r", 130.0))
+		raw = dem.sample(lon, lat)
+		zf -= np.median(zf[~gaps] - raw[~gaps])  # onto Copernicus's datum
+		fine = zf - zr
+		zr = zf
+		print("2 m profile: %.1f m off the 30 m one at most, %d m without data" % (np.abs(fine).max(), gaps.sum()))
+	if cfg.get("roughness"):
+		zr = zr + bumps(len(zr), cfg["roughness"] / cfg["scale"], 1971)
 	base = float(zr[int(cfg["lead"])])  # the start line is at height 0
 	centre = real.mean(axis=0)
 	road = (real - centre) * sc
@@ -218,6 +396,7 @@ def bake(stage_id, preview):
 	for m, h, half in cfg.get("jumps", []):
 		d = (at - cfg["lead"] - m) * sc / half
 		prof += np.where(np.abs(d) < 1.0, h * (0.5 + 0.5 * np.cos(d * np.pi)), 0.0)
+	cam = camber_profile(cfg, real, dem, kx, ky) if cfg.get("camber") else None
 	origin_lon = (centre[0]) / kx
 	origin_lat = -(centre[1]) / ky
 
@@ -256,6 +435,11 @@ def bake(stage_id, preview):
 	t = np.clip((dist - DETAIL[0]) / (DETAIL[1] - DETAIL[0]), 0, 1)
 	t = t * t * (3 - 2 * t)
 	near = near * (1 - t) + tri_interp(far, fx0, fz0, FAR_CELL, gx, gz) * t
+	if fine is not None:
+		_, at_i = cKDTree(dense).query(np.c_[gx, gz])
+		fade = np.clip((dist - 14.0) / 56.0, 0, 1)
+		fade = 1 - fade * fade * (3 - 2 * fade)
+		near = near + fine[np.clip(np.round(at_i / sc).astype(int), 0, len(fine) - 1)] * sc * fade
 	near = near.reshape(nn, nn)
 	dist = dist.reshape(nn, nn)
 	lo_h = float(min(near.min(), far.min())) - 1.0
@@ -267,7 +451,8 @@ def bake(stage_id, preview):
 	meta = {
 		"credit": "Road: (c) OpenStreetMap contributors, ODbL (via Overture Maps). "
 			"Terrain: Copernicus GLO-30 DEM, (c) DLR e.V. 2010-2014 and Airbus 2014-2018, provided under COPERNICUS by the "
-			"European Union and ESA.",
+			"European Union and ESA." + (" Road heights: ArcticDEM v4.1 2 m mosaic, Polar Geospatial Center "
+			"(NSF-OPP awards 1043681, 1559691, 1542736, 1810976, 2129685), CC BY 4.0." if fine is not None else ""),
 		"road": cfg["road"],
 		"origin": [round(origin_lat, 6), round(origin_lon, 6)],
 		"base_height": round(base, 1),
@@ -280,6 +465,8 @@ def bake(stage_id, preview):
 		"profile": [round(float(h), 2) for h in np.interp(np.arange(0, cs[-1] + 2.0, 2.0) / sc,
 			np.arange(len(prof)), prof)],
 		"height_min": round(lo_h, 1),
+		**({"camber": [round(float(c), 3) for c in np.interp(np.arange(0, cs[-1] + 2.0, 2.0) / sc,
+			np.arange(len(cam)), cam)]} if cam is not None else {}),
 		"near": {"x0": nx0, "z0": nz0, "n": nn, "cell": CELL, "band": BAND},
 		"far": {"x0": fx0, "z0": fz0, "n": fn, "cell": FAR_CELL},
 	}
@@ -289,10 +476,10 @@ def bake(stage_id, preview):
 	print("%s: %.0f m stage (game), climb %.0f m, %d control points, near grid %d^2, far grid %d^2"
 		% (stage_id, (len(prof) - cfg["lead"] - cfg["tail"]) * sc, climb, len(cp), nn, fn))
 	if preview:
-		_preview(stage_id, near, nx0, nz0, nn, road, prof, sc)
+		_preview(stage_id, near, nx0, nz0, nn, road, prof, sc, cam)
 
 
-def _preview(stage_id, near, nx0, nz0, nn, road, prof, sc):
+def _preview(stage_id, near, nx0, nz0, nn, road, prof, sc, cam=None):
 	import matplotlib
 	matplotlib.use("Agg")
 	import matplotlib.pyplot as plt
@@ -303,7 +490,9 @@ def _preview(stage_id, near, nx0, nz0, nn, road, prof, sc):
 	a.plot(road[:, 0], road[:, 1], "r-", lw=1)
 	a.set_title(stage_id + " (game metres, north up)")
 	b.plot(np.arange(len(prof)) * sc, prof)
-	b.set_title("road profile")
+	b.set_title("road profile" + (" (red: camber x100)" if cam is not None else ""))
+	if cam is not None:
+		b.plot(np.arange(len(cam)) * sc, cam * 100.0, "r-", lw=0.5)
 	b.grid(True)
 	path = os.path.join(CACHE, stage_id + "_preview.png")
 	plt.savefig(path, dpi=80, bbox_inches="tight")
