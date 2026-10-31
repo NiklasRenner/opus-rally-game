@@ -27,6 +27,9 @@ var points := PackedVector3Array()
 var tangents := PackedVector3Array()
 var surfaces := PackedStringArray()
 var widths := PackedFloat32Array()
+## Per sample: the road's camber, rise per metre towards its right-hand side
+## (0 flat; only real-road stages bank their bends so far).
+var camber := PackedFloat32Array()
 var total_length := 0.0
 ## false on a point-to-point stage: the road has two ends and indices don't wrap
 var loop := true
@@ -115,6 +118,7 @@ func prepare() -> void:
 	tangents.clear()
 	surfaces.clear()
 	widths.clear()
+	camber.clear()
 	_sample_spline()
 
 
@@ -326,6 +330,7 @@ func _sample_spline() -> void:
 		var p := dense[j].lerp(dense[(j + 1) % dense.size()], t)
 		var frac := (s - s_start) / stage_length
 		points.append(Vector3(p.x, _geo.road_height(s / total_length, total_length) if _geo else _elevation(frac), p.y))
+		camber.append(_geo.camber_at(s / total_length, total_length) if _geo else 0.0)
 		var surf: String = _sections[0][1]
 		for sec in _sections:
 			if frac >= sec[0]:
@@ -350,6 +355,13 @@ func _sample_spline() -> void:
 			for o in range(-5, 6):
 				m = maxf(m, widen[wrap_index(i + o)] * (1.0 - absf(o) / 6.0))
 			widths[i] *= 1.0 + 0.5 * m
+
+
+## Height of the road surface `off` metres right of sample i's centre (left
+## if negative): the camber tilts it, out to the edges of the tarmac.
+func road_y(i: int, off: float) -> float:
+	var half := widths[i] * 0.5
+	return points[i].y + camber[i] * clampf(off, -half, half)
 
 
 func _side(i: int) -> Vector3:
@@ -383,10 +395,10 @@ func _build_road() -> void:
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
 			tools[surf] = st
 		var st2: SurfaceTool = tools[surf]
-		var la := points[i] - _side(i) * widths[i] * 0.5
-		var ra := points[i] + _side(i) * widths[i] * 0.5
-		var lb := points[b] - _side(b) * widths[b] * 0.5
-		var rb := points[b] + _side(b) * widths[b] * 0.5
+		var la := points[i] - _side(i) * widths[i] * 0.5 + Vector3(0, road_y(i, -widths[i]) - points[i].y, 0)
+		var ra := points[i] + _side(i) * widths[i] * 0.5 + Vector3(0, road_y(i, widths[i]) - points[i].y, 0)
+		var lb := points[b] - _side(b) * widths[b] * 0.5 + Vector3(0, road_y(b, -widths[b]) - points[b].y, 0)
+		var rb := points[b] + _side(b) * widths[b] * 0.5 + Vector3(0, road_y(b, widths[b]) - points[b].y, 0)
 		var seg := points[i].distance_to(points[b]) / 10.0
 		# wound so faces point up (Godot: clockwise = front)
 		_quad(st2, la, ra, lb, rb, Vector2(0, v), Vector2(1, v), Vector2(0, v + seg), Vector2(1, v + seg))
